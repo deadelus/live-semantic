@@ -1,0 +1,9 @@
+torch
+torchvision
+torchaudio
+transformers
+requests
+onnx
+onnxruntime
+Pillow
+numpy

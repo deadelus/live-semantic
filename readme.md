@@ -43,8 +43,8 @@ go build -o livesemantic src/main.go
 
 #### Classic CLI Commands
 ```bash
-# Create an example (current working feature)
-./livesemantic example create john@example.com "John Doe"
+# Create a new task
+./livesemantic create-task "My First Task" "A description of the task"
 
 # Show help
 ./livesemantic help
@@ -77,9 +77,9 @@ go build -o livesemantic src/main.go
 ./livesemantic web 3000
 
 # Test API endpoint
-curl -X POST http://localhost:8080/api/v1/example \
+curl -X POST http://localhost:8080/api/v1/tasks \
   -H "Content-Type: application/json" \
-  -d '{"email":"john@example.com","name":"John Doe"}'
+  -d '{"title":"My API Task","description":"Task created via API"}'
 ```
 
 #### WebSocket Mode
@@ -91,7 +91,7 @@ curl -X POST http://localhost:8080/api/v1/example \
 ./livesemantic ws 9000
 
 # Connect to ws://localhost:8081/ws
-# Send message: {"type":"example","data":{"email":"john@example.com","name":"John Doe"}}
+# Send message: {"type":"create_task","data":{"title":"My WebSocket Task","description":"Task via WS"}}
 ```
 
 ## 🏗️ **Architecture**
@@ -131,38 +131,26 @@ LiveSemantic follows Clean Architecture principles with transport-agnostic desig
 ```
 live-semantic/
 ├── .env                          # Environment variables
+├── .gitignore                    # Git ignore file
 ├── go.mod                        # Go module dependencies
+├── go.sum                        # Go module checksums
+├── readme.md                     # This file
 ├── src/
 │   ├── main.go                   # Application entry point
-│   ├── domain/                   # Business logic layer
-│   │   ├── use_cases.go         # Use case interfaces
-│   │   ├── uc_example.go        # Example use case implementation
-│   │   ├── dto.go               # Result pattern
-│   │   └── dto_example.go       # Example DTOs
-│   └── transport/               # Transport layer
-│       ├── transport.go         # Transport interfaces
-│       ├── handler.go           # Base handler
-│       ├── handle_example.go    # Example handler logic
-│       ├── cli/                 # CLI transport (Interactive + Classic)
-│       │   ├── interactive.go   # Survey controller base
-│       │   ├── menu.go          # Interactive main menu
-│       │   ├── cli_example.go   # Interactive example flows
-│       │   ├── cli_settings.go  # Interactive settings
-│       │   └── cmd/             # Classic Cobra commands
-│       │       ├── root.go      # Cobra root command
-│       │       └── cmd_example.go # Cobra example commands
-│       ├── api/                 # HTTP transport
-│       │   ├── server.go        # Gin server
-│       │   ├── routes.go        # Route definitions
-│       │   └── api_example.go   # API handlers
-│       └── websocket/           # WebSocket transport
-│           ├── server.go        # WS server
-│           └── handler.go       # WS message handlers
-├── pkg/app/                     # Application framework
-│   ├── application/             # App context & lifecycle
-│   ├── logger/                  # Logging interfaces
-│   └── lifecycle/               # Graceful shutdown
-└── docs/                        # Documentation
+│   ├── domain/                   # Core business logic and models
+│   │   ├── dto/                  # Data Transfer Objects
+│   │   ├── models/               # Domain models (entities)
+│   │   └── uc/                   # Use Case implementations
+│   ├── infrastructure/           # External concerns (AI, DB, etc.)
+│   └── transport/                # Adapters for delivery mechanisms
+│       ├── handler.go            # Base handler for all transports
+│       ├── api/                  # REST API (Gin)
+│       ├── cli/                  # Interactive CLI (Survey)
+│       ├── cmd/                  # Classic CLI (Cobra)
+│       └── websocket/            # WebSocket transport (Gorilla)
+├── internal/                     # Internal application code/scripts
+│   └── scripts/
+└── docs/                         # Project documentation
 ```
 
 ## 🔧 **Development**
@@ -202,8 +190,9 @@ APP_DEBUG="true"
 
 ### Adding New Use Cases
 
-1. **Define DTOs** in `src/domain/dto_*.go`:
+1. **Define DTOs** in `src/domain/dto/dto_task.go`:
 ```go
+// src/domain/dto/dto_task.go
 type CreateTaskRequest struct {
     Title       string `json:"title"`
     Description string `json:"description"`
@@ -217,68 +206,52 @@ type TaskResponse struct {
 }
 ```
 
-2. **Add use case** to interface in `src/domain/use_cases.go`:
+2. **Add use case** to interface in `src/domain/uc/use_case.go`:
 ```go
+// src/domain/uc/use_case.go
 type UseCases interface {
-    CreateTask(context.Context, CreateTaskRequest) (Result[TaskResponse], error) // New
+    CreateTask(context.Context, dto.CreateTaskRequest) (dto.Result[dto.TaskResponse], error) // New
 }
 ```
 
-3. **Implement use case** in `src/domain/uc_*.go`:
+3. **Implement use case** in `src/domain/uc/uc_task.go`:
 ```go
-func (uc *UseCase) CreateTask(ctx context.Context, req CreateTaskRequest) (Result[TaskResponse], error) {
+// src/domain/uc/uc_task.go
+func (uc *UseCase) CreateTask(ctx context.Context, req dto.CreateTaskRequest) (dto.Result[dto.TaskResponse], error) {
     // Implementation here
 }
 ```
 
-4. **Add transport handler** in `src/transport/handle_*.go`:
+4. **Add transport handler** in `src/transport/handle_task.go`:
 ```go
-func (h *BaseHandler) HandleCreateTask(req TransportRequest[CreateTaskRequest]) TransportResponse[TaskResponse] {
+// src/transport/handle_task.go
+func (h *BaseHandler) HandleCreateTask(req TransportRequest[dto.CreateTaskRequest]) TransportResponse[dto.TaskResponse] {
     // Handler implementation
 }
 ```
 
-5. **Add CLI interfaces** in `src/transport/cli/`:
+5. **Add transport adapters**:
 
-**Interactive CLI flows** in `cli_*.go`:
+**Interactive CLI** in `src/transport/cli/cli_task.go`:
 ```go
+// src/transport/cli/cli_task.go
 func (s *SurveyController) createTaskFlow() error {
-    var qs = []*survey.Question{
-        {Name: "title", Prompt: &survey.Input{Message: "📝 Task Title:"}},
-        {Name: "description", Prompt: &survey.Input{Message: "📄 Description:"}},
-    }
-    // Interactive implementation with confirmation
+    // Interactive implementation
 }
 ```
 
-**Interactive menu** in `menu.go`:
+**Classic CLI command** in `src/transport/cmd/cmd_task.go`:
 ```go
-func (s *SurveyController) Run() error {
-    for {
-        var action string
-        prompt := &survey.Select{
-            Message: "What would you like to do?",
-            Options: []string{"📝 Create Task", "📋 List Tasks", "❌ Exit"},
-        }
-        // Menu handling logic
-    }
-}
-```
-
-**Classic CLI commands** in `cmd/cmd_*.go`:
-```go
+// src/transport/cmd/cmd_task.go
 var createTaskCmd = &cobra.Command{
     Use:   "create-task [title] [description]",
-    Short: "Create a new task",
-    Args:  cobra.ExactArgs(2),
-    Run: func(cmd *cobra.Command, args []string) {
-        // CLI implementation
-    },
+    // ...
 }
 ```
 
-6. **Add API endpoint** in `src/transport/api/api_*.go`:
+**API endpoint** in `src/transport/api/api_task.go`:
 ```go
+// src/transport/api/api_task.go
 func (s *Server) createTask(c *gin.Context) {
     // API implementation
 }
@@ -292,7 +265,7 @@ func (s *Server) createTask(c *gin.Context) {
 docker build -t livesemantic:latest .
 
 # Run CLI mode
-docker run --rm livesemantic:latest example create john@example.com "John"
+docker run --rm livesemantic:latest create-task "Docker Task" "A task from Docker"
 
 # Run web server
 docker run -d -p 8080:8080 livesemantic:latest web
@@ -378,29 +351,29 @@ spec:
 
 # Interactive flow example:
 # 🚀 Welcome to Live Semantic Interactive CLI!
-# ? What would you like to do? 
-#   ▶ 📝 Create Example
-#     📋 List Examples
+# ? What would you like to do?
+#   ▶ 📝 Create Task
+#     📋 List Tasks
 #     ⚙️ Settings
 #     ❌ Exit
-# 
-# ? 📧 Email: test@example.com
-# ? 👤 Name: Test User
-# ? Create example for Test User (test@example.com)? Yes
-# ✅ Example created successfully!
+#
+# ? 📝 Task Title: My Interactive Task
+# ? 📄 Description: A new task created interactively
+# ? Create task "My Interactive Task"? Yes
+# ✅ Task created successfully!
 ```
 
 #### Classic CLI Testing
 ```bash
-# Test example creation
-./livesemantic example create test@example.com "Test User"
+# Test task creation
+./livesemantic create-task "My CLI Task" "A new task from CLI"
 
 # Test with verbose output
-./livesemantic example create test@example.com "Test User" --verbose
+./livesemantic create-task "My Verbose Task" "A verbose task" --verbose
 
 # Test help system
 ./livesemantic help
-./livesemantic example help
+./livesemantic create-task --help
 ```
 
 #### API Testing
@@ -411,10 +384,10 @@ spec:
 # Test health endpoint
 curl http://localhost:8080/health
 
-# Test example creation
-curl -X POST http://localhost:8080/api/v1/example \
+# Test task creation
+curl -X POST http://localhost:8080/api/v1/tasks \
   -H "Content-Type: application/json" \
-  -d '{"email":"test@example.com","name":"Test User"}'
+  -d '{"title":"My API Test Task","description":"A task for API testing"}'
 
 # Stop server
 pkill livesemantic
@@ -429,7 +402,7 @@ pkill livesemantic
 wscat -c ws://localhost:8081/ws
 
 # Send test message
-{"type":"example","data":{"email":"test@example.com","name":"Test User"}}
+{"type":"create_task","data":{"title":"My WS Test Task","description":"A task for WS testing"}}
 ```
 
 ### Unit Testing
@@ -452,7 +425,7 @@ The application uses structured logging with Zap:
 
 ```bash
 # Enable debug logging
-APP_DEBUG=true ./livesemantic example create test@example.com "Test"
+APP_DEBUG=true ./livesemantic create-task "My Debug Task" "A task for debugging"
 
 # Different log levels based on APP_ENV
 APP_ENV=development  # Debug logging with caller info
