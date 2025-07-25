@@ -1,11 +1,6 @@
 package websocket
 
 import (
-	"context"
-	"encoding/json"
-	"live-semantic/src/domain/dto"
-	"live-semantic/src/transport"
-
 	"github.com/gin-gonic/gin"
 	"github.com/gorilla/websocket"
 )
@@ -41,54 +36,21 @@ func (s *Server) handleWebSocket(c *gin.Context) {
 
 		// Traiter le message selon son type
 		switch msg.Type {
-		case "Task":
-			s.handleTaskMessage(conn, msg.Data)
 		default:
 			s.sendError(conn, "Unknown message type: "+msg.Type)
 		}
 	}
 }
 
-// handleTaskMessage traite les messages d'exemple
-func (s *Server) handleTaskMessage(conn *websocket.Conn, data map[string]interface{}) {
-	// Convertir les données en TaskRequest
-	jsonData, _ := json.Marshal(data)
-	var req dto.TaskRequest
-	if err := json.Unmarshal(jsonData, &req); err != nil {
-		s.sendError(conn, "Invalid data format")
-		return
-	}
-
-	// Créer le handler de base
-	baseHandler := transport.NewBaseHandler(s.useCases, s.logger)
-
-	// Créer la requête transport
-	transportReq := transport.TransportRequest[dto.TaskRequest]{
-		Data:    req,
-		Context: context.Background(),
-		Source:  "websocket",
-	}
-
-	// Exécuter le handler
-	response := baseHandler.HandleTask(transportReq)
-
-	// Envoyer la réponse
-	if err := conn.WriteJSON(response); err != nil {
-		s.logger.Error("Failed to send WebSocket response", map[string]interface{}{
-			"error": err.Error(),
-		})
-		return
-	}
-}
-
 // sendError envoie un message d'erreur
 func (s *Server) sendError(conn *websocket.Conn, message string) {
-	response := transport.TransportResponse[dto.TaskResponse]{
-		Success: false,
-		Error:   message,
-		Source:  "websocket",
+	errorMsg := WSMessage{
+		Type: "Error",
+		Data: map[string]interface{}{
+			"message": message,
+		},
 	}
-	if err := conn.WriteJSON(response); err != nil {
+	if err := conn.WriteJSON(errorMsg); err != nil {
 		s.logger.Error("Failed to send error response", map[string]interface{}{
 			"error": err.Error(),
 		})

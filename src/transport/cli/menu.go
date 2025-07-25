@@ -26,12 +26,6 @@ func (s *SurveyController) Run() error {
 		}
 
 		switch action {
-		case "📝 Create Task":
-			if err := s.createTaskFlow(); err != nil {
-				fmt.Printf("❌ Error: %v\n", err)
-			}
-		case "📋 List Tasks":
-			s.listTasks()
 		case "⚙️ Settings":
 			s.showSettings()
 		case "❌ Exit":

@@ -3,6 +3,7 @@ package main
 import (
 	"fmt"
 	"live-semantic/src/domain/uc"
+	"live-semantic/src/provider"
 	"live-semantic/src/transport/api"
 	"live-semantic/src/transport/cli"
 	"live-semantic/src/transport/cmd"
@@ -57,7 +58,12 @@ func main() {
 		},
 	)
 
-	useCases, err := uc.NewUseCase(engine.Logger())
+	videoSource := provider.NewVideoSource()
+	aiProvider := provider.NewAIProvider()
+	alerter := provider.NewAlerter()
+	toolbox := provider.NewUtils()
+
+	useCases, err := uc.NewUseCase(engine.Context(), engine.Logger(), videoSource, aiProvider, alerter, toolbox)
 	if err != nil {
 		engine.Logger().Error("Failed to create use cases", err)
 		return

@@ -14,7 +14,12 @@ func (s *Server) setupRoutes() {
 	// API routes
 	api := s.router.Group("/api/v1")
 	{
-		api.POST("/createTask", s.createTask)
+		api.GET("/realtime-analysis", func(c *gin.Context) {
+			// Handle realtime analysis request
+			// This should call the RealtimeAnalysisUseCase method from the useCases
+			c.JSON(http.StatusOK, gin.H{"message": "Realtime analysis endpoint"})
+		})
+		// Add more routes as needed
 	}
 }
 

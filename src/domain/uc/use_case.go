@@ -5,16 +5,15 @@ import (
 	"context"
 	"live-semantic/src/domain/dto"
 	"live-semantic/src/domain/errors"
-	"live-semantic/src/domain/models"
 	"live-semantic/src/infrastructure"
+	"live-semantic/src/internal/utils"
 
 	"github.com/deadelus/go-clean-app/src/logger"
 )
 
 // UseCases defines the interface for the use cases in the application.
 type UseCases interface {
-	CreateTask(context.Context, dto.TaskRequest) (dto.Result[dto.TaskResponse], error)
-	RealtimeAnalysisUseCase(filter models.Filter) error
+	RealtimeAnalysisUseCase(ctx context.Context, req dto.RealtimeAnalysisRequest) (dto.Result[dto.RealtimeAnalysisResponse], error)
 }
 
 // useCase implements the UseCases interface.
@@ -23,10 +22,15 @@ type UseCase struct {
 	videoSource infrastructure.VideoSource
 	aiProvider  infrastructure.AIProvider
 	alerter     infrastructure.Alerter
+	utils       utils.Utils
 }
 
 // NewUseCase initializes your use cases with all the necessary dependencies
-func NewUseCase(logger logger.Logger, videoSource infrastructure.VideoSource, aiProvider infrastructure.AIProvider, alerter infrastructure.Alerter) (UseCases, error) {
+func NewUseCase(ctx context.Context, logger logger.Logger, videoSource infrastructure.VideoSource, aiProvider infrastructure.AIProvider, alerter infrastructure.Alerter, utils utils.Utils) (UseCases, error) {
+
+	if ctx == nil {
+		return nil, errors.ErrNilContext
+	}
 
 	if logger == nil {
 		return nil, errors.ErrNilLogger
@@ -44,10 +48,15 @@ func NewUseCase(logger logger.Logger, videoSource infrastructure.VideoSource, ai
 		return nil, errors.ErrNilAlerter
 	}
 
+	if utils == nil {
+		return nil, errors.ErrNilUtils
+	}
+
 	return &UseCase{
 		logger:      logger,
 		videoSource: videoSource,
 		aiProvider:  aiProvider,
 		alerter:     alerter,
+		utils:       utils,
 	}, nil
 }
