@@ -2,8 +2,11 @@ package main
 
 import (
 	"fmt"
+	"live-semantic/src/domain"
 	"live-semantic/src/domain/uc"
-	"live-semantic/src/provider"
+	onnx "live-semantic/src/implementation/ai/onnx/yolo11s"
+	"live-semantic/src/implementation/notifier"
+	"live-semantic/src/implementation/source/macOsCamera"
 	"live-semantic/src/transport/api"
 	"live-semantic/src/transport/cli"
 	"live-semantic/src/transport/cmd"
@@ -20,6 +23,9 @@ const (
 )
 
 func main() {
+	println("Live Semantic - Starting Application")
+	// os.Exit(onnx_poc.Run()) // Run the ONNX Proof of concept model and handle any errors
+
 	// Define and parse flags first to determine the mode
 	web := pflag.BoolP("web", "s", false, "Start the web server (API mode)")
 	ws := pflag.BoolP("websocket", "w", false, "Start the WebSocket server")
@@ -58,12 +64,25 @@ func main() {
 		},
 	)
 
-	videoSource := provider.NewVideoSource()
-	aiProvider := provider.NewAIProvider()
-	alerter := provider.NewAlerter()
-	toolbox := provider.NewUtils()
+	videoSource, err := macOsCamera.NewMacOsCameraSource()
+	if err != nil {
+		engine.Logger().Error("Failed to create video source", err)
+		return
+	}
 
-	useCases, err := uc.NewUseCase(engine.Context(), engine.Logger(), videoSource, aiProvider, alerter, toolbox)
+	notifier := notifier.NewLogNotifier()
+	if notifier == nil {
+		engine.Logger().Error("Notifier not initialized", domain.ErrNilNotifier)
+		return
+	}
+
+	ai, err := onnx.NewYolo11sNeuralNetwork()
+	if err != nil {
+		engine.Logger().Error("Failed to initialize AI", err)
+		return
+	}
+
+	useCases, err := uc.NewUseCase(engine.Context(), engine.Logger(), videoSource, notifier, ai)
 	if err != nil {
 		engine.Logger().Error("Failed to create use cases", err)
 		return

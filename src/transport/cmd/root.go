@@ -20,18 +20,23 @@ var (
 // rootCmd represents the base command
 var rootCmd = &cobra.Command{
 	Use:   "live-semantic",
-	Short: "🚀 Live Semantic CLI Application",
-	Long: `Live Semantic - A modern CLI application with clean architecture.
+	Short: fmt.Sprintf("🚀 %s CLI Application", os.Getenv("APP_NAME")),
+	Long: fmt.Sprintf(`%s - A modern CLI application with clean architecture.
 
 Built with ❤️  using Go, Cobra, and Clean Architecture principles.
-Supports CLI, Web API, and WebSocket modes.`,
-	Version: "1.0.0",
+Supports CLI, Web API, and WebSocket modes.`, os.Getenv("APP_NAME")),
+	Version: os.Getenv("APP_VERSION"),
 }
 
 // Execute executes the root command
 func Execute(uc uc.UseCases, logger logger.Logger) {
 	useCases = uc
 	appLogger = logger
+
+	appLogger.Info(fmt.Sprintf("Starting %s CMD Application", os.Getenv("APP_NAME")), map[string]interface{}{
+		"version": os.Getenv("APP_VERSION"),
+		"mode":    "CMD",
+	})
 
 	if err := rootCmd.Execute(); err != nil {
 		fmt.Println(err)

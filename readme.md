@@ -16,6 +16,32 @@ LiveSemantic analyzes video streams and files using AI-powered semantic understa
 - OpenCV 4.x
 - ONNX Runtime
 
+## 🚀 Installation GoCV et OpenCV sur macOS
+
+Pour utiliser la caméra avec GoCV sur macOS :
+
+1. **Installer OpenCV avec Homebrew**
+   ```sh
+   brew install opencv
+   ```
+
+2. **Définir la variable d’environnement pour GoCV**
+   ```sh
+   export PKG_CONFIG_PATH=/opt/homebrew/lib/pkgconfig
+   ```
+   Pour la rendre permanente :
+   ```sh
+   echo 'export PKG_CONFIG_PATH=/opt/homebrew/lib/pkgconfig' >> ~/.zshrc
+   source ~/.zshrc
+   ```
+
+3. **Vérifier l’installation**
+   ```sh
+   go run src/main.go
+   ```
+
+Si tu rencontres une erreur liée à `opencv4.pc` ou à la variable d’environnement, vérifie bien les étapes ci-dessus.
+
 ### Installation
 ```bash
 # Clone repository

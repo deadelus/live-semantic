@@ -2,6 +2,7 @@ package api
 
 import (
 	"net/http"
+	"os"
 
 	"github.com/gin-gonic/gin"
 )
@@ -27,7 +28,7 @@ func (s *Server) setupRoutes() {
 func (s *Server) healthCheck(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{
 		"status":  "ok",
-		"service": "live-semantic",
-		"version": "1.0.0",
+		"service": os.Getenv("APP_NAME") + " API Server",
+		"version": os.Getenv("APP_VERSION"),
 	})
 }

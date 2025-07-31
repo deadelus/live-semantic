@@ -3,60 +3,55 @@ package uc
 
 import (
 	"context"
+	"live-semantic/src/domain"
 	"live-semantic/src/domain/dto"
-	"live-semantic/src/domain/errors"
-	"live-semantic/src/infrastructure"
-	"live-semantic/src/internal/utils"
+	"live-semantic/src/infrastructure/ai"
+	"live-semantic/src/infrastructure/notifier"
+	"live-semantic/src/infrastructure/source"
 
 	"github.com/deadelus/go-clean-app/src/logger"
 )
 
 // UseCases defines the interface for the use cases in the application.
 type UseCases interface {
-	RealtimeAnalysisUseCase(ctx context.Context, req dto.RealtimeAnalysisRequest) (dto.Result[dto.RealtimeAnalysisResponse], error)
+	ObjectRecognitionUseCase(ctx context.Context, req dto.ObjectRecognitionRequest) (dto.Result[dto.ObjectRecognitionResponse], error)
 }
 
 // useCase implements the UseCases interface.
 type UseCase struct {
 	logger      logger.Logger
-	videoSource infrastructure.VideoSource
-	aiProvider  infrastructure.AIProvider
-	alerter     infrastructure.Alerter
-	utils       utils.Utils
+	videoSource source.VideoSource
+	notifier    notifier.Notifier
+	ai          ai.AI
 }
 
 // NewUseCase initializes your use cases with all the necessary dependencies
-func NewUseCase(ctx context.Context, logger logger.Logger, videoSource infrastructure.VideoSource, aiProvider infrastructure.AIProvider, alerter infrastructure.Alerter, utils utils.Utils) (UseCases, error) {
+func NewUseCase(ctx context.Context, logger logger.Logger, videoSource source.VideoSource, notifier notifier.Notifier, ai ai.AI) (UseCases, error) {
 
 	if ctx == nil {
-		return nil, errors.ErrNilContext
+		return nil, domain.ErrNilContext
 	}
 
 	if logger == nil {
-		return nil, errors.ErrNilLogger
+		return nil, domain.ErrNilLogger
 	}
 
 	if videoSource == nil {
-		return nil, errors.ErrNilVideoSource
+		return nil, domain.ErrNilVideoSource
 	}
 
-	if aiProvider == nil {
-		return nil, errors.ErrNilAIProvider
+	if notifier == nil {
+		return nil, domain.ErrNilNotifier
 	}
 
-	if alerter == nil {
-		return nil, errors.ErrNilAlerter
-	}
-
-	if utils == nil {
-		return nil, errors.ErrNilUtils
+	if ai == nil {
+		return nil, domain.ErrNilAI
 	}
 
 	return &UseCase{
 		logger:      logger,
 		videoSource: videoSource,
-		aiProvider:  aiProvider,
-		alerter:     alerter,
-		utils:       utils,
+		notifier:    notifier,
+		ai:          ai,
 	}, nil
 }

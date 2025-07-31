@@ -2,20 +2,20 @@ package cli
 
 import (
 	"fmt"
+	"os"
 
 	"github.com/AlecAivazis/survey/v2"
 )
 
 func (s *SurveyController) Run() error {
-	fmt.Println("🚀 Welcome to Live Semantic Interactive CLI!")
+	fmt.Printf("🚀 Welcome to %s Interactive CLI!\n", os.Getenv("APP_NAME"))
 
 	for {
 		var action string
 		prompt := &survey.Select{
 			Message: "What would you like to do?",
 			Options: []string{
-				"📝 Create Task",
-				"📋 List Tasks",
+				"📸 Object recognition",
 				"⚙️ Settings",
 				"❌ Exit",
 			},
@@ -26,6 +26,10 @@ func (s *SurveyController) Run() error {
 		}
 
 		switch action {
+		case "📸 Object recognition":
+			if err := s.createObjectRecognitionFlow(); err != nil {
+				fmt.Printf("❌ Error: %v\n", err)
+			}
 		case "⚙️ Settings":
 			s.showSettings()
 		case "❌ Exit":
