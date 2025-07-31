@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"live-semantic/src/domain"
 	"live-semantic/src/domain/uc"
-	onnx "live-semantic/src/implementation/ai/onnx/yolo11s"
+	"live-semantic/src/implementation/ai/yolo11s"
 	"live-semantic/src/implementation/notifier"
 	"live-semantic/src/implementation/source/macOsCamera"
 	"live-semantic/src/transport/api"
@@ -76,7 +76,7 @@ func main() {
 		return
 	}
 
-	ai, err := onnx.NewYolo11sNeuralNetwork()
+	ai, err := yolo11s.NewNeuralNetwork()
 	if err != nil {
 		engine.Logger().Error("Failed to initialize AI", err)
 		return

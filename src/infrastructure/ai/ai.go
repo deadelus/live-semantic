@@ -1,3 +1,4 @@
+// Package ai defines the interface for AI-related functionalities.
 package ai
 
 import (
