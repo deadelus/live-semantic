@@ -14,30 +14,42 @@ import (
 
 // MacOsCameraSource implements the VideoSource interface for macOS cameras.
 type MacOsCameraSource struct {
-	webcam      *gocv.VideoCapture
+	camera      *gocv.VideoCapture
 	frameNumber uint64
 }
 
 // NewMacOsCameraSource creates a new MacOsCameraSource instance with the given device ID.
 func NewMacOsCameraSource() (*MacOsCameraSource, error) {
+	return &MacOsCameraSource{}, nil
+}
+
+// Start implements the VideoHandler.Start.
+func (s *MacOsCameraSource) Start() error {
+
 	deviceID := listDevices()
 
 	if deviceID == -1 {
-		return nil, nil
+		return domain.ErrNoCameraFound
 	}
 
 	webcam, err := gocv.OpenVideoCapture(deviceID)
 	if err != nil {
-		return nil, domain.ErrCouldNotOpenCamera
+		return domain.ErrCouldNotOpenCamera
 	}
 
-	return &MacOsCameraSource{webcam: webcam}, nil
+	s.camera = webcam
+
+	if s.camera == nil {
+		return domain.ErrCameraNotInitialized
+	}
+
+	return nil
 }
 
-// NextFrame implements the VideoSource interface for MacOsCameraSource.
+// NextFrame implements the VideoHandler.NextFrame.
 func (s *MacOsCameraSource) NextFrame() (*model.Frame, error) {
 	img := gocv.NewMat()
-	if ok := s.webcam.Read(&img); !ok || img.Empty() {
+	if ok := s.camera.Read(&img); !ok || img.Empty() {
 		return nil, domain.ErrCouldNotReadFrameFromCamera
 	}
 	defer img.Close()
@@ -63,17 +75,17 @@ func (s *MacOsCameraSource) NextFrame() (*model.Frame, error) {
 	}, nil
 }
 
-// Close implements the VideoSource interface for MacOsCameraSource.
+// Close implements the VideoHandler.Close.
 func (s *MacOsCameraSource) Close() error {
-	return s.webcam.Close()
+	return s.camera.Close()
 }
 
 func listDevices() int {
 	for i := 0; i < 10; i++ {
-		webcam, err := gocv.OpenVideoCapture(i)
-		if err == nil && webcam.IsOpened() {
+		camera, err := gocv.OpenVideoCapture(i)
+		if err == nil && camera.IsOpened() {
 			fmt.Printf("Camera found at deviceID: %d\n", i)
-			webcam.Close()
+			camera.Close()
 			return i
 		}
 	}

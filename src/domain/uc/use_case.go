@@ -6,8 +6,9 @@ import (
 	"live-semantic/src/domain"
 	"live-semantic/src/domain/dto"
 	"live-semantic/src/infrastructure/ai"
+	displayhandler "live-semantic/src/infrastructure/displayHandler"
 	"live-semantic/src/infrastructure/notifier"
-	"live-semantic/src/infrastructure/source"
+	sourcehandler "live-semantic/src/infrastructure/sourceHandler"
 
 	"github.com/deadelus/go-clean-app/src/logger"
 )
@@ -19,14 +20,15 @@ type UseCases interface {
 
 // useCase implements the UseCases interface.
 type UseCase struct {
-	logger      logger.Logger
-	videoSource source.VideoSource
-	notifier    notifier.Notifier
-	ai          ai.AI
+	logger             logger.Logger
+	videoSourceHandler sourcehandler.VideoHandler
+	displayhandler     displayhandler.DisplayHandler
+	notifier           notifier.Notifier
+	ai                 ai.AI
 }
 
 // NewUseCase initializes your use cases with all the necessary dependencies
-func NewUseCase(ctx context.Context, logger logger.Logger, videoSource source.VideoSource, notifier notifier.Notifier, ai ai.AI) (UseCases, error) {
+func NewUseCase(ctx context.Context, logger logger.Logger, videoSourceHandler sourcehandler.VideoHandler, displayhandler displayhandler.DisplayHandler, notifier notifier.Notifier, ai ai.AI) (UseCases, error) {
 
 	if ctx == nil {
 		return nil, domain.ErrNilContext
@@ -36,8 +38,12 @@ func NewUseCase(ctx context.Context, logger logger.Logger, videoSource source.Vi
 		return nil, domain.ErrNilLogger
 	}
 
-	if videoSource == nil {
+	if videoSourceHandler == nil {
 		return nil, domain.ErrNilVideoSource
+	}
+
+	if displayhandler == nil {
+		return nil, domain.ErrNilDisplayHandler
 	}
 
 	if notifier == nil {
@@ -49,9 +55,10 @@ func NewUseCase(ctx context.Context, logger logger.Logger, videoSource source.Vi
 	}
 
 	return &UseCase{
-		logger:      logger,
-		videoSource: videoSource,
-		notifier:    notifier,
-		ai:          ai,
+		logger:             logger,
+		videoSourceHandler: videoSourceHandler,
+		displayhandler:     displayhandler,
+		notifier:           notifier,
+		ai:                 ai,
 	}, nil
 }

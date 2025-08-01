@@ -1,4 +1,5 @@
-package notifier
+// Package lognotifier provides a simple implementation of the Notifier interface that logs messages to the console.
+package lognotifier
 
 import (
 	"fmt"

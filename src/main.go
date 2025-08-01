@@ -5,13 +5,19 @@ import (
 	"live-semantic/src/domain"
 	"live-semantic/src/domain/uc"
 	"live-semantic/src/implementation/ai/yolo11s"
-	"live-semantic/src/implementation/notifier"
-	"live-semantic/src/implementation/source/macOsCamera"
+	"live-semantic/src/implementation/displayhandler/window"
+	lognotifier "live-semantic/src/implementation/notifier/log-notifier"
+	"live-semantic/src/implementation/sourceHandler/macOsCamera"
+	"live-semantic/src/infrastructure/ai"
+	displayhandler "live-semantic/src/infrastructure/displayHandler"
+	"live-semantic/src/infrastructure/notifier"
+	sourcehandler "live-semantic/src/infrastructure/sourceHandler"
 	"live-semantic/src/transport/api"
 	"live-semantic/src/transport/cli"
 	"live-semantic/src/transport/cmd"
 	"live-semantic/src/transport/websocket"
 	"os"
+	"runtime"
 
 	"github.com/deadelus/go-clean-app/src/application"
 	"github.com/spf13/pflag"
@@ -23,6 +29,10 @@ const (
 )
 
 func main() {
+	if runtime.GOOS == "darwin" {
+		runtime.LockOSThread()
+	}
+
 	println("Live Semantic - Starting Application")
 	// os.Exit(onnx_poc.Run()) // Run the ONNX Proof of concept model and handle any errors
 
@@ -64,25 +74,13 @@ func main() {
 		},
 	)
 
-	videoSource, err := macOsCamera.NewMacOsCameraSource()
+	videoHandler, displayHandler, notifier, ai, err := initDependencies(engine)
 	if err != nil {
-		engine.Logger().Error("Failed to create video source", err)
+		engine.Logger().Error("Failed to initialize dependencies", err)
 		return
 	}
 
-	notifier := notifier.NewLogNotifier()
-	if notifier == nil {
-		engine.Logger().Error("Notifier not initialized", domain.ErrNilNotifier)
-		return
-	}
-
-	ai, err := yolo11s.NewNeuralNetwork()
-	if err != nil {
-		engine.Logger().Error("Failed to initialize AI", err)
-		return
-	}
-
-	useCases, err := uc.NewUseCase(engine.Context(), engine.Logger(), videoSource, notifier, ai)
+	useCases, err := uc.NewUseCase(engine.Context(), engine.Logger(), videoHandler, displayHandler, notifier, ai)
 	if err != nil {
 		engine.Logger().Error("Failed to create use cases", err)
 		return
@@ -103,6 +101,38 @@ func main() {
 	default:
 		startCLIMode(engine, useCases)
 	}
+}
+
+func initDependencies(engine *application.Engine) (sourcehandler.VideoHandler, displayhandler.DisplayHandler, notifier.Notifier, ai.AI, error) {
+	videoSource, err := macOsCamera.NewMacOsCameraSource()
+	if err != nil {
+		engine.Logger().Error("Failed to create video source", err)
+		return nil, nil, nil, nil, err
+	}
+
+	displayHandler := window.NewDisplayHandler()
+	go func() {
+		displayHandler.ProcessCommands()
+	}()
+
+	if displayHandler == nil {
+		engine.Logger().Error("Display handler not initialized", domain.ErrNilDisplayHandler)
+		return nil, nil, nil, nil, domain.ErrNilDisplayHandler
+	}
+
+	notifier := lognotifier.NewLogNotifier()
+	if notifier == nil {
+		engine.Logger().Error("Notifier not initialized", domain.ErrNilNotifier)
+		return videoSource, displayHandler, nil, nil, domain.ErrNilNotifier
+	}
+
+	ai, err := yolo11s.NewNeuralNetwork()
+	if err != nil {
+		engine.Logger().Error("Failed to initialize Yolo11s AI model", err)
+		return videoSource, displayHandler, nil, nil, err
+	}
+
+	return videoSource, displayHandler, notifier, ai, nil
 }
 
 func determinePort(flagPort, defaultPort int) int {
