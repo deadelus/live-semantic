@@ -84,7 +84,7 @@ func drawRect(img *image.RGBA, rect image.Rectangle, col color.Color, thickness 
 
 // drawLabel dessine un texte avec la police donnée.
 func drawLabel(img *image.RGBA, x, y int, label string, face font.Face) {
-	col := color.RGBA{255, 255, 0, 255} // Jaune
+	col := colorFromWord(label)
 	point := fixed.Point26_6{X: fixed.I(x), Y: fixed.I(y)}
 	d := &font.Drawer{
 		Dst:  img,
@@ -93,4 +93,16 @@ func drawLabel(img *image.RGBA, x, y int, label string, face font.Face) {
 		Dot:  point,
 	}
 	d.DrawString(label)
+}
+
+// colorFromWord generates a deterministic color from a word.
+func colorFromWord(word string) color.RGBA {
+	var hash uint32 = 2166136261
+	for i := 0; i < len(word); i++ {
+		hash = (hash * 16777619) ^ uint32(word[i])
+	}
+	r := uint8((hash >> 16) & 0xFF)
+	g := uint8((hash >> 8) & 0xFF)
+	b := uint8(hash & 0xFF)
+	return color.RGBA{r, g, b, 255}
 }

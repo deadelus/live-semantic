@@ -4,6 +4,7 @@ import "errors"
 
 var (
 	// Define custom errors for the application
+	ErrNilRuntime                = errors.New("nil runtime error")
 	ErrModelInitialization       = errors.New("model initialization failed")
 	ErrModelOptionInitialization = errors.New("model option initialization failed")
 
@@ -17,10 +18,14 @@ var (
 	ErrNilUtils          = errors.New("utils not initialized")
 
 	// Error for camera-related issues
-	ErrNoCameraFound               = errors.New("no camera found")
-	ErrCouldNotOpenCamera          = errors.New("could not open camera")
-	ErrCameraNotInitialized        = errors.New("camera not initialized")
+	ErrNoCameraFound        = errors.New("no camera found")
+	ErrCouldNotOpenCamera   = errors.New("could not open camera")
+	ErrCameraNotInitialized = errors.New("camera not initialized")
+
 	ErrCouldNotReadFrameFromCamera = errors.New("could not read frame from camera")
 	ErrCouldNotConvertFrameToImage = errors.New("could not convert frame to image")
 	ErrCouldNotEncodeFrameToJPEG   = errors.New("could not encode frame to JPEG")
+
+	// Error for streaming processor issues
+	ErrNilStreamingProcessor = errors.New("streaming processor not initialized")
 )

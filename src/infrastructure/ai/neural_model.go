@@ -10,11 +10,13 @@ type ObjectDetectionResult struct {
 	// Frame is the original image frame that was analyzed.
 	Frame *model.Frame
 	// BoundingBoxes contains the detected bounding boxes in the frame.
-	BoundingBoxes *[]model.BoundingBox
+	BoundingBoxes []model.BoundingBox
 }
 
 // AI defines all the methods required for neural network stuff.
 type AI interface {
 	// AnalyzeFrame runs inference on a single frame and returns detected bounding boxes.
 	AnalyzeFrame(frame *model.Frame) (*ObjectDetectionResult, error)
+	// DrawBoundingBoxes draws bounding boxes on the given image based on the detected objects.
+	DrawBoundingBoxes(imgData []byte, boxes []model.BoundingBox, filter string) ([]byte, error)
 }

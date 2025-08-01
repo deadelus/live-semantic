@@ -2,21 +2,33 @@
 package yolo11s
 
 import (
+	"bytes"
 	"fmt"
 	"image"
+	"image/color"
+	"image/draw"
+	"image/jpeg"
+	"io"
 	"live-semantic/src/domain"
 	"live-semantic/src/domain/model"
 	"live-semantic/src/infrastructure/ai"
 	"live-semantic/src/internal/onnx"
+	"os"
 	"sort"
 
 	"github.com/nfnt/resize"
 	ort "github.com/yalue/onnxruntime_go"
+	"golang.org/x/image/font"
+	"golang.org/x/image/font/opentype"
+	"golang.org/x/image/math/fixed"
 )
 
 const (
-	// Yolo11sModelPath is the path to the YOLOv11s ONNX model file.
-	Yolo11sModelPath = "src/implementation/ai/yolo11s/yolo11s.onnx"
+	// yolo11sModelPath is the path to the YOLOv11s ONNX model file.
+	yolo11sModelPath = "src/implementation/ai/yolo11s/yolo11s.onnx"
+	fontsPath        = "src/assets/fonts/Roboto-Regular.ttf"
+	fontSize         = 30
+	boxThickness     = 5
 )
 
 // Array of YOLOv8 class labels
@@ -39,10 +51,10 @@ type Yolo11sNeuralNetwork struct {
 }
 
 // NewNeuralNetwork initializes the ONNX runtime for YOLOv11s model.
-func NewNeuralNetwork() (*Yolo11sNeuralNetwork, error) {
+func NewNeuralNetwork() *Yolo11sNeuralNetwork {
 	// Initialize the ONNX runtime with the model path and input/output shapes
 	onnxRuntime := onnx.NewOnnxRuntime(
-		Yolo11sModelPath,
+		yolo11sModelPath,
 		"", // No specific library path needed for this model
 		onnx.TensorInputShape{
 			BatchSize: 1,
@@ -57,17 +69,17 @@ func NewNeuralNetwork() (*Yolo11sNeuralNetwork, error) {
 		},
 	)
 	if onnxRuntime == nil {
-		return nil, domain.ErrModelInitialization
+		fmt.Println(domain.ErrNilRuntime.Error(), "Yolo11sNeuralNetwork", yolo11sModelPath)
 	}
 
 	// Create a new ONNX session
 	session, err := onnx.NewONNXSession(onnxRuntime)
 	if err != nil {
-		return nil, fmt.Errorf("failed to create ONNX session: %w", err)
+		fmt.Println(domain.ErrModelInitialization.Error(), "Yolo11sNeuralNetwork", yolo11sModelPath, err)
 	}
 	return &Yolo11sNeuralNetwork{
 		Session: session,
-	}, nil
+	}
 }
 
 // AnalyzeFrame implements the AI interface for Yolo11sNeuralNetwork.
@@ -95,6 +107,38 @@ func (m *Yolo11sNeuralNetwork) AnalyzeFrame(frame *model.Frame) (*ai.ObjectDetec
 		Frame:         frame,
 		BoundingBoxes: boxes,
 	}, nil
+}
+
+// DrawBoundingBoxes implements the AI interface for Yolo11sNeuralNetwork
+func (m *Yolo11sNeuralNetwork) DrawBoundingBoxes(imgData []byte, boxes []model.BoundingBox, filter string) ([]byte, error) {
+	img, _, err := image.Decode(bytes.NewReader(imgData))
+	if err != nil {
+		return nil, fmt.Errorf("failed to decode image: %w", err)
+	}
+
+	out := image.NewRGBA(img.Bounds())
+	draw.Draw(out, img.Bounds(), img, image.Point{}, draw.Src)
+
+	for _, box := range boxes {
+		if filter != "*" && box.Label != filter {
+			continue // Skip boxes that do not match the filter
+		}
+
+		color := model.ClassLabelColor(box.Label)
+
+		rect := box.ToRect()
+		drawRect(out, rect, color, boxThickness)
+
+		label := fmt.Sprintf("%s %.2f", box.Label, box.Confidence)
+		drawLabel(out, rect.Min.X, rect.Min.Y-10, label)
+	}
+
+	var buf bytes.Buffer
+	if err := jpeg.Encode(&buf, out, nil); err != nil {
+		return nil, fmt.Errorf("failed to encode image: %w", err)
+	}
+
+	return buf.Bytes(), nil
 }
 
 // preProcessFrame prepares the input frame for the model.
@@ -127,7 +171,7 @@ func preProcessFrame(img image.Image, tensor *ort.Tensor[float32]) error {
 
 // postProcessOutput processes the output of the YOLOv8 model and returns a slice of bounding boxes.
 // It iterates through the output array, finds the class with the highest probability for each index
-func postProcessOutput(output []float32, originalWidth, originalHeight int) *[]model.BoundingBox {
+func postProcessOutput(output []float32, originalWidth, originalHeight int) []model.BoundingBox {
 	boundingBoxes := make([]model.BoundingBox, 0, 8400)
 
 	var classID int
@@ -192,5 +236,70 @@ func postProcessOutput(output []float32, originalWidth, originalHeight int) *[]m
 	}
 
 	// This will still be in sorted order by confidence
-	return &mergedResults
+	return mergedResults
+}
+
+// drawRect draws a rectangle on the image with the specified color and thickness
+func drawRect(img *image.RGBA, rect image.Rectangle, col color.Color, thickness int) {
+	for t := 0; t < thickness; t++ {
+		// Top
+		for x := rect.Min.X + t; x < rect.Max.X-t; x++ {
+			img.Set(x, rect.Min.Y+t, col)
+		}
+		// Bottom
+		for x := rect.Min.X + t; x < rect.Max.X-t; x++ {
+			img.Set(x, rect.Max.Y-1-t, col)
+		}
+		// Left
+		for y := rect.Min.Y + t; y < rect.Max.Y-t; y++ {
+			img.Set(rect.Min.X+t, y, col)
+		}
+		// Right
+		for y := rect.Min.Y + t; y < rect.Max.Y-t; y++ {
+			img.Set(rect.Max.X-1-t, y, col)
+		}
+	}
+}
+
+// drawLabel draws a label on the image at the specified position
+func drawLabel(img *image.RGBA, x, y int, label string) {
+	// Load the font face
+	face, err := loadFontFace()
+	if err != nil {
+		fmt.Println("Error loading font face:", err)
+		return
+	}
+
+	col := color.RGBA{255, 255, 0, 255} // Jaune
+	point := fixed.Point26_6{X: fixed.I(x), Y: fixed.I(y)}
+	d := &font.Drawer{
+		Dst:  img,
+		Src:  image.NewUniform(col),
+		Face: face,
+		Dot:  point,
+	}
+	d.DrawString(label)
+}
+
+// loadFontFace loads the font face for drawing text on images.
+func loadFontFace() (font.Face, error) {
+	fontFile, err := os.Open(fontsPath)
+	if err != nil {
+		return nil, err
+	}
+	defer fontFile.Close()
+	fontBytes, err := io.ReadAll(fontFile)
+	if err != nil {
+		return nil, err
+	}
+	fnt, err := opentype.Parse(fontBytes)
+	if err != nil {
+		return nil, err
+	}
+	face, err := opentype.NewFace(fnt, &opentype.FaceOptions{
+		Size:    fontSize,
+		DPI:     72,
+		Hinting: font.HintingFull,
+	})
+	return face, err
 }
