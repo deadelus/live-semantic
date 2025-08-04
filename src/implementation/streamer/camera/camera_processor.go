@@ -1,7 +1,9 @@
 package camera
 
 import (
+	"bytes"
 	"fmt"
+	"image/jpeg"
 	"live-semantic/src/domain"
 	"live-semantic/src/domain/model"
 	"time"
@@ -92,43 +94,54 @@ func (cp *CameraProcessor) Start(frameActionCallback func(*model.Frame) (*model.
 			continue
 		}
 
-		// Appliquer le traitement de l'image
-		// Encode imgMat as JPEG
-		buf, err := gocv.IMEncode(gocv.JPEGFileExt, imgMat)
-		if err != nil {
-			fmt.Printf("Erreur lors de l'encodage JPEG: %v\n", err)
+		// Call the frameActionCallback with the encoded image
+		image, error := imgMat.ToImage()
+		if error != nil {
+			fmt.Printf("Erreur lors de la conversion de l'image: %v\n", error)
 			continue
 		}
 
-		// Call the frameActionCallback with the encoded image
+		// Create a new frame with the image and current timestamp
+		// Call the frameActionCallback with the new frame
+		// Assuming frameActionCallback returns a processed frame
+		// If it returns an error, we handle it accordingly
 		outFrame, err := frameActionCallback(&model.Frame{
-			ImageData:   buf.GetBytes(),
-			ImageType:   model.ImageTypeJPEG,
-			Width:       imgMat.Cols(),
-			Height:      imgMat.Rows(),
+			Image:       image,
 			Timestamp:   time.Now(),
 			FrameNumber: uint64(frameCount),
 		})
-
-		buf.Close()
 
 		if err != nil {
 			fmt.Printf("Erreur lors du traitement de la frame: %v\n", err)
 			continue
 		}
 
-		// Convert the processed frame back to a Mat
 		if outFrame == nil {
 			fmt.Println("Frame traitée est nulle, arrêt du traitement")
 			continue
 		}
 
-		// Create a new Mat from the processed image data
-		processedImgMat, err := gocv.IMDecode(outFrame.ImageData, gocv.IMReadColor)
+		if outFrame.Image == nil {
+			fmt.Println("Image traitée est nulle, arrêt du traitement")
+			continue
+		}
+
+		// Convert Image to Bytes for display
+		buf := new(bytes.Buffer)
+		err = jpeg.Encode(buf, outFrame.Image, &jpeg.Options{Quality: 90})
+		if err != nil {
+			return err
+		}
+		img := buf.Bytes()
+
+		// Decode the JPEG image for display
+		processedImgMat, err := gocv.IMDecode(img, gocv.IMReadColor)
+
 		if err != nil || processedImgMat.Empty() {
 			fmt.Printf("Erreur lors du décodage JPEG pour affichage: %v\n", err)
 			continue
 		}
+
 		// Afficher les images
 		cp.originalWindow.IMShow(imgMat)
 		cp.window.IMShow(processedImgMat)

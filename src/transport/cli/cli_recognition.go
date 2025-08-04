@@ -9,8 +9,8 @@ import (
 	"github.com/AlecAivazis/survey/v2"
 )
 
-func (s *SurveyController) createObjectRecognitionFlow() error {
-	fmt.Println("\n📸 Object recognition...")
+func (s *SurveyController) createRecognitionFlow() error {
+	fmt.Println("\n📸 Recognition...")
 
 	var qs = []*survey.Question{
 		{
@@ -49,8 +49,8 @@ func (s *SurveyController) createObjectRecognitionFlow() error {
 	}
 
 	// Créer via le handler
-	req := transport.TransportRequest[dto.ObjectRecognitionRequest]{
-		Data: dto.ObjectRecognitionRequest{
+	req := transport.TransportRequest[dto.RecognitionRequest]{
+		Data: dto.RecognitionRequest{
 			Filter:              answers.Filter,
 			SimilarityThreshold: answers.SimilarityThreshold,
 		},
@@ -58,10 +58,10 @@ func (s *SurveyController) createObjectRecognitionFlow() error {
 		Source:  "interactive",
 	}
 
-	response := s.handler.HandleObjectRecognition(req)
+	response := s.handler.HandleRecognitionUseCase(req)
 
 	if response.Success {
-		fmt.Printf("\n✅ Object recognition request created successfully!\n")
+		fmt.Printf("\n✅ Recognition request created successfully!\n")
 	} else {
 		fmt.Printf("\n❌ Error: %s\n\n", response.Error)
 	}

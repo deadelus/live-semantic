@@ -2,25 +2,15 @@
 package yolo11s
 
 import (
-	"bytes"
 	"fmt"
-	"image"
-	"image/color"
-	"image/draw"
-	"image/jpeg"
-	"io"
 	"live-semantic/src/domain"
 	"live-semantic/src/domain/model"
 	"live-semantic/src/infrastructure/ai"
 	"live-semantic/src/internal/onnx"
-	"os"
 	"sort"
 
 	"github.com/nfnt/resize"
 	ort "github.com/yalue/onnxruntime_go"
-	"golang.org/x/image/font"
-	"golang.org/x/image/font/opentype"
-	"golang.org/x/image/math/fixed"
 )
 
 const (
@@ -83,14 +73,9 @@ func NewNeuralNetwork() *Yolo11sNeuralNetwork {
 }
 
 // AnalyzeFrame implements the AI interface for Yolo11sNeuralNetwork.
-func (m *Yolo11sNeuralNetwork) AnalyzeFrame(frame *model.Frame) (*ai.ObjectDetectionResult, error) {
+func (m *Yolo11sNeuralNetwork) AnalyzeFrame(frame *model.Frame) (*ai.DetectionResult, error) {
+	err := preProcessFrame(m.Session.TensorInput, frame)
 
-	img, err := frame.Image()
-	if err != nil {
-		return nil, fmt.Errorf("failed to decode frame image: %w", err)
-	}
-
-	err = preProcessFrame(img, m.Session.TensorInput)
 	if err != nil {
 		return nil, err
 	}
@@ -100,50 +85,17 @@ func (m *Yolo11sNeuralNetwork) AnalyzeFrame(frame *model.Frame) (*ai.ObjectDetec
 		return nil, err
 	}
 
-	output := m.Session.TensorOutput.GetData()
-	boxes := postProcessOutput(output, frame.Width, frame.Height)
+	boxes := postProcessOutput(m.Session.TensorOutput, frame)
 
-	return &ai.ObjectDetectionResult{
+	return &ai.DetectionResult{
 		Frame:         frame,
 		BoundingBoxes: boxes,
 	}, nil
 }
 
-// DrawBoundingBoxes implements the AI interface for Yolo11sNeuralNetwork
-func (m *Yolo11sNeuralNetwork) DrawBoundingBoxes(imgData []byte, boxes []model.BoundingBox, filter string) ([]byte, error) {
-	img, _, err := image.Decode(bytes.NewReader(imgData))
-	if err != nil {
-		return nil, fmt.Errorf("failed to decode image: %w", err)
-	}
-
-	out := image.NewRGBA(img.Bounds())
-	draw.Draw(out, img.Bounds(), img, image.Point{}, draw.Src)
-
-	for _, box := range boxes {
-		if filter != "*" && box.Label != filter {
-			continue // Skip boxes that do not match the filter
-		}
-
-		color := model.ClassLabelColor(box.Label)
-
-		rect := box.ToRect()
-		drawRect(out, rect, color, boxThickness)
-
-		label := fmt.Sprintf("%s %.2f", box.Label, box.Confidence)
-		drawLabel(out, rect.Min.X, rect.Min.Y-10, label)
-	}
-
-	var buf bytes.Buffer
-	if err := jpeg.Encode(&buf, out, nil); err != nil {
-		return nil, fmt.Errorf("failed to encode image: %w", err)
-	}
-
-	return buf.Bytes(), nil
-}
-
 // preProcessFrame prepares the input frame for the model.
 // It resizes the image to 640x640 and normalizes the pixel values.
-func preProcessFrame(img image.Image, tensor *ort.Tensor[float32]) error {
+func preProcessFrame(tensor *ort.Tensor[float32], frame *model.Frame) error {
 	data := tensor.GetData()
 	channelSize := 640 * 640
 	if len(data) < (channelSize * 3) {
@@ -154,11 +106,16 @@ func preProcessFrame(img image.Image, tensor *ort.Tensor[float32]) error {
 	blueChannel := data[channelSize*2 : channelSize*3]
 
 	// Resize the image to 640x640 using Lanczos3 algorithm
-	img = resize.Resize(640, 640, img, resize.Lanczos3)
+	originalBounds := frame.Image.Bounds()
+	originalWidth := originalBounds.Dx()
+	originalHeight := originalBounds.Dy()
+
+	frame.Image = resize.Resize(640, 640, frame.Image, resize.Lanczos3)
+
 	i := 0
 	for y := 0; y < 640; y++ {
 		for x := 0; x < 640; x++ {
-			r, g, b, _ := img.At(x, y).RGBA()
+			r, g, b, _ := frame.Image.At(x, y).RGBA()
 			redChannel[i] = float32(r>>8) / 255.0
 			greenChannel[i] = float32(g>>8) / 255.0
 			blueChannel[i] = float32(b>>8) / 255.0
@@ -166,12 +123,24 @@ func preProcessFrame(img image.Image, tensor *ort.Tensor[float32]) error {
 		}
 	}
 
+	// Resize output image back to original dimensions and overwrite frame.Image
+	frame.Image = resize.Resize(uint(originalWidth), uint(originalHeight), frame.Image, resize.Lanczos3)
+
 	return nil
 }
 
 // postProcessOutput processes the output of the YOLOv8 model and returns a slice of bounding boxes.
 // It iterates through the output array, finds the class with the highest probability for each index
-func postProcessOutput(output []float32, originalWidth, originalHeight int) []model.BoundingBox {
+func postProcessOutput(tensor *ort.Tensor[float32], frame *model.Frame) []model.BoundingBox {
+	output := tensor.GetData()
+	if len(output) < 8400*84 {
+		fmt.Println("Output tensor does not have enough data for 8400 detections with 84 classes")
+		return nil
+	}
+
+	// Initialize a slice to hold the bounding boxes
+	// 8400 is the number of detections, 84 is the number of classes + 4 coordinates
+	// Each detection has 4 coordinates and a class probability for each class
 	boundingBoxes := make([]model.BoundingBox, 0, 8400)
 
 	var classID int
@@ -197,10 +166,10 @@ func postProcessOutput(output []float32, originalWidth, originalHeight int) []mo
 		// Extract the coordinates and dimensions of the bounding box
 		xc, yc := output[idx], output[8400+idx]
 		w, h := output[2*8400+idx], output[3*8400+idx]
-		x1 := (xc - w/2) / 640 * float32(originalWidth)
-		y1 := (yc - h/2) / 640 * float32(originalHeight)
-		x2 := (xc + w/2) / 640 * float32(originalWidth)
-		y2 := (yc + h/2) / 640 * float32(originalHeight)
+		x1 := (xc - w/2) / 640 * float32(frame.Image.Bounds().Max.X)
+		y1 := (yc - h/2) / 640 * float32(frame.Image.Bounds().Max.Y)
+		x2 := (xc + w/2) / 640 * float32(frame.Image.Bounds().Max.X)
+		y2 := (yc + h/2) / 640 * float32(frame.Image.Bounds().Max.Y)
 
 		// Append the bounding box to the result
 		boundingBoxes = append(boundingBoxes, model.BoundingBox{
@@ -237,69 +206,4 @@ func postProcessOutput(output []float32, originalWidth, originalHeight int) []mo
 
 	// This will still be in sorted order by confidence
 	return mergedResults
-}
-
-// drawRect draws a rectangle on the image with the specified color and thickness
-func drawRect(img *image.RGBA, rect image.Rectangle, col color.Color, thickness int) {
-	for t := 0; t < thickness; t++ {
-		// Top
-		for x := rect.Min.X + t; x < rect.Max.X-t; x++ {
-			img.Set(x, rect.Min.Y+t, col)
-		}
-		// Bottom
-		for x := rect.Min.X + t; x < rect.Max.X-t; x++ {
-			img.Set(x, rect.Max.Y-1-t, col)
-		}
-		// Left
-		for y := rect.Min.Y + t; y < rect.Max.Y-t; y++ {
-			img.Set(rect.Min.X+t, y, col)
-		}
-		// Right
-		for y := rect.Min.Y + t; y < rect.Max.Y-t; y++ {
-			img.Set(rect.Max.X-1-t, y, col)
-		}
-	}
-}
-
-// drawLabel draws a label on the image at the specified position
-func drawLabel(img *image.RGBA, x, y int, label string) {
-	// Load the font face
-	face, err := loadFontFace()
-	if err != nil {
-		fmt.Println("Error loading font face:", err)
-		return
-	}
-
-	col := color.RGBA{255, 255, 0, 255} // Jaune
-	point := fixed.Point26_6{X: fixed.I(x), Y: fixed.I(y)}
-	d := &font.Drawer{
-		Dst:  img,
-		Src:  image.NewUniform(col),
-		Face: face,
-		Dot:  point,
-	}
-	d.DrawString(label)
-}
-
-// loadFontFace loads the font face for drawing text on images.
-func loadFontFace() (font.Face, error) {
-	fontFile, err := os.Open(fontsPath)
-	if err != nil {
-		return nil, err
-	}
-	defer fontFile.Close()
-	fontBytes, err := io.ReadAll(fontFile)
-	if err != nil {
-		return nil, err
-	}
-	fnt, err := opentype.Parse(fontBytes)
-	if err != nil {
-		return nil, err
-	}
-	face, err := opentype.NewFace(fnt, &opentype.FaceOptions{
-		Size:    fontSize,
-		DPI:     72,
-		Hinting: font.HintingFull,
-	})
-	return face, err
 }

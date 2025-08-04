@@ -4,14 +4,16 @@ import (
 	"context"
 	"live-semantic/src/domain/dto"
 	"live-semantic/src/domain/model"
+	"live-semantic/src/internal/drawer"
+	"time"
 )
 
 // Execute starts the continuous analysis of the video stream.
 // It reads frames, gets embeddings, compares them to filters, and sends alerts.
-func (uc *UseCase) ObjectRecognitionUseCase(ctx context.Context, req dto.ObjectRecognitionRequest) (dto.Result[dto.ObjectRecognitionResponse], error) {
+func (uc *UseCase) RecognitionUseCase(ctx context.Context, req dto.RecognitionRequest) (dto.Result[dto.RecognitionResponse], error) {
 	select {
 	case <-ctx.Done():
-		return dto.Failure[dto.ObjectRecognitionResponse]("context cancelled"), ctx.Err()
+		return dto.Failure[dto.RecognitionResponse]("context cancelled"), ctx.Err()
 	default:
 	}
 
@@ -46,17 +48,20 @@ func (uc *UseCase) ObjectRecognitionUseCase(ctx context.Context, req dto.ObjectR
 				}
 			}()
 
-			// Draw bounding boxes on the frame
-			imgData, err := uc.ai.DrawBoundingBoxes(result.Frame.ImageData, result.BoundingBoxes, req.Filter)
-			if err != nil {
-				uc.logger.Info("Error drawing bounding boxes", "error", err)
-				return nil, err
+			boxDrawer := drawer.NewBoxDrawer(frame.Image, result.BoundingBoxes)
+
+			if boxDrawer == nil {
+				uc.logger.Info("BoxDrawer creation failed, returning original frame")
+				return frame, nil
 			}
 
-			frame.ImageData = imgData
-			frame.ImageType = model.ImageTypeJPEG
+			boxDrawer.Draw()
 
-			return frame, nil
+			return &model.Frame{
+				Image:       boxDrawer.ToImage(),
+				Timestamp:   time.Now(),
+				FrameNumber: frame.FrameNumber,
+			}, nil
 		}
 
 		// If no bounding boxes, return the original frame
@@ -64,5 +69,5 @@ func (uc *UseCase) ObjectRecognitionUseCase(ctx context.Context, req dto.ObjectR
 		return frame, nil
 	})
 
-	return dto.Success(dto.ObjectRecognitionResponse{}), nil
+	return dto.Success(dto.RecognitionResponse{}), nil
 }

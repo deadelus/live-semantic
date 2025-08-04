@@ -8,10 +8,10 @@ import (
 	"github.com/spf13/cobra"
 )
 
-var objectRecognitionCmd = &cobra.Command{
-	Use:   "object-recognition",
-	Short: "Run object recognition with filter and similarity threshold",
-	Long:  `Execute the object recognition use case with a filter and similarity threshold.`,
+var recognitionCmd = &cobra.Command{
+	Use:   "recognition",
+	Short: "Run recognition with filter and similarity threshold",
+	Long:  `Execute the recognition use case with a filter and similarity threshold.`,
 	Run: func(cmd *cobra.Command, args []string) {
 		filter, err := cmd.Flags().GetString("filter")
 
@@ -32,12 +32,12 @@ var objectRecognitionCmd = &cobra.Command{
 			return
 		}
 
-		req := dto.ObjectRecognitionRequest{
+		req := dto.RecognitionRequest{
 			Filter:              filter,
 			SimilarityThreshold: threshold,
 		}
 
-		result, err := useCases.ObjectRecognitionUseCase(context.Background(), req)
+		result, err := useCases.RecognitionUseCase(context.Background(), req)
 		if err != nil {
 			fmt.Printf("❌ Error: %s\n", err.Error())
 			return
@@ -51,10 +51,10 @@ var objectRecognitionCmd = &cobra.Command{
 }
 
 func init() {
-	rootCmd.AddCommand(objectRecognitionCmd)
-	objectRecognitionCmd.Flags().String("filter", "", "Text filter for semantic analysis")
-	objectRecognitionCmd.Flags().Float32("similarity-threshold", 0.8, "Similarity threshold for match")
-	err := objectRecognitionCmd.MarkFlagRequired("filter")
+	rootCmd.AddCommand(recognitionCmd)
+	recognitionCmd.Flags().String("filter", "", "Text filter for semantic analysis")
+	recognitionCmd.Flags().Float32("similarity-threshold", 0.8, "Similarity threshold for match")
+	err := recognitionCmd.MarkFlagRequired("filter")
 	if err != nil {
 		fmt.Printf("❌ Error: %s\n", err.Error())
 		return

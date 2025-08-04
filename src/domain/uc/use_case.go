@@ -14,7 +14,7 @@ import (
 
 // UseCases defines the interface for the use cases in the application.
 type UseCases interface {
-	ObjectRecognitionUseCase(ctx context.Context, req dto.ObjectRecognitionRequest) (dto.Result[dto.ObjectRecognitionResponse], error)
+	RecognitionUseCase(ctx context.Context, req dto.RecognitionRequest) (dto.Result[dto.RecognitionResponse], error)
 }
 
 // useCase implements the UseCases interface.

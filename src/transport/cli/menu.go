@@ -15,7 +15,7 @@ func (s *SurveyController) Run() error {
 		prompt := &survey.Select{
 			Message: "What would you like to do?",
 			Options: []string{
-				"📸 Object recognition",
+				"📸 Recognition",
 				"⚙️ Settings",
 				"❌ Exit",
 			},
@@ -26,8 +26,8 @@ func (s *SurveyController) Run() error {
 		}
 
 		switch action {
-		case "📸 Object recognition":
-			if err := s.createObjectRecognitionFlow(); err != nil {
+		case "📸 Recognition":
+			if err := s.createRecognitionFlow(); err != nil {
 				fmt.Printf("❌ Error: %v\n", err)
 			}
 		case "⚙️ Settings":
