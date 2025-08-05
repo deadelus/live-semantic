@@ -6,7 +6,10 @@ import (
 	"live-semantic/src/domain"
 	"live-semantic/src/domain/model"
 	"live-semantic/src/infrastructure/ai"
-	"live-semantic/src/internal/onnx"
+	"path/filepath"
+	"runtime"
+
+	"github.com/deadelus/go-clean-onnxruntime/src/onnx"
 )
 
 var (
@@ -38,12 +41,43 @@ type Yolo11sNeuralNetwork struct {
 	Session *onnx.ONNXSession
 }
 
+func getOnnxLibrary() string {
+	var absPath string
+
+	switch runtime.GOOS {
+	case "windows":
+		switch runtime.GOARCH {
+		case "amd64":
+			absPath, _ = filepath.Abs("src/libraries/win/onnxruntime.dll")
+		}
+	case "darwin":
+		switch runtime.GOARCH {
+		case "arm64":
+			absPath, _ = filepath.Abs("src/libraries/osx/onnxruntime_arm64.dylib")
+		case "amd64":
+			absPath, _ = filepath.Abs("src/libraries/osx/onnxruntime_amd64.dylib")
+		}
+	case "linux":
+		switch runtime.GOARCH {
+		case "arm64":
+			absPath, _ = filepath.Abs("src/libraries/linux/onnxruntime_arm64.so")
+		default:
+			absPath, _ = filepath.Abs("src/libraries/linux/onnxruntime.so")
+		}
+	}
+
+	if absPath == "" {
+		panic("Unable to find a version of the onnxruntime library supporting this system.")
+	}
+	return absPath
+}
+
 // NewNeuralNetwork initializes the ONNX runtime for YOLOv11s model.
 func NewNeuralNetwork() *Yolo11sNeuralNetwork {
 	// Initialize the ONNX runtime with the model path and input/output shapes
 	onnxRuntime := onnx.NewOnnxRuntime(
 		yolo11sModelPath,
-		"", // No specific library path needed for this model
+		getOnnxLibrary(),
 		onnx.TensorInputShape{
 			BatchSize: int64(batchSize),
 			Channels:  int64(modelInputChannels),

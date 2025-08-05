@@ -234,6 +234,19 @@ Mat Mat_Reshape(Mat m, int cn, int rows) {
     }
 }
 
+Mat Mat_ReshapeWithSize(Mat m, int cn, struct IntVector dims) {
+    try {
+        std::vector<int> _dims;
+        for (int i = 0, *v = dims.val; i < dims.length; ++v, ++i) {
+            _dims.push_back(*v);
+        }
+        return new cv::Mat(m->reshape(cn, _dims));
+    } catch(const cv::Exception& e){
+        setExceptionInfo(e.code, e.what());
+        return new cv::Mat();
+    }
+}
+
 OpenCVResult Mat_PatchNaNs(Mat m) {
     try {
         cv::patchNaNs(*m);
@@ -1020,6 +1033,15 @@ OpenCVResult Mat_Max(Mat src1, Mat src2, Mat dst) {
 OpenCVResult Mat_MeanStdDev(Mat src, Mat dstMean, Mat dstStdDev) {
     try {
         cv::meanStdDev(*src, *dstMean, *dstStdDev);
+        return successResult();
+    } catch(const cv::Exception& e) {
+        return errorResult(e.code, e.what());
+    }
+}
+
+OpenCVResult Mat_MeanStdDevWithMask(Mat src, Mat dstMean, Mat dstStdDev, Mat mask) {
+    try {
+        cv::meanStdDev(*src, *dstMean, *dstStdDev, *mask);
         return successResult();
     } catch(const cv::Exception& e) {
         return errorResult(e.code, e.what());

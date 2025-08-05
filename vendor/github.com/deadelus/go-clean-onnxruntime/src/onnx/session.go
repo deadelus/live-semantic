@@ -1,9 +1,6 @@
 package onnx
 
 import (
-	"fmt"
-	"os"
-
 	ort "github.com/yalue/onnxruntime_go"
 )
 
@@ -33,12 +30,8 @@ type OutputTensor struct {
 func NewONNXSession(nr *OnnxRuntime) (*ONNXSession, error) {
 	onnxSession := &ONNXSession{}
 
-	if _, err := os.Stat(GetOnnxLibrary()); err != nil {
-		fmt.Printf("Initializing ONNX session with model: %s\n", GetOnnxLibrary())
-		panic("Ensure the ONNX library is correctly set up before running this code.")
-	}
+	ort.SetSharedLibraryPath(nr.libraryPath)
 
-	ort.SetSharedLibraryPath(GetOnnxLibrary())
 	err := ort.InitializeEnvironment()
 	if err != nil {
 		return nil, err

@@ -1,3 +1,5 @@
+//go:build !gocv_specific_modules || (gocv_specific_modules && gocv_video)
+
 package gocv
 
 /*
@@ -297,6 +299,43 @@ func (t TrackerGOTURN) Close() error {
 	t.p = nil
 	return nil
 
+}
+
+// TrackerVit is a Tracker using the Vit tracker, a super lightweight dnn-based general object tracking.
+//
+// For further details, please see:
+// https://docs.opencv.org/4.x/d9/d26/classcv_1_1TrackerVit.html
+type TrackerVit struct {
+	p C.TrackerVit
+}
+
+// NewTrackerVit returns a new TrackerVit.
+func NewTrackerVit() Tracker {
+	return TrackerVit{p: C.TrackerVit_Create()}
+}
+
+func NewTrackerVitWithParams(model string) TrackerVit {
+	c_model := C.CString(model)
+	defer C.free(unsafe.Pointer(c_model))
+
+	return TrackerVit{p: C.TrackerVit_CreateWithParams(c_model)}
+}
+
+// Close closes the TrackerMIL.
+func (trk TrackerVit) Close() error {
+	C.TrackerVit_Close(trk.p)
+	trk.p = nil
+	return nil
+}
+
+// Init initializes the TrackerVIT.
+func (trk TrackerVit) Init(img Mat, boundingBox image.Rectangle) bool {
+	return trackerInit(C.Tracker(trk.p), img, boundingBox)
+}
+
+// Update updates the TrackerVIT.
+func (trk TrackerVit) Update(img Mat) (image.Rectangle, bool) {
+	return trackerUpdate(C.Tracker(trk.p), img)
 }
 
 // KalmanFilter implements a standard Kalman filter http://en.wikipedia.org/wiki/Kalman_filter.

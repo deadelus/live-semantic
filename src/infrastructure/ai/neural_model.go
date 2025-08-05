@@ -3,7 +3,8 @@ package ai
 
 import (
 	"live-semantic/src/domain/model"
-	"live-semantic/src/internal/onnx"
+
+	"github.com/deadelus/go-clean-onnxruntime/src/onnx"
 )
 
 // DetectionResult represents the result of an object detection inference.

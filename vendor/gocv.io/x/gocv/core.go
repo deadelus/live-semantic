@@ -659,6 +659,24 @@ func (m *Mat) Reshape(cn int, rows int) Mat {
 	return newMat(C.Mat_Reshape(m.p, C.int(cn), C.int(rows)))
 }
 
+// ReshapeWithSize changes the shape and/or the number of channels of a 2D matrix without copying the data.
+//
+// For further details, please see:
+// https://docs.opencv.org/master/d3/d63/classcv_1_1Mat.html#a4eb96e3251417fa88b78e2abd6cfd7d8
+func (m *Mat) ReshapeWithSize(cn int, dims []int) Mat {
+	cDimsArray := make([]C.int, len(dims))
+	for i, ft := range dims {
+		cDimsArray[i] = C.int(ft)
+	}
+
+	cDimsVector := C.IntVector{
+		val:    (*C.int)(&cDimsArray[0]),
+		length: C.int(len(dims)),
+	}
+
+	return newMat(C.Mat_ReshapeWithSize(m.p, C.int(cn), cDimsVector))
+}
+
 // ConvertFp16 converts a Mat to half-precision floating point.
 //
 // For further details, please see:
@@ -1550,6 +1568,14 @@ func Max(src1, src2 Mat, dst *Mat) error {
 // https://docs.opencv.org/master/d2/de8/group__core__array.html#ga846c858f4004d59493d7c6a4354b301d
 func MeanStdDev(src Mat, dst *Mat, dstStdDev *Mat) error {
 	return OpenCVResult(C.Mat_MeanStdDev(src.p, dst.p, dstStdDev.p))
+}
+
+// MeanStdDevWithMask calculates a mean and standard deviation of array elements while applying the mask.
+//
+// For further details, please see:
+// https://docs.opencv.org/4.x/d2/de8/group__core__array.html#ga846c858f4004d59493d7c6a4354b301d
+func MeanStdDevWithMask(src Mat, dstMean *Mat, dstStdDev *Mat, mask Mat) error {
+	return OpenCVResult(C.Mat_MeanStdDevWithMask(src.p, dstMean.p, dstStdDev.p, mask.p))
 }
 
 // Merge creates one multi-channel array out of several single-channel ones.
