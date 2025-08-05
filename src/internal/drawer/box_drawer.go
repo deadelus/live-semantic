@@ -4,30 +4,26 @@ import (
 	"bytes"
 	"fmt"
 	"image"
-	"image/color"
 	"image/draw"
 	"image/jpeg"
-	"live-semantic/src/domain/model"
 
 	"golang.org/x/image/font"
 	"golang.org/x/image/math/fixed"
 )
 
 const (
-	defaultBoxThickness  = 5
 	defaultLabelFontSize = 12
 )
 
 type BoxDrawer struct {
 	img           *image.RGBA
-	boxes         []model.BoundingBox
-	boxThickness  int
+	boxes         []Box
 	labelFont     font.Face
 	labelFontSize float64
 }
 
 // NewBoxDrawer creates a new BoxDrawer instance with the given image.
-func NewBoxDrawer(img image.Image, boxes []model.BoundingBox) *BoxDrawer {
+func NewBoxDrawer(img image.Image, boxes []Box) *BoxDrawer {
 	if img == nil {
 		return nil
 	}
@@ -49,7 +45,6 @@ func NewBoxDrawer(img image.Image, boxes []model.BoundingBox) *BoxDrawer {
 	return &BoxDrawer{
 		img:           rgbaImg,
 		boxes:         boxes,
-		boxThickness:  defaultBoxThickness,
 		labelFont:     defaultFontFace,
 		labelFontSize: defaultLabelFontSize,
 	}
@@ -69,14 +64,6 @@ func (bd *BoxDrawer) SetFonts(labelFontPath string, labelFontSize float64) {
 	bd.labelFontSize = labelFontSize
 }
 
-func (bd *BoxDrawer) SetBoxThickness(thickness int) {
-	if thickness <= 0 {
-		fmt.Println("Invalid box thickness, must be greater than 0")
-		return
-	}
-	bd.boxThickness = thickness
-}
-
 // ToImage returns the current image.
 func (bd *BoxDrawer) ToImage() *image.RGBA {
 	return bd.img
@@ -94,15 +81,17 @@ func (bd *BoxDrawer) ToBytes() []byte {
 // DrawBox draws bounding boxes on the image with labels and confidence scores.
 func (bd *BoxDrawer) Draw() {
 	for _, box := range bd.boxes {
-		label := fmt.Sprintf("%s %.2f", box.Label, box.Confidence)
-		rect := box.ToRect()
-		bd.DrawRect(bd.img, rect, model.ClassLabelColor(box.Label), bd.boxThickness)
-		bd.WriteLabel(bd.img, rect.Min.X+10, rect.Min.Y+30, label)
+		bd.DrawRect(bd.img, box)
+		bd.WriteLabel(bd.img, box, 10, 30)
 	}
 }
 
 // DrawRect draws a rectangle on the image with the specified color and thickness
-func (bd *BoxDrawer) DrawRect(img *image.RGBA, rect image.Rectangle, col color.Color, thickness int) {
+func (bd *BoxDrawer) DrawRect(img *image.RGBA, box Box) {
+	col := box.Color
+	thickness := box.Thickness
+	rect := box.ToRect()
+
 	for t := 0; t < thickness; t++ {
 		// Top
 		for x := rect.Min.X + t; x < rect.Max.X-t; x++ {
@@ -124,14 +113,17 @@ func (bd *BoxDrawer) DrawRect(img *image.RGBA, rect image.Rectangle, col color.C
 }
 
 // DrawLabel draws a label on the image at the specified position
-func (bd *BoxDrawer) WriteLabel(img *image.RGBA, x, y int, label string) {
-	col := model.ClassLabelColor(label)
-	point := fixed.Point26_6{X: fixed.I(x), Y: fixed.I(y)}
+func (bd *BoxDrawer) WriteLabel(img *image.RGBA, box Box, x, y int) {
+	rect := box.ToRect()
+	col := box.Color
+	point := fixed.Point26_6{X: fixed.I(rect.Min.X + x), Y: fixed.I(rect.Min.Y + y)}
+
 	d := &font.Drawer{
 		Dst:  img,
 		Src:  image.NewUniform(col),
 		Face: bd.labelFont,
 		Dot:  point,
 	}
-	d.DrawString(label)
+
+	d.DrawString(box.Description)
 }

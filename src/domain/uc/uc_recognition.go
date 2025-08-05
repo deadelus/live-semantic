@@ -2,6 +2,7 @@ package uc
 
 import (
 	"context"
+	"fmt"
 	"live-semantic/src/domain/dto"
 	"live-semantic/src/domain/model"
 	"live-semantic/src/internal/drawer"
@@ -48,7 +49,24 @@ func (uc *UseCase) RecognitionUseCase(ctx context.Context, req dto.RecognitionRe
 				}
 			}()
 
-			boxDrawer := drawer.NewBoxDrawer(frame.Image, result.BoundingBoxes)
+			// If bounding boxes are detected, draw them on the frame
+			// Create a slice of boxes for the drawer
+			var boxes []drawer.Box
+			for _, boundingBox := range result.BoundingBoxes {
+				ID := drawer.BoxID(boundingBox.Label)
+				boxes = append(boxes, drawer.Box{
+					ID:          ID,
+					Description: fmt.Sprintf("%s (%.2f%%)", boundingBox.Label, boundingBox.Confidence*100),
+					Color:       model.BoxColor(ID),
+					Thickness:   5,
+					X1:          boundingBox.X1,
+					Y1:          boundingBox.Y1,
+					X2:          boundingBox.X2,
+					Y2:          boundingBox.Y2,
+				})
+			}
+
+			boxDrawer := drawer.NewBoxDrawer(frame.Image, boxes)
 
 			if boxDrawer == nil {
 				uc.logger.Info("BoxDrawer creation failed, returning original frame")

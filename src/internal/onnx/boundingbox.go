@@ -1,4 +1,4 @@
-package model
+package onnx
 
 import (
 	"fmt"

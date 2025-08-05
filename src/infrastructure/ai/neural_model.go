@@ -3,6 +3,7 @@ package ai
 
 import (
 	"live-semantic/src/domain/model"
+	"live-semantic/src/internal/onnx"
 )
 
 // DetectionResult represents the result of an object detection inference.
@@ -10,7 +11,7 @@ type DetectionResult struct {
 	// Frame is the original image frame that was analyzed.
 	Frame *model.Frame
 	// BoundingBoxes contains the detected bounding boxes in the frame.
-	BoundingBoxes []model.BoundingBox
+	BoundingBoxes []onnx.BoundingBox
 }
 
 // AI defines all the methods required for neural network stuff.
