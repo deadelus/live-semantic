@@ -19,14 +19,15 @@ type UseCases interface {
 
 // useCase implements the UseCases interface.
 type UseCase struct {
-	logger             logger.Logger
-	streamingProcessor streamer.StreamingProcessor
-	notifier           notifier.Notifier
-	ai                 ai.AI
+	logger          logger.Logger
+	streamingInput  streamer.InputStream
+	streamingOutput streamer.OutputStream
+	notifier        notifier.Notifier
+	ai              ai.AI
 }
 
 // NewUseCase initializes your use cases with all the necessary dependencies
-func NewUseCase(ctx context.Context, logger logger.Logger, streamingProcessor streamer.StreamingProcessor, notifier notifier.Notifier, ai ai.AI) (UseCases, error) {
+func NewUseCase(ctx context.Context, logger logger.Logger, streamingInput streamer.InputStream, streamingOutput streamer.OutputStream, notifier notifier.Notifier, ai ai.AI) (UseCases, error) {
 
 	if ctx == nil {
 		return nil, domain.ErrNilContext
@@ -36,7 +37,10 @@ func NewUseCase(ctx context.Context, logger logger.Logger, streamingProcessor st
 		return nil, domain.ErrNilLogger
 	}
 
-	if streamingProcessor == nil {
+	if streamingInput == nil {
+		return nil, domain.ErrNilStreamingProcessor
+	}
+	if streamingOutput == nil {
 		return nil, domain.ErrNilStreamingProcessor
 	}
 
@@ -49,9 +53,10 @@ func NewUseCase(ctx context.Context, logger logger.Logger, streamingProcessor st
 	}
 
 	return &UseCase{
-		logger:             logger,
-		streamingProcessor: streamingProcessor,
-		notifier:           notifier,
-		ai:                 ai,
+		logger:          logger,
+		streamingInput:  streamingInput,
+		streamingOutput: streamingOutput,
+		notifier:        notifier,
+		ai:              ai,
 	}, nil
 }

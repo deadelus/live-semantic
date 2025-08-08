@@ -104,7 +104,7 @@ func NewNeuralNetwork() *Yolo11sNeuralNetwork {
 	}
 }
 
-// AnalyzeFrame implements the AI interface for Yolo11sNeuralNetwork.
+// AnalyzeFrame implements the AI.AnalyzeFrame for Yolo11sNeuralNetwork.
 func (m *Yolo11sNeuralNetwork) AnalyzeFrame(frame *model.Frame) (*ai.DetectionResult, error) {
 	processor := &onnx.Processor{
 		Image:               frame.Image,
@@ -134,4 +134,12 @@ func (m *Yolo11sNeuralNetwork) AnalyzeFrame(frame *model.Frame) (*ai.DetectionRe
 		Frame:         frame,
 		BoundingBoxes: boxes,
 	}, nil
+}
+
+// Cleanup implements the AI.Cleanup for Yolo11sNeuralNetwork.
+func (m *Yolo11sNeuralNetwork) Cleanup() {
+	if m.Session != nil {
+		m.Session.Close()
+	}
+	fmt.Println("Yolo11sNeuralNetwork resources cleaned up successfully.")
 }

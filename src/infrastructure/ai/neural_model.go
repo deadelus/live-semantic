@@ -19,4 +19,6 @@ type DetectionResult struct {
 type AI interface {
 	// AnalyzeFrame runs inference on a single frame and returns detected bounding boxes.
 	AnalyzeFrame(frame *model.Frame) (*DetectionResult, error)
+	// Cleanup performs any necessary cleanup operations.
+	Cleanup()
 }

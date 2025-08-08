@@ -54,7 +54,7 @@ github.com/cloudwego/base64x/internal/rt
 # github.com/davecgh/go-spew v1.1.1
 ## explicit
 github.com/davecgh/go-spew/spew
-# github.com/deadelus/go-clean-app v1.0.0
+# github.com/deadelus/go-clean-app v1.0.1
 ## explicit; go 1.24.5
 github.com/deadelus/go-clean-app/src/application
 github.com/deadelus/go-clean-app/src/cerr

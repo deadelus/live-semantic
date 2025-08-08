@@ -8,4 +8,6 @@ import (
 type Notifier interface {
 	// Notify sends a notification for a given message.
 	Notify(msg model.Message) error
+	// Cleanup performs any necessary cleanup operations.
+	Cleanup()
 }

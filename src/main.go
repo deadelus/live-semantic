@@ -1,19 +1,24 @@
 package main
 
 import (
+	"context"
 	"fmt"
 	"live-semantic/src/domain/uc"
 	"live-semantic/src/implementation/ai/yolo11s"
 	lognotifier "live-semantic/src/implementation/notifier/log-notifier"
-	"live-semantic/src/implementation/streamer/camera"
+	"live-semantic/src/implementation/streamer/input"
+	"live-semantic/src/implementation/streamer/output"
 	"live-semantic/src/infrastructure/ai"
 	"live-semantic/src/infrastructure/notifier"
+	"live-semantic/src/infrastructure/streamer"
 	"live-semantic/src/transport/api"
 	"live-semantic/src/transport/cli"
 	"live-semantic/src/transport/cmd"
 	"live-semantic/src/transport/websocket"
 	"os"
 	"runtime"
+	"syscall"
+	"time"
 
 	"github.com/deadelus/go-clean-app/src/application"
 	"github.com/spf13/pflag"
@@ -57,6 +62,7 @@ func main() {
 		application.SetVersionFromEnv(),
 		options...,
 	)
+
 	if err != nil {
 		fmt.Println("Error creating application:", err)
 		return
@@ -70,9 +76,28 @@ func main() {
 		},
 	)
 
-	streamingProcessor, notifier, ai := initCameraDependencies()
+	streamingInput, windowOutput, notifier, ai := initDependencies()
 
-	useCases, err := uc.NewUseCase(engine.Context(), engine.Logger(), &streamingProcessor, notifier, ai)
+	engine.Gracefull().Register("Stopping application gracefully", func() error {
+		fmt.Println("🔒 Stopping application gracefully...")
+		if notifier != nil {
+			fmt.Println("Cleaning up notifier...")
+		}
+		if ai != nil {
+			fmt.Println("Cleaning up AI resources...")
+		}
+		// Cleanup resources
+		if notifier != nil {
+			notifier.Cleanup()
+		}
+		if ai != nil {
+			ai.Cleanup()
+		}
+		fmt.Println("Application stopped gracefully.")
+		return nil
+	})
+
+	useCases, err := uc.NewUseCase(engine.Context(), engine.Logger(), streamingInput, windowOutput, notifier, ai)
 	if err != nil {
 		engine.Logger().Error("Failed to create use cases", err)
 		return
@@ -95,11 +120,13 @@ func main() {
 	}
 }
 
-func initCameraDependencies() (camera.CameraProcessor, notifier.Notifier, ai.AI) {
-	cameraProcessor := camera.NewCameraProcessor()
+func initDependencies() (streamer.InputStream, streamer.OutputStream, notifier.Notifier, ai.AI) {
+	cameraInput := input.NewCameraInput()
+	windowOutput := output.NewWindowOutput()
+
 	logNotifier := lognotifier.NewLogNotifier()
 	ai := yolo11s.NewNeuralNetwork()
-	return *cameraProcessor, logNotifier, ai
+	return cameraInput, windowOutput, logNotifier, ai
 }
 
 func determinePort(flagPort, defaultPort int) int {
@@ -113,9 +140,17 @@ func determinePort(flagPort, defaultPort int) int {
 func startInteractiveMode(engine *application.Engine, useCases uc.UseCases) {
 	engine.Logger().Info("💡 Starting in interactive mode")
 	controller := cli.NewSurveyController(useCases, engine.Logger())
-	if err := controller.Run(); err != nil {
-		engine.Logger().Error("Interactive CLI failed", err)
-		os.Exit(1)
+	if err := controller.Run(engine.Context()); err != nil {
+		if err == context.Canceled {
+			fmt.Println("Graceful shutdown triggered by interrupt.")
+			return
+		}
+		// Send SIGTERM to self for graceful shutdown and wait briefly
+		p, err := os.FindProcess(os.Getpid())
+		if err == nil {
+			_ = p.Signal(syscall.SIGTERM)
+		}
+		time.Sleep(500 * time.Millisecond)
 	}
 }
 

@@ -9,6 +9,11 @@ import (
 // LogNotifier is a simple implementation of the Alerter interface that logs messages to the console.
 type LogNotifier struct{}
 
+// NewLogNotifier creates a new instance of LogNotifier.
+func NewLogNotifier() *LogNotifier {
+	return &LogNotifier{}
+}
+
 // Notify implements the Notifier interface for LogNotifier.
 func (n *LogNotifier) Notify(msg model.Message) error {
 	// This is a placeholder for notification logic.
@@ -17,7 +22,7 @@ func (n *LogNotifier) Notify(msg model.Message) error {
 	return nil
 }
 
-// NewLogNotifier creates a new instance of LogNotifier.
-func NewLogNotifier() *LogNotifier {
-	return &LogNotifier{}
+// Cleanup implements the Notifier interface for LogNotifier.
+func (n *LogNotifier) Cleanup() {
+	fmt.Println("LogNotifier resources cleaned up successfully.")
 }

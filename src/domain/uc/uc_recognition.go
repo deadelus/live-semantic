@@ -12,28 +12,22 @@ import (
 // Execute starts the continuous analysis of the video stream.
 // It reads frames, gets embeddings, compares them to filters, and sends alerts.
 func (uc *UseCase) RecognitionUseCase(ctx context.Context, req dto.RecognitionRequest) (dto.Result[dto.RecognitionResponse], error) {
+	defer func() {
+		// Ensure cleanup is called only after loop exits
+		uc.streamingOutput.Cleanup()
+	}()
+
 	select {
 	case <-ctx.Done():
 		return dto.Failure[dto.RecognitionResponse]("context cancelled"), ctx.Err()
 	default:
 	}
 
-	uc.streamingProcessor.Initialize()
+	uc.streamingInput.Initialize()
+	uc.streamingOutput.Initialize()
 
-	uc.streamingProcessor.Start(func(frame *model.Frame) (*model.Frame, error) {
-		println("Processing frame:", frame.FrameNumber)
-
-		// Analyze the frame using the AI model
-		result, err := uc.ai.AnalyzeFrame(frame)
-
-		if err != nil {
-			uc.logger.Info("AI analysis error", "error", err)
-			return nil, err
-		}
-
-		uc.logger.Info("Frame processed", "frame_number", frame.FrameNumber)
-
-		if result.BoundingBoxes != nil {
+	uc.streamingInput.Start(func(frame *model.Frame) (*model.Frame, error) {
+		/*
 			go func() {
 				// Process each bounding box
 				for _, box := range result.BoundingBoxes {
@@ -48,9 +42,22 @@ func (uc *UseCase) RecognitionUseCase(ctx context.Context, req dto.RecognitionRe
 					}
 				}
 			}()
+		*/
 
+		println("Processing frame number :", frame.FrameNumber)
+
+		// Analyze the frame using the AI model
+		result, err := uc.ai.AnalyzeFrame(frame)
+
+		if err != nil {
+			uc.logger.Info("AI analysis error", "error", err)
+			return nil, err
+		}
+
+		uc.logger.Info("Frame processed", "frame_number", frame.FrameNumber)
+
+		if result.BoundingBoxes != nil {
 			// If bounding boxes are detected, draw them on the frame
-			// Create a slice of boxes for the drawer
 			var boxes []drawer.Box
 			for _, boundingBox := range result.BoundingBoxes {
 				ID := drawer.BoxID(boundingBox.Label)
@@ -75,11 +82,23 @@ func (uc *UseCase) RecognitionUseCase(ctx context.Context, req dto.RecognitionRe
 
 			boxDrawer.Draw()
 
-			return &model.Frame{
+			outFrame := &model.Frame{
 				Image:       boxDrawer.ToImage(),
 				Timestamp:   time.Now(),
 				FrameNumber: frame.FrameNumber,
-			}, nil
+			}
+
+			// Output the frame
+			uc.streamingOutput.Render(outFrame)
+
+			// Handle key events (e.g., for stopping the stream)
+			key := uc.streamingOutput.HandleKeyEvent()
+			if key == 27 { // 'q' or Escape to quit
+				uc.logger.Info("Stopping stream due to key event")
+				return nil, nil
+			}
+
+			return outFrame, nil
 		}
 
 		// If no bounding boxes, return the original frame
@@ -87,5 +106,10 @@ func (uc *UseCase) RecognitionUseCase(ctx context.Context, req dto.RecognitionRe
 		return frame, nil
 	})
 
+	// Stop all processing before cleanup
+	uc.streamingInput.Stop()
+	uc.streamingOutput.Stop()
+
+	fmt.Println("Recognition completed successfully.")
 	return dto.Success(dto.RecognitionResponse{}), nil
 }

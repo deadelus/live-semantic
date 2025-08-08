@@ -3,7 +3,7 @@ module live-semantic
 go 1.24.5
 
 require (
-	github.com/deadelus/go-clean-app v1.0.0
+	github.com/deadelus/go-clean-app v1.0.1
 	github.com/deadelus/go-clean-onnxruntime v1.21.2
 	github.com/spf13/cobra v1.9.1
 	gocv.io/x/gocv v0.42.0
