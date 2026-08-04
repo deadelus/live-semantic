@@ -1,213 +1,128 @@
 # 🎯 **LiveSemantic - Architecture & Projet**
 
+> Ce document reflète l'état réel du code sur `feat/displayer` (branche la plus avancée) au 2026-08-04. Pour la vision cible et le plan détaillé, voir `TODO.md` et `MIGRATION.md`.
+
 ## 📋 **Vue d'ensemble**
 
-**Analyseur sémantique vidéo temps réel** avec filtres IA en langage naturel, optimisé pour performance maximale et déploiement agnostique.
+**Vision** : analyseur sémantique vidéo temps réel avec filtres IA en langage naturel.
+
+**Réalité actuelle** : détecteur d'objets temps réel à vocabulaire fermé (80 classes COCO, YOLO11s en ONNX natif Go), avec capture webcam, overlay des bounding boxes et CLI. Le matching sémantique en langage naturel (CLIP, embeddings, cosine similarity) n'est **pas implémenté** — les "filtres" actuels comparent une chaîne à un label de classe YOLO, rien de plus.
 
 ---
 
-## 🏗️ **Architecture Clean Architecture + ONNX**
+## 🏗️ **Architecture réelle**
 
 ```
 ┌─────────────────────┐
-│     TRANSPORT       │  CLI, Future: HTTP/WebSocket
+│     TRANSPORT       │  CLI (cobra) ✅, mode interactif ✅ — Web API (gin) et WebSocket : squelettes non branchés
 ├─────────────────────┤
-│    APPLICATION      │  Use Cases, Strategies, Events
+│    DOMAIN (uc)       │  UseCases.RecognitionUseCase ✅ — un seul use case
 ├─────────────────────┤
-│      DOMAIN         │  Business Logic, Ports
+│  INFRASTRUCTURE      │  ports (interfaces) ai.AI, streamer.InputStream/OutputStream, notifier.Notifier ✅
 ├─────────────────────┤
-│  INFRASTRUCTURE     │  ONNX, Video, Storage, Alerts
+│  IMPLEMENTATION      │  yolo11s (ONNX natif) ✅, camera gocv ✅, window gocv ✅, log-notifier ✅
 └─────────────────────┘
 ```
 
-### **🎛️ Dual Mode**
-- **Realtime** : Webcam surveillance, latence < 50ms, alertes immédiates
-- **Batch** : Fichiers vidéo, précision maximale, indexation complète
+L'inversion de dépendance est réelle : `domain/uc` ne dépend que d'interfaces (`infrastructure/*`), les implémentations concrètes vivent dans `implementation/` et sont injectées dans `main.go`. Point faible : `infrastructure/ai.DetectionResult` expose directement le type `onnx.BoundingBox` de la lib vendorisée au lieu d'un type domaine — fuite mineure d'abstraction.
 
-### **🧠 IA Stack - ONNX First**
-1. **ONNX Go natif** (5-20ms) - Premier choix
-2. **Python embedded** (10-50ms) - Fallback
-3. **REST API** (100ms+) - Dernier recours
+### **🧠 IA Stack — état réel**
+1. **ONNX Go natif (YOLO11s)** ✅ — seul backend implémenté, détection d'objets classique (bounding boxes + label + confidence)
+2. **CLIP / embeddings texte-image** ❌ — non implémenté, aucun encodeur sémantique
+3. **Python embedded / REST API** ❌ — jamais implémenté, resteront des options de fallback futures
 
 ---
 
-## 📁 **Structure Projet**
+## 📁 **Structure Projet réelle**
 
 ```
-
+src/
+├── main.go                        # bootstrap, wiring des dépendances
+├── domain/
+│   ├── uc/                        # UseCases.RecognitionUseCase (seul use case)
+│   ├── dto/                       # DTOs requête/réponse
+│   └── model/                     # Frame, Class (constantes COCO), couleurs de box
+├── infrastructure/                 # ports (interfaces) : ai.AI, streamer.{Input,Output}Stream, notifier.Notifier
+├── implementation/
+│   ├── ai/yolo11s/                # adapter ONNX YOLO11s
+│   ├── streamer/{input,output}/   # capture webcam gocv, fenêtre d'affichage gocv
+│   └── notifier/log-notifier/     # notifier console
+├── internal/drawer/                # dessin des bounding boxes sur l'image
+└── transport/
+    ├── cli/, cmd/                  # CLI cobra + mode interactif — branchés sur RecognitionUseCase ✅
+    ├── api/                        # Web API gin — squelette, ne route PAS vers RecognitionUseCase ❌
+    └── websocket/                  # squelette, ne route PAS vers RecognitionUseCase ❌
 ```
+
+~2000 lignes de Go (hors vendor), 2 fichiers de test (`domain/dto`, `domain/uc` — ce dernier sans test réel), couverture quasi nulle.
 
 ---
 
-## ⚡ **Composants Clés**
+## 🎮 **Modes d'utilisation — état réel**
 
-### **🎥 Pipeline Vidéo**
-- **Sources** : Webcam (gocv), fichiers vidéo, streams RTMP
-- **Processing** : Frame extraction, buffering, preprocessing
-- **Performance** : Backpressure, worker pools, circuit breakers
-
-### **🧠 IA Engine Agnostique**
-```go
-type AIProvider interface {
-    EncodeText(text string) (Embedding, error)
-    EncodeImage(image []byte) (Embedding, error)
-    GetLatency() time.Duration
-}
-```
-
-### **🎯 Semantic Matching**
-- **Filtres** : Langage naturel ("person walking", "red car")
-- **Matching** : Cosine similarity embeddings
-- **Contexte** : Security vs Creative (seuils différents)
-
-### **🚨 Alerting Agnostique**
-```go
-type AlertSender interface {
-    Send(alert Alert) error
-    SupportsFormat(format AlertFormat) bool
-}
-```
-
----
-
-## 🎮 **Modes d'utilisation**
-
-### **Mode Realtime (Surveillance)**
+### **Mode Realtime (webcam)** ✅ implémenté
 ```bash
-livesemantic realtime \
-  --source="cam0" \
-  --filter="person walking,vehicle entering" \
-  --threshold=0.7 \
-  --alert="console,webhook" \
-  --latency-target=50ms
+./livesemantic recognition --filter="person" --threshold=0.7
 ```
+Capture webcam → YOLO11s → dessin des boxes → fenêtre d'affichage. Fonctionne de bout en bout (testé).
 
-**Optimisations :**
-- FPS réduit (5 FPS)
-- Résolution adaptée (720p)
-- Seuils ajustés sécurité
-- Cache embeddings court
-- Alertes immédiates
+### **Mode Batch (fichiers vidéo)** ❌ non implémenté
+Aucune lecture de fichier vidéo, aucune indexation, aucun export de clips.
 
-### **Mode Batch (Analyse)**
-```bash
-livesemantic batch \
-  --file="video.mp4" \
-  --filters="mariée sourit,applaudissements" \
-  --output="highlights/" \
-  --export-clips \
-  --quality=high
-```
-
-**Optimisations :**
-- FPS max (précision)
-- Full résolution
-- Traitement parallèle
-- Cache embeddings long
-- Indexation complète
+### **Web API / WebSocket** ❌ squelettes
+Routes et handlers présents (34-67 lignes chacun) mais ne branchent sur aucun use case.
 
 ---
 
-## 🔧 **Patterns Architecturaux**
+## 🔧 **Patterns architecturaux — état réel**
 
-### **Strategy Pattern** - Processing par mode
-```go
-type ProcessingStrategy interface {
-    ProcessFrame(frame Frame, filters []Filter) ([]Match, error)
-    GetOptimalBatchSize() int
-    GetFrameRate() int
-}
-```
+- **Strategy Pattern**, **Circuit Breaker**, **Event-Driven** : décrits ci-dessous à titre de vision, **aucun n'est implémenté**. Ce sont des exemples de code illustratifs, pas du code du projet.
+- Un vrai prototype de pipeline découplé par channel existe, mais **non mergé** : branche `feat/ochestrator` (commit unique, code de test qui se termine par un `panic()` volontaire). Voir `TODO.md` / décision C.
 
-### **Circuit Breaker** - Résilience IA
 ```go
-type LatencyOptimizedAI struct {
-    primary   AIProvider  // ONNX rapide
-    fallback  AIProvider  // Backup
-    circuit   CircuitBreaker
-    timeout   time.Duration
-}
-```
-
-### **Event-Driven** - Découplage composants
-```go
-type DomainEvent interface {
-    AggregateID() string
-    OccurredAt() time.Time
-    EventType() string
-}
+// Exemples de patterns visés, non implémentés à ce jour
+type ProcessingStrategy interface { ... }
+type LatencyOptimizedAI struct { ... }
+type DomainEvent interface { ... }
 ```
 
 ---
 
-## 📊 **Métriques & Observabilité**
+## 📊 **Métriques & Observabilité — état réel**
 
-### **Performance Tracking**
-- Latence processing par frame
-- Throughput (frames/sec, heures video/heure)
-- Taux de matches, faux positifs
-- Santé des providers IA
-
-### **Agnostique Implementation**
-```go
-type MetricsCollector interface {
-    RecordLatency(operation string, duration time.Duration)
-    RecordCounter(metric string, value int64)
-    RecordGauge(metric string, value float64)
-}
-```
-
-**Implémentations :** Console → Prometheus → Cloud metrics
+Logs structurés zap (console dev / JSON prod) via `go-clean-app/v2`. Aucun `MetricsCollector`, aucune métrique de latence/throughput/taux de match. Purement des logs, pas de métriques.
 
 ---
 
 ## 🚀 **MVP Roadmap**
 
-### **Phase 1 - Foundation** ⭐
+### **Phase 1 - Foundation**
 - [x] Architecture Clean + ports/adapters
-- [ ] ONNX CLIP intégration Go natif
-- [ ] Pipeline webcam basique (gocv)
-- [ ] CLI realtime surveillance
-- [ ] Métriques console
+- [x] ONNX Go natif intégré (YOLO11s, pas CLIP — vocabulaire fermé)
+- [x] Pipeline webcam basique (gocv)
+- [x] CLI realtime surveillance
+- [ ] Métriques console (logs seulement, pas de métriques structurées)
 
 ### **Phase 2 - Performance**
-- [ ] Cache embeddings LRU
+- [ ] Cache embeddings LRU (pas d'embeddings à ce jour)
 - [ ] Multi-provider AI (ONNX + fallbacks)
-- [ ] Backpressure pipeline
+- [ ] Backpressure pipeline (prototype non mergé sur `feat/ochestrator`)
 - [ ] Mode batch fichiers vidéo
 
 ### **Phase 3 - Production**
 - [ ] Persistance state (snapshots → DB)
-- [ ] API REST + WebSocket
+- [ ] API REST + WebSocket (squelettes présents, logique métier absente)
 - [ ] Interface web monitoring
 - [ ] Containerisation Docker
 
 ### **Phase 4 - Scale**
 - [ ] Multi-instance deployment
 - [ ] Cloud adapters (AWS/GCP)
-- [ ] Advanced AI models
+- [ ] Advanced AI models (CLIP, tracking, cascade — voir `TODO.md`)
 - [ ] Distributed processing
 
 ---
 
-## 🎯 **Avantages Architecture**
+## 🎯 **Prochaines étapes**
 
-✅ **Performance** : ONNX natif Go, 5-20ms latence  
-✅ **Agnostique** : Providers IA, storage, alerting pluggables  
-✅ **Résilient** : Circuit breakers, fallbacks multiples  
-✅ **Évolutif** : Clean Architecture, event-driven  
-✅ **Déployable** : Single binary → multi-cloud  
-✅ **Testable** : Ports/adapters, mocking facile  
-
----
-
-## 🤔 **Prêt pour implémentation MVP ?**
-
-Focus immédiat :
-1. **Setup ONNX models** (export Python → Go)
-2. **Core domain** (Video, Match, Filter)
-3. **ONNX provider** Go natif  
-4. **Webcam pipeline** gocv
-5. **CLI realtime** avec alertes console
-
-**On démarre par quelle partie ?**
+Voir `AUDIT.md` pour l'état des lieux détaillé (branches, hygiène, matrice de recouvrement), `TODO.md` pour le backlog actionnable, et `MIGRATION.md` pour le plan de mise en œuvre phasé.
