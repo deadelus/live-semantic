@@ -9,7 +9,7 @@ import (
 	"live-semantic/src/infrastructure/notifier"
 	"live-semantic/src/infrastructure/streamer"
 
-	"github.com/deadelus/go-clean-app/src/logger"
+	"github.com/deadelus/go-clean-app/v2/logger"
 )
 
 // UseCases defines the interface for the use cases in the application.

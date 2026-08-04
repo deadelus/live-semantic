@@ -5,7 +5,7 @@ import (
 	"live-semantic/src/domain/uc"
 	"live-semantic/src/transport"
 
-	"github.com/deadelus/go-clean-app/src/logger"
+	"github.com/deadelus/go-clean-app/v2/logger"
 )
 
 type SurveyController struct {

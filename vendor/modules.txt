@@ -54,13 +54,12 @@ github.com/cloudwego/base64x/internal/rt
 # github.com/davecgh/go-spew v1.1.1
 ## explicit
 github.com/davecgh/go-spew/spew
-# github.com/deadelus/go-clean-app v1.0.1
+# github.com/deadelus/go-clean-app/v2 v2.1.0
 ## explicit; go 1.24.5
-github.com/deadelus/go-clean-app/src/application
-github.com/deadelus/go-clean-app/src/cerr
-github.com/deadelus/go-clean-app/src/lifecycle
-github.com/deadelus/go-clean-app/src/logger
-github.com/deadelus/go-clean-app/src/logger/zaplogger
+github.com/deadelus/go-clean-app/v2/application
+github.com/deadelus/go-clean-app/v2/lifecycle
+github.com/deadelus/go-clean-app/v2/logger
+github.com/deadelus/go-clean-app/v2/logger/zaplogger
 # github.com/deadelus/go-clean-onnxruntime v1.21.2
 ## explicit; go 1.24.5
 github.com/deadelus/go-clean-onnxruntime/src/onnx
@@ -229,7 +228,7 @@ github.com/yalue/onnxruntime_go
 # go.uber.org/multierr v1.11.0
 ## explicit; go 1.19
 go.uber.org/multierr
-# go.uber.org/zap v1.27.0
+# go.uber.org/zap v1.27.1
 ## explicit; go 1.19
 go.uber.org/zap
 go.uber.org/zap/buffer

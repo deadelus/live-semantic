@@ -3,7 +3,7 @@ module live-semantic
 go 1.24.5
 
 require (
-	github.com/deadelus/go-clean-app v1.0.1
+	github.com/deadelus/go-clean-app/v2 v2.1.0
 	github.com/deadelus/go-clean-onnxruntime v1.21.2
 	github.com/spf13/cobra v1.9.1
 	gocv.io/x/gocv v0.42.0
@@ -59,10 +59,10 @@ require (
 	github.com/gin-gonic/gin v1.10.1
 	github.com/gorilla/websocket v1.5.3
 	github.com/inconshreveable/mousetrap v1.1.0 // indirect
-	github.com/joho/godotenv v1.5.1 // indirect
+	github.com/joho/godotenv v1.5.1
 	github.com/spf13/pflag v1.0.7
 	github.com/spf13/viper v1.20.1
 	github.com/stretchr/testify v1.10.0
 	go.uber.org/multierr v1.11.0 // indirect
-	go.uber.org/zap v1.27.0 // indirect
+	go.uber.org/zap v1.27.1 // indirect
 )

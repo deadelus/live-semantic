@@ -6,7 +6,7 @@ import (
 	"net/http"
 	"os"
 
-	"github.com/deadelus/go-clean-app/src/logger"
+	"github.com/deadelus/go-clean-app/v2/logger"
 	"github.com/gin-gonic/gin"
 	"github.com/gorilla/websocket"
 )

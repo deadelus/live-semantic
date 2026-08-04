@@ -3,7 +3,7 @@ package transport
 import (
 	"live-semantic/src/domain/uc"
 
-	"github.com/deadelus/go-clean-app/src/logger"
+	"github.com/deadelus/go-clean-app/v2/logger"
 )
 
 // BaseHandler handler générique réutilisable

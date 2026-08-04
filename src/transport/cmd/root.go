@@ -5,7 +5,7 @@ import (
 	"live-semantic/src/domain/uc"
 	"os"
 
-	"github.com/deadelus/go-clean-app/src/logger"
+	"github.com/deadelus/go-clean-app/v2/logger"
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 )

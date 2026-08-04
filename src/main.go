@@ -20,7 +20,9 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/deadelus/go-clean-app/src/application"
+	"github.com/deadelus/go-clean-app/v2/application"
+	"github.com/deadelus/go-clean-app/v2/logger/zaplogger"
+	"github.com/joho/godotenv"
 	"github.com/spf13/pflag"
 )
 
@@ -37,6 +39,11 @@ func main() {
 	println("Live Semantic - Starting Application")
 	// os.Exit(onnx_poc.Run()) // Run the ONNX Proof of concept model and handle any errors
 
+	// go-clean-app v2 no longer auto-loads .env (explicit over magic), so we load it ourselves.
+	if err := godotenv.Load(); err != nil {
+		fmt.Println("Error loading .env file:", err)
+	}
+
 	// Define and parse flags first to determine the mode
 	web := pflag.BoolP("web", "s", false, "Start the web server (API mode)")
 	ws := pflag.BoolP("websocket", "w", false, "Start the WebSocket server")
@@ -44,24 +51,31 @@ func main() {
 	port := pflag.IntP("port", "p", 0, "Port to use for the server")
 	pflag.Parse()
 
+	appVersion := os.Getenv(application.AppVersionEnvName)
+	if appVersion == "" {
+		fmt.Printf("Error creating application: environment variable %s not set\n", application.AppVersionEnvName)
+		return
+	}
+
 	// Build application options
-	var options = []application.Option{}
+	var options = []application.Option{
+		application.Version(appVersion),
+	}
+	if appName := os.Getenv(application.AppNameEnvName); appName != "" {
+		options = append(options, application.AppName(appName))
+	}
 
 	isCliMode := !*web && !*ws && !*interactive
 	if isCliMode {
 		// Use a console-friendly logger for CLI mode
-		options = append(options, application.SetZapLoggerForCLI(), application.WithCLIMode())
+		options = append(options, zaplogger.SetZapLoggerForCLI(), application.WithCLIMode())
 	} else {
 		// Use a web-friendly logger for web or websocket mode
-		options = append(options, application.SetZapLogger())
+		options = append(options, zaplogger.SetZapLogger())
 	}
 
 	// Create the engine with the appropriate options
-	engine, err := application.New(
-		application.AppNameEnvName,
-		application.SetVersionFromEnv(),
-		options...,
-	)
+	engine, err := application.New(options...)
 
 	if err != nil {
 		fmt.Println("Error creating application:", err)
