@@ -2,11 +2,62 @@
 
 [![Go Version](https://img.shields.io/badge/Go-1.24+-00ADD8?logo=go)](https://golang.org/)
 [![License](https://img.shields.io/badge/License-MIT-green.svg)](https://opensource.org/licenses/MIT)
-[![Build Status](https://img.shields.io/badge/Build-Passing-brightgreen)](https://github.com/your-org/livesemantic)
+[![Build Status](https://img.shields.io/badge/Build-Passing-brightgreen)](https://github.com/deadelus/live-semantic)
 
-**Real-time semantic video analysis with natural language AI filters**
+**Real-time semantic video analysis with natural language AI filters** *(vision — voir l'état d'avancement ci-dessous pour ce qui existe réellement aujourd'hui)*
 
-LiveSemantic analyzes video streams and files using AI-powered semantic understanding. Define any filter in natural language ("person walking", "red car entering", "crowd gathering") and get instant matches with sub-50ms latency.
+LiveSemantic vise à analyser des flux vidéo en langage naturel ("person walking", "red car entering", "crowd gathering"). **Aujourd'hui, le projet détecte des objets en webcam temps réel avec YOLO11s (80 classes COCO fixes) — le matching sémantique en langage naturel n'est pas encore implémenté.** Détails complets : [AUDIT.md](AUDIT.md).
+
+---
+
+## 📍 État d'avancement du projet
+
+> Dernière mise à jour : 2026-08-04, branche `main`/`feat/displayer`. Pour l'audit complet, le backlog et le plan de migration : [AUDIT.md](AUDIT.md), [TODO.md](TODO.md), [MIGRATION.md](MIGRATION.md).
+
+### Vision vs réalité
+
+| | Vision | Réalité actuelle |
+|---|---|---|
+| Filtres | Langage naturel libre (CLIP, embeddings) | Vocabulaire fermé : 80 classes COCO (YOLO), comparaison de chaîne |
+| Détection | Cascade YOLO → crop → CLIP | YOLO11s seul, ONNX natif Go ✅ |
+| Tracking | Tracker visuel (KCF/CSRT/MOSSE) + agrégat `Track` | Absent |
+| Modes | Realtime + Batch fichiers | Realtime webcam ✅ — Batch absent |
+| Transport | CLI + Web API + WebSocket, même logique métier partout | CLI ✅ branchée sur le use case — Web API et WebSocket : squelettes non branchés |
+| Observabilité | Métriques (latence, throughput, taux de match) | Logs structurés zap uniquement, pas de métriques |
+
+### Architecture réelle
+
+```
+┌─────────────────────┐
+│     TRANSPORT       │  CLI (cobra) ✅, mode interactif ✅ — Web API (gin) et WebSocket : squelettes non branchés
+├─────────────────────┤
+│    DOMAIN (uc)       │  UseCases.RecognitionUseCase ✅ — un seul use case
+├─────────────────────┤
+│  INFRASTRUCTURE      │  ports (interfaces) ai.AI, streamer.InputStream/OutputStream, notifier.Notifier ✅
+├─────────────────────┤
+│  IMPLEMENTATION      │  yolo11s (ONNX natif) ✅, camera gocv ✅, window gocv ✅, log-notifier ✅
+└─────────────────────┘
+```
+
+L'inversion de dépendance est réelle : `domain/uc` ne dépend que d'interfaces, les implémentations concrètes sont injectées dans `main.go`.
+
+### Roadmap
+
+- [x] Architecture Clean + ports/adapters
+- [x] ONNX Go natif intégré (YOLO11s, vocabulaire fermé)
+- [x] Pipeline webcam basique (gocv)
+- [x] CLI realtime surveillance
+- [ ] Métriques console
+- [ ] Cache embeddings LRU
+- [ ] Mode batch fichiers vidéo
+- [ ] Tracking + agrégat `Track`
+- [ ] Cascade YOLO → crop → CLIP (matching sémantique en langage naturel)
+- [ ] API REST + WebSocket branchées sur la logique métier
+- [ ] Persistance, monitoring, conteneurisation
+
+~2000 lignes de Go (hors vendor), couverture de tests quasi nulle (2 fichiers de test, dont 1 sans test réel exécuté).
+
+---
 
 ## 🚀 **Quick Start**
 
@@ -45,8 +96,8 @@ Si tu rencontres une erreur liée à `opencv4.pc` ou à la variable d’environn
 ### Installation
 ```bash
 # Clone repository
-git clone https://github.com/your-org/livesemantic.git
-cd livesemantic
+git clone https://github.com/deadelus/live-semantic.git
+cd live-semantic
 
 # Install Go dependencies
 go mod tidy
@@ -67,10 +118,10 @@ go build -o livesemantic src/main.go
 ./livesemantic -i
 ```
 
-#### Classic CLI Commands
+#### Classic CLI Commands (réellement implémenté)
 ```bash
-# Create a new task
-./livesemantic create-task "My First Task" "A description of the task"
+# Run realtime webcam recognition (YOLO11s, vocabulaire fermé COCO)
+./livesemantic recognition --filter="person" --similarity-threshold=0.7
 
 # Show help
 ./livesemantic help
@@ -79,48 +130,28 @@ go build -o livesemantic src/main.go
 ./livesemantic version
 ```
 
-#### Future Video Analysis Features
+#### Future Video Analysis Features (non implémenté)
 ```bash
-# Real-time webcam surveillance (planned)
-./livesemantic realtime \
-  --source="cam0" \
-  --filter="person walking,vehicle entering" \
-  --threshold=0.7
-
-# Batch video file analysis (planned)
+# Batch video file analysis (planned — voir TODO.md décision A)
 ./livesemantic batch \
   --file="video.mp4" \
   --filters="celebration,applause,dancing" \
   --export-clips
 ```
 
-#### Web API Mode
+#### Web API / WebSocket Mode ⚠️ squelettes non fonctionnels
 ```bash
-# Start web server on port 8080
-./livesemantic web
-
-# Or specify custom port
-./livesemantic web 3000
-
-# Test API endpoint
-curl -X POST http://localhost:8080/api/v1/tasks \
-  -H "Content-Type: application/json" \
-  -d '{"title":"My API Task","description":"Task created via API"}'
+# Ces serveurs démarrent (-s / -w) mais ne routent vers AUCUN use case métier.
+# Les exemples curl/wscat ci-dessous ne fonctionneront pas tant que TODO.md
+# (branchement transport/api et transport/websocket sur RecognitionUseCase)
+# n'est pas fait.
+./livesemantic -s -p 8080   # web
+./livesemantic -w -p 8081   # websocket
 ```
 
-#### WebSocket Mode
-```bash
-# Start WebSocket server on port 8081
-./livesemantic ws
+## 🏗️ **Architecture (vision cible)**
 
-# Or specify custom port
-./livesemantic ws 9000
-
-# Connect to ws://localhost:8081/ws
-# Send message: {"type":"create_task","data":{"title":"My WebSocket Task","description":"Task via WS"}}
-```
-
-## 🏗️ **Architecture**
+> ⚠️ Ceci décrit l'architecture visée pour l'ensemble des transports. L'architecture *réellement en place aujourd'hui* est décrite plus haut dans [État d'avancement](#-état-davancement-du-projet) — seule la CLI est branchée sur la logique métier, Web API et WebSocket sont des squelettes.
 
 LiveSemantic follows Clean Architecture principles with transport-agnostic design:
 
@@ -152,7 +183,9 @@ LiveSemantic follows Clean Architecture principles with transport-agnostic desig
 - **🔧 Configuration**: Cobra + Viper for professional CLI experience
 - **🐳 Container Ready**: Docker and Kubernetes deployment examples
 
-## 📖 **Project Structure**
+## 📖 **Project Structure (vision cible)**
+
+> ⚠️ Structure cible générique (`models/`, `internal/scripts/`...). La structure *réelle* du code aujourd'hui est dans [État d'avancement](#-état-davancement-du-projet).
 
 ```
 live-semantic/

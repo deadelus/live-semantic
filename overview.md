@@ -77,7 +77,7 @@ Routes et handlers présents (34-67 lignes chacun) mais ne branchent sur aucun u
 ## 🔧 **Patterns architecturaux — état réel**
 
 - **Strategy Pattern**, **Circuit Breaker**, **Event-Driven** : décrits ci-dessous à titre de vision, **aucun n'est implémenté**. Ce sont des exemples de code illustratifs, pas du code du projet.
-- Un vrai prototype de pipeline découplé par channel existe, mais **non mergé** : branche `feat/ochestrator` (commit unique, code de test qui se termine par un `panic()` volontaire). Voir `TODO.md` / décision C.
+- Un prototype de pipeline découplé par channel avait été exploré sur la branche `feat/ochestrator` (code de test se terminant par un `panic()` volontaire) — supprimée depuis, son contenu est documenté dans `TODO.md` / décision C pour référence.
 
 ```go
 // Exemples de patterns visés, non implémentés à ce jour
