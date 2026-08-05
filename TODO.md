@@ -32,9 +32,9 @@ Référence matrice : E — PARTIEL/DIVERGENT. La DI existe déjà (`infrastruct
 
 ## B — Tracking-by-detection
 
-Référence matrice : B — tracker ABSENT, mais primitive IoU déjà écrite et testée (NMS) dans `vendor/github.com/deadelus/go-clean-onnxruntime/src/onnx/boundingbox.go`.
+Référence matrice : B — tracker ABSENT. La primitive IoU (ex-vendorisée dans `go-clean-onnxruntime`) est maintenant domaine.
 
-- [ ] **[DÉJÀ FAIT → À INTÉGRER]** Réutiliser l'IoU existant plutôt que le réécrire : soit l'exposer publiquement côté lib vendorisée (PR sur `go-clean-onnxruntime`), soit dupliquer les ~10 lignes côté domaine `live-semantic` (plus rapide, moins de couplage). **Dépendance : ports E (le type domaine bbox doit exister d'abord). Effort : XS une fois E fait.**
+- [x] Réutiliser l'IoU existant plutôt que le réécrire : fait le 2026-08-05, en même temps que la sortie de `go-clean-onnxruntime` (voir `github.com/deadelus/go-clean-onnxruntime` vs `onnxruntime_go`, décision prise en aparté) — `entities.BoundingBox.IoU/Intersection/Union` dans `internal/domain/entities/boundingbox.go`, utilisé pour le NMS de `yolo11s.go`. Publique, testable, plus de dépendance au vendor pour ça.
 - [ ] Intégrer un tracker mono-objet gocv (KCF, CSRT ou MOSSE au choix — à trancher selon un test de dérive sur vidéo réelle, aucun des trois n'est présupposé meilleur ici). **Dépendance : `ports.ObjectTracker` (E). Effort : M (0.5-1 j, gocv expose déjà ces trackers nativement, donc pas de portage à faire, juste l'intégration + tests de dérive).**
 - [ ] Boucle de ré-ancrage périodique (re-détection toutes les 1-2s ou sur chute de confiance) + association IoU (seuil 0.3-0.5) contre les tracks existantes. **Dépendance : tracker ci-dessus + agrégat Track (D). Effort : M.**
 

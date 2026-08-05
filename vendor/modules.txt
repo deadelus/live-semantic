@@ -60,9 +60,6 @@ github.com/deadelus/go-clean-app/v2/application
 github.com/deadelus/go-clean-app/v2/lifecycle
 github.com/deadelus/go-clean-app/v2/logger
 github.com/deadelus/go-clean-app/v2/logger/zaplogger
-# github.com/deadelus/go-clean-onnxruntime v1.21.2
-## explicit; go 1.24.5
-github.com/deadelus/go-clean-onnxruntime/src/onnx
 # github.com/fsnotify/fsnotify v1.9.0
 ## explicit; go 1.17
 github.com/fsnotify/fsnotify

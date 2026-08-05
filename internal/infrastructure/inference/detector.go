@@ -4,8 +4,6 @@ package inference
 
 import (
 	"live-semantic/internal/domain/entities"
-
-	"github.com/deadelus/go-clean-onnxruntime/src/onnx"
 )
 
 // DetectionResult represents the result of an object detection inference.
@@ -13,7 +11,7 @@ type DetectionResult struct {
 	// Frame is the original image frame that was analyzed.
 	Frame *entities.Frame
 	// BoundingBoxes contains the detected bounding boxes in the frame.
-	BoundingBoxes []onnx.BoundingBox
+	BoundingBoxes []entities.BoundingBox
 }
 
 // ObjectDetector defines all the methods required to run object detection inference.
