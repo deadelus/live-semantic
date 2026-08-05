@@ -31,15 +31,17 @@ LiveSemantic vise à analyser des flux vidéo en langage naturel ("person walkin
 ┌─────────────────────┐
 │     TRANSPORT       │  CLI (cobra) ✅, mode interactif ✅ — Web API (gin) et WebSocket : squelettes non branchés
 ├─────────────────────┤
-│    DOMAIN (uc)       │  UseCases.RecognitionUseCase ✅ — un seul use case
+│  APPLICATION (uc)   │  UseCases.RecognitionUseCase ✅ — un seul use case, orchestre les ports
 ├─────────────────────┤
-│  INFRASTRUCTURE      │  ports (interfaces) ai.AI, streamer.InputStream/OutputStream, notifier.Notifier ✅
+│     DOMAIN          │  entités pures (Frame, Class...) — zéro dépendance externe
 ├─────────────────────┤
-│  IMPLEMENTATION      │  yolo11s (ONNX natif) ✅, camera gocv ✅, window gocv ✅, log-notifier ✅
+│  INFRASTRUCTURE     │  ports (interfaces) ai.AI, streamer.InputStream/OutputStream, notifier.Notifier ✅
+├─────────────────────┤
+│  IMPLEMENTATION     │  yolo11s (ONNX natif) ✅, camera gocv ✅, window gocv ✅, log-notifier ✅
 └─────────────────────┘
 ```
 
-L'inversion de dépendance est réelle : `domain/uc` ne dépend que d'interfaces, les implémentations concrètes sont injectées dans `main.go`.
+L'inversion de dépendance est réelle : `application/uc` ne dépend que d'interfaces (`internal/infrastructure/*`), les implémentations concrètes (`internal/implementation/*`) sont injectées dans `cmd/livesemantic/main.go`.
 
 ### Roadmap
 
@@ -88,7 +90,7 @@ Pour utiliser la caméra avec GoCV sur macOS :
 
 3. **Vérifier l’installation**
    ```sh
-   go run src/main.go
+   go run ./cmd/livesemantic
    ```
 
 Si tu rencontres une erreur liée à `opencv4.pc` ou à la variable d’environnement, vérifie bien les étapes ci-dessus.
@@ -103,7 +105,7 @@ cd live-semantic
 go mod tidy
 
 # Build the application
-go build -o livesemantic src/main.go
+go build -o livesemantic ./cmd/livesemantic
 ```
 
 ### Basic Usage
@@ -183,33 +185,37 @@ LiveSemantic follows Clean Architecture principles with transport-agnostic desig
 - **🔧 Configuration**: Cobra + Viper for professional CLI experience
 - **🐳 Container Ready**: Docker and Kubernetes deployment examples
 
-## 📖 **Project Structure (vision cible)**
-
-> ⚠️ Structure cible générique (`models/`, `internal/scripts/`...). La structure *réelle* du code aujourd'hui est dans [État d'avancement](#-état-davancement-du-projet).
+## 📖 **Project Structure**
 
 ```
 live-semantic/
-├── .env                          # Environment variables
-├── .gitignore                    # Git ignore file
-├── go.mod                        # Go module dependencies
-├── go.sum                        # Go module checksums
-├── readme.md                     # This file
-├── src/
-│   ├── main.go                   # Application entry point
-│   ├── domain/                   # Core business logic and models
-│   │   ├── dto/                  # Data Transfer Objects
-│   │   ├── models/               # Domain models (entities)
-│   │   └── uc/                   # Use Case implementations
-│   ├── infrastructure/           # External concerns (AI, DB, etc.)
-│   └── transport/                # Adapters for delivery mechanisms
-│       ├── handler.go            # Base handler for all transports
-│       ├── api/                  # REST API (Gin)
-│       ├── cli/                  # Interactive CLI (Survey)
-│       ├── cmd/                  # Classic CLI (Cobra)
-│       └── websocket/            # WebSocket transport (Gorilla)
-├── internal/                     # Internal application code/scripts
-│   └── scripts/
-└── docs/                         # Project documentation
+├── .env.example                  # Template des variables d'environnement (.env réel non versionné)
+├── .gitignore
+├── go.mod / go.sum
+├── LICENSE
+├── readme.md / overview.md / AUDIT.md / TODO.md / MIGRATION.md
+├── assets/                       # Assets binaires (non compilés) : modèles ONNX, libs natives, fonts
+│   ├── fonts/
+│   ├── models/
+│   └── libraries/{linux,osx,win}/
+├── cmd/
+│   └── livesemantic/
+│       └── main.go                # Point d'entrée, wiring des dépendances
+└── internal/
+    ├── domain/                    # Pur : entités, zéro dépendance externe
+    │   └── entities/
+    ├── application/                # Orchestre domain + ports
+    │   ├── uc/                     # Use cases (RecognitionUseCase)
+    │   └── dto/                    # Contrats input/output des use cases
+    ├── infrastructure/             # Interfaces / ports (ai, notifier, streamer)
+    ├── implementation/             # Adapters concrets (yolo11s, gocv camera/window, drawer, log-notifier)
+    └── transport/                  # CLI (cobra + interactif) ✅, API (gin) et WebSocket ❌ squelettes
+        ├── handler/                # BaseHandler partagé par les transports
+        ├── envelope/                # TransportRequest/Response — enveloppe agnostique (Source, Context)
+        ├── api/
+        ├── cli/
+        ├── cmd/
+        └── websocket/
 ```
 
 ## 🔧 **Development**
@@ -220,13 +226,13 @@ live-semantic/
 go mod tidy
 
 # Development build
-go build -o livesemantic src/main.go
+go build -o livesemantic ./cmd/livesemantic
 
 # Production build with optimizations
-go build -ldflags="-s -w" -o livesemantic src/main.go
+go build -ldflags="-s -w" -o livesemantic ./cmd/livesemantic
 
 # Cross-compilation for Linux
-GOOS=linux GOARCH=amd64 go build -o livesemantic-linux src/main.go
+GOOS=linux GOARCH=amd64 go build -o livesemantic-linux ./cmd/livesemantic
 
 # Run tests
 go test ./...
@@ -239,19 +245,16 @@ golangci-lint run
 ```
 
 ### Environment Setup
-Create a `.env` file in the project root:
-```env
-APP_NAME="live semantic"
-APP_VERSION="0.1.0"
-APP_ENV="development"
-APP_DEBUG="true"
+Copie `.env.example` en `.env` à la racine (le fichier `.env` réel n'est pas versionné) :
+```bash
+cp .env.example .env
 ```
 
 ### Adding New Use Cases
 
-1. **Define DTOs** in `src/domain/dto/dto_task.go`:
+1. **Define DTOs** in `internal/application/dto/dto_task.go`:
 ```go
-// src/domain/dto/dto_task.go
+// internal/application/dto/dto_task.go
 type CreateTaskRequest struct {
     Title       string `json:"title"`
     Description string `json:"description"`
@@ -265,25 +268,25 @@ type TaskResponse struct {
 }
 ```
 
-2. **Add use case** to interface in `src/domain/uc/use_case.go`:
+2. **Add use case** to interface in `internal/application/uc/use_case.go`:
 ```go
-// src/domain/uc/use_case.go
+// internal/application/uc/use_case.go
 type UseCases interface {
     CreateTask(context.Context, dto.CreateTaskRequest) (dto.Result[dto.TaskResponse], error) // New
 }
 ```
 
-3. **Implement use case** in `src/domain/uc/uc_task.go`:
+3. **Implement use case** in `internal/application/uc/uc_task.go`:
 ```go
-// src/domain/uc/uc_task.go
+// internal/application/uc/uc_task.go
 func (uc *UseCase) CreateTask(ctx context.Context, req dto.CreateTaskRequest) (dto.Result[dto.TaskResponse], error) {
     // Implementation here
 }
 ```
 
-4. **Add transport handler** in `src/transport/handle_task.go`:
+4. **Add transport handler** in `internal/transport/handle_task.go`:
 ```go
-// src/transport/handle_task.go
+// internal/transport/handle_task.go
 func (h *BaseHandler) HandleCreateTask(req TransportRequest[dto.CreateTaskRequest]) TransportResponse[dto.TaskResponse] {
     // Handler implementation
 }
@@ -291,26 +294,26 @@ func (h *BaseHandler) HandleCreateTask(req TransportRequest[dto.CreateTaskReques
 
 5. **Add transport adapters**:
 
-**Interactive CLI** in `src/transport/cli/cli_task.go`:
+**Interactive CLI** in `internal/transport/cli/cli_task.go`:
 ```go
-// src/transport/cli/cli_task.go
+// internal/transport/cli/cli_task.go
 func (s *SurveyController) createTaskFlow() error {
     // Interactive implementation
 }
 ```
 
-**Classic CLI command** in `src/transport/cmd/cmd_task.go`:
+**Classic CLI command** in `internal/transport/cmd/cmd_task.go`:
 ```go
-// src/transport/cmd/cmd_task.go
+// internal/transport/cmd/cmd_task.go
 var createTaskCmd = &cobra.Command{
     Use:   "create-task [title] [description]",
     // ...
 }
 ```
 
-**API endpoint** in `src/transport/api/api_task.go`:
+**API endpoint** in `internal/transport/api/api_task.go`:
 ```go
-// src/transport/api/api_task.go
+// internal/transport/api/api_task.go
 func (s *Server) createTask(c *gin.Context) {
     // API implementation
 }
@@ -473,8 +476,8 @@ go test ./...
 go test -cover ./...
 
 # Run specific package tests
-go test ./src/domain/
-go test ./src/transport/
+go test ./internal/domain/... ./internal/application/...
+go test ./internal/transport/...
 ```
 
 ## 📊 **Monitoring & Observability**

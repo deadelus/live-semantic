@@ -1,1 +1,3 @@
 .roo/
+.DS_Store
+.env

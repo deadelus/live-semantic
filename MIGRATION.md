@@ -22,38 +22,47 @@ Objectif : rassembler le travail avant de construire quoi que ce soit de neuf. R
 
 ---
 
-## Phase 1 — Hygiène et restructuration (`src/` → `cmd/` + `internal/`)
+## Phase 1 — Hygiène et restructuration (`src/` → `cmd/` + `internal/`) ✅ Terminée le 2026-08-05
 
-Risque faible, débloque tout le reste (Go modules pruning, imports internes, lisibilité). Correspond à la décision G.
+Correspond à la décision G. **La structure finale diffère de la proposition initiale ci-dessous** — affinée avec l'utilisateur (via `di-architecture-example.md`, repris comme gabarit de référence) avant exécution, puis exécutée et vérifiée (build/vet/test/smoke-test).
 
-**Fichiers déplacés :**
+**Écart principal avec le plan initial** : le plan proposait de renommer `infrastructure/`→`ports/` et `implementation/`→`infrastructure/` pour coller à la convention Clean Architecture manuel. Décision finale : **garder les noms `infrastructure/` (interfaces) et `implementation/` (adapters) du code existant**, juste les relocaliser sous `internal/` — moins de renommage, moins de risque, et le nom n'était pas le vrai problème (la fuite d'abstraction `onnx.BoundingBox`, elle, reste à corriger en Phase 2). Une couche `application/` a en plus été introduite, absente du plan initial : le code réel montrait déjà une distinction nette entre `domain/model` (aucune dépendance externe) et `domain/uc` (dépend des ports) — cette distinction a été rendue explicite en séparant `application/{uc,dto}` de `domain/`.
+
+**Fichiers déplacés (mapping réel) :**
 
 ```
 src/main.go                    → cmd/livesemantic/main.go
-src/domain/                    → internal/domain/        (Track, Match, Filter à créer ici en Phase 2)
-src/infrastructure/            → internal/ports/          (renommage sémantique : ce sont des ports, pas de l'infra)
-src/implementation/            → internal/infrastructure/ (renommage sémantique inverse : ce sont les adapters)
-src/internal/drawer/           → internal/infrastructure/drawer/
-src/transport/                 → internal/transport/      (déplace, ne réécrit pas)
+src/domain/model/               → internal/domain/entities/    (renommé model→entities, pur, zéro dépendance)
+src/domain/error.go            → internal/domain/error.go
+src/domain/uc/                 → internal/application/uc/      (orchestre domaine + ports)
+src/domain/dto/                → internal/application/dto/     (contrats input/output des use cases)
+src/infrastructure/{ai,notifier,streamer}  → internal/infrastructure/{ai,notifier,streamer}  (nom conservé)
+src/implementation/{ai,notifier,streamer}  → internal/implementation/{ai,notifier,streamer}  (nom conservé)
+src/internal/drawer/           → internal/implementation/drawer/
+src/transport/                 → internal/transport/           (inchangé)
+src/assets/fonts/, src/implementation/ai/yolo11s/*.onnx,
+src/libraries/{linux,osx,win}/ → assets/{fonts,models,libraries}/  (sortis du code source, ce ne sont pas des .go)
+src/domain/assets/             → supprimé (duplicata mort, non référencé par le code — confirmé avant suppression)
 ```
 
-*Pourquoi ce remapping de noms* : la convention Clean Architecture standard veut que les *interfaces* (ports) soient nommées `ports/` et les *implémentations concrètes* `infrastructure/`. Le projet actuel a l'inverse (`infrastructure/` = interfaces, `implementation/` = adapters), ce qui a probablement dérouté la lecture lors de la rédaction de la mission initiale (les décisions ont été prises sans lire le code). On aligne les noms sur la convention plutôt que d'inventer une troisième nomenclature.
+Les chemins hardcodés en dur dans le code (`yolo11sModelPath`, chemins des libs `onnxruntime.*`, `defaultFontPath`) ont été mis à jour pour pointer vers `assets/...` au lieu de `src/...`.
 
 **Fichiers créés :**
-- `.env.example` (copie de `.env` sans les valeurs), puis `git rm --cached .env`.
+- `.env.example` (copie de `.env` sans les valeurs) ; `.env` désindexé (`git rm --cached`) et ajouté à `.gitignore` avec `.DS_Store`.
 - `LICENSE` (MIT).
 
 **Fichiers modifiés :**
-- `readme.md` : placeholders `your-org` → `deadelus`, chiffres de latence corrigés.
-- Tous les fichiers Go déplacés : chemins d'import à réécrire (`live-semantic/src/...` → `live-semantic/internal/...` ou `live-semantic/cmd/...`).
+- `readme.md` : placeholders `your-org` → `deadelus`, chiffres de latence corrigés, section "État d'avancement" ajoutée, commandes build/run/test et exemples de code mis à jour vers les nouveaux chemins, section Project Structure remplacée par l'arborescence réelle.
+- `di-architecture-example.md` : structure cible harmonisée pour servir de référence à cette phase.
+- Tous les fichiers Go déplacés : imports réécrits vers `live-semantic/internal/...` / `live-semantic/cmd/...`.
 
-**Ce qui casse et comment vérifier :**
-- Compilation cassée le temps du déplacement (imports). Vérification : `go build ./...` doit repasser au vert avant de committer la phase.
-- `go vet ./...` et `go test ./...` doivent rester verts (les 2 tests existants ne doivent pas régresser).
-- Test de non-régression manuel : `go run ./cmd/livesemantic recognition --filter=person` doit démarrer la capture webcam et afficher la fenêtre, comme aujourd'hui avec `go run ./src`.
-- Le binaire de vendoring (`vendor/modules.txt`) n'a pas besoin de changer (aucune dépendance externe ne bouge dans cette phase) — seul `go mod vendor` de contrôle pour confirmer.
+**Vérifications effectuées :**
+- `go build ./...`, `go vet ./...`, `go test ./...` : verts.
+- Smoke-test binaire réel (`go run ./cmd/livesemantic`, mode CLI par défaut) : démarre, charge le modèle ONNX et les libs natives depuis `assets/`, logs corrects (`appName`/`appVersion` depuis `.env`), exit 0.
 
-**Livrable de la phase** : un commit unique de déplacement (pas de logique changée), un commit séparé pour l'hygiène `.env`/`LICENSE`/`README`. Deux commits distincts pour que le déplacement pur reste facile à `git blame`/revert indépendamment du nettoyage.
+**Raffinement post-déplacement** : `transport.go` (les fichiers `handler.go`, `handle_object_recognition.go`, `transport.go` vivaient à la racine de `internal/transport/`, en dehors de la symétrie avec `api/cli/cmd/websocket/`) a été scindé en deux : `internal/transport/handler/` (le `BaseHandler` partagé) et `internal/transport/envelope/` (les types génériques `TransportRequest[T]`/`TransportResponse[T]`, renommés "envelope" plutôt que "dto" pour éviter la collision de nom de package avec `internal/application/dto`).
+
+**Non fait dans cette phase** : sortir les binaires (`*.onnx`, `onnxruntime.*`) de l'**historique** Git (Git LFS ou téléchargement au build) — jugé plus risqué (réécriture d'historique sur repo public) que la valeur immédiate ; ils sont déjà proprement regroupés dans `assets/` pour tout nouveau commit. Reste une tâche ouverte, voir `TODO.md` § G.
 
 ---
 

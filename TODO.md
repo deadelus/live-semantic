@@ -8,15 +8,16 @@ Ordre de dépendance global : **G (hygiène) → E (ports) → B (IoU/tracker) �
 
 ## G — Restructuration & hygiène (bloquant, faible risque, à faire en premier)
 
-Référence matrice : G — restructuration absente partout, problèmes d'hygiène confirmés en étape 2.
+Référence matrice : G — restructuration absente partout, problèmes d'hygiène confirmés en étape 2. **Phase terminée le 2026-08-05** (voir `MIGRATION.md` § Phase 1 pour le détail de ce qui a réellement été fait, la structure finale diffère légèrement de la proposition initiale — affinée avec l'utilisateur avant exécution).
 
-- [ ] `git rm --cached .env`, créer `.env.example` avec les 4 clés (`APP_NAME`, `APP_VERSION`, `APP_ENV`, `APP_DEBUG`) sans valeurs sensibles. **Dépendance : aucune. Effort : XS (15 min).**
-- [ ] Ajouter `LICENSE` (MIT, comme annoncé dans le badge du README). **Dépendance : aucune. Effort : XS (5 min).**
-- [ ] Remplacer les placeholders `github.com/your-org/livesemantic` par `github.com/deadelus/live-semantic` dans `readme.md` (lignes 5 et 48). **Dépendance : aucune. Effort : XS (5 min).**
-- [ ] Corriger les promesses de latence non étayées ("sub-50ms") dans `readme.md` avec les chiffres réalistes de la décision F (20-40 ms CPU x86, 300ms-1s ARM fp32). **Dépendance : aucune. Effort : XS.**
-- [ ] Sortir les binaires (`*.onnx`, `onnxruntime.{so,dylib,dll}`) de l'historique Git courant vers Git LFS ou un téléchargement au build. **Dépendance : décision utilisateur sur la méthode (LFS vs script de download) — à arbitrer, voir `MIGRATION.md`. Effort : M (0.5-1 j), plus risque sur l'historique si réécriture.**
-- [ ] Migration `src/` → `cmd/livesemantic/` + `internal/` selon la cible de `MIGRATION.md`. **Dépendance : aucune techniquement, mais à faire une fois les stashes/branches consolidés (voir AUDIT.md § questions branches) pour éviter de dupliquer le travail de déplacement. Effort : M (0.5 j, majoritairement mécanique).**
-- [ ] Déplacer les DTO actuels (`src/domain/dto`) vers la couche applicative une fois la restructuration faite. **Dépendance : migration `src/`→`internal/` ci-dessus. Effort : XS.**
+- [x] `git rm --cached .env`, créer `.env.example` avec les 4 clés sans valeurs sensibles. `.env` et `.DS_Store` ajoutés à `.gitignore`.
+- [x] Ajouter `LICENSE` (MIT).
+- [x] Remplacer les placeholders `github.com/your-org/livesemantic` par `github.com/deadelus/live-semantic` dans `readme.md`.
+- [x] Corriger les promesses de latence non étayées ("sub-50ms") dans `readme.md`.
+- [ ] Sortir les binaires (`*.onnx`, `onnxruntime.{so,dylib,dll}`) de l'**historique** Git vers Git LFS ou un téléchargement au build. **Pas fait** — ils sont déjà regroupés proprement dans `assets/` (fait), mais l'historique Git existant n'a pas été réécrit (risque jugé trop élevé pour un gain hygiène seul, voir `MIGRATION.md` § Risques). Reste une tâche ouverte si le poids du `.git` devient un problème réel.
+- [x] Migration `src/` → `cmd/livesemantic/` + `internal/`. Structure finale (affinée avec l'utilisateur, différente de la proposition initiale `ports/`+`infrastructure/`) :
+  `internal/domain/entities` (pur, ex-`model/`, renommé) · `internal/application/{uc,dto}` (orchestre domaine + ports) · `internal/infrastructure/*` (interfaces/ports, nom conservé du code existant) · `internal/implementation/*` (adapters concrets, nom conservé, `drawer/` y a rejoint) · `internal/transport/*` (inchangé) · `cmd/livesemantic/main.go`. Assets binaires (fonts, modèles ONNX, libs natives) sortis du code source vers `assets/` à la racine, chemins hardcodés mis à jour en conséquence. Build/vet/test/smoke-test tous verts après coup.
+- [x] Déplacer les DTO vers la couche applicative — fait (`internal/application/dto`), en même temps que la migration ci-dessus plutôt qu'en deux passes.
 
 ## E — Ports (inversion de dépendance complète)
 

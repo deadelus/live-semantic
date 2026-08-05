@@ -35,20 +35,25 @@ livesemantic/
 │
 ├── 📁 internal/
 │   │
-│   ├── 📁 domain/                     # 🏢 DOMAIN LAYER
-│   │   ├── entities/                  # Entités métier
-│   │   ├── services/                  # Services métier 
-│   │   └── ports/                     # Interfaces (contracts)
+│   ├── 📁 domain/                     # 🏢 DOMAIN LAYER — pur, zéro dépendance externe
+│   │   ├── entities/                  # Entités métier (Track, Frame, Class...)
+│   │   └── services/                  # Services métier (state machine Track, IoU...)
 │   │
-│   ├── 📁 application/                # 🚀 APPLICATION LAYER
-│   │   ├── usecases/                  # Use Cases avec leurs inputs/outputs
-│   │   └── dto/                       # DTOs pour communication
+│   ├── 📁 infrastructure/             # 🔌 INFRASTRUCTURE LAYER (interfaces / ports)
+│   │   ├── database/                  # Interface repositories
+│   │   ├── ai/                        # Interface services IA
+│   │   ├── cache/                     # Interface cache
+│   │   └── video/                     # Interface video processing
 │   │
-│   ├── 📁 infrastructure/             # 🔌 INFRASTRUCTURE LAYER
+│   ├── 📁 implementation/             # 🔧 IMPLEMENTATION LAYER (adapters concrets)
 │   │   ├── database/                  # Implémentations repositories
-│   │   ├── ai/                        # Services IA
-│   │   ├── cache/                     # Cache implementations
-│   │   └── video/                     # Video processing
+│   │   ├── ai/                        # Implémentations services IA
+│   │   ├── cache/                     # Implémentations cache
+│   │   └── video/                     # Implémentations video processing
+│   │
+│   ├── 📁 application/                # 🚀 APPLICATION LAYER — orchestre domain + ports
+│   │   ├── usecases/                  # Use Cases avec leurs inputs/outputs
+│   │   └── dto/                       # DTOs (contrat input/output des use cases)
 │   │
 │   └── 📁 transport/                  # 🌐 TRANSPORT LAYER
 │       ├── http/                      # HTTP handlers + Use Case builders
