@@ -1,4 +1,4 @@
-package handler
+package handlers
 
 import (
 	"live-semantic/internal/application/uc"

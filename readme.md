@@ -145,7 +145,7 @@ go build -o livesemantic ./cmd/livesemantic
 ```bash
 # Ces serveurs démarrent (-s / -w) mais ne routent vers AUCUN use case métier.
 # Les exemples curl/wscat ci-dessous ne fonctionneront pas tant que TODO.md
-# (branchement transport/api et transport/websocket sur RecognitionUseCase)
+# (branchement transport/adapters/api et transport/adapters/websocket sur RecognitionUseCase)
 # n'est pas fait.
 ./livesemantic -s -p 8080   # web
 ./livesemantic -w -p 8081   # websocket
@@ -210,12 +210,13 @@ live-semantic/
     ├── infrastructure/             # Interfaces / ports (ai, notifier, streamer)
     ├── implementation/             # Adapters concrets (yolo11s, gocv camera/window, drawer, log-notifier)
     └── transport/                  # CLI (cobra + interactif) ✅, API (gin) et WebSocket ❌ squelettes
-        ├── handler/                # BaseHandler partagé par les transports
-        ├── envelope/                # TransportRequest/Response — enveloppe agnostique (Source, Context)
-        ├── api/
-        ├── cli/
-        ├── cmd/
-        └── websocket/
+        ├── handlers/                # BaseHandler partagé par les transports
+        ├── envelopes/               # TransportRequest/Response — enveloppe agnostique (Source, Context)
+        └── adapters/                # Implémentations par canal
+            ├── api/
+            ├── cli/
+            ├── cmd/
+            └── websocket/
 ```
 
 ## 🔧 **Development**
@@ -252,7 +253,7 @@ cp .env.example .env
 
 ### Adding New Use Cases
 
-1. **Define DTOs** in `internal/application/dto/dto_task.go`:
+1. **Define DTOs** in `internal/application/dto/`:
 ```go
 // internal/application/dto/dto_task.go
 type CreateTaskRequest struct {
@@ -268,7 +269,7 @@ type TaskResponse struct {
 }
 ```
 
-2. **Add use case** to interface in `internal/application/uc/use_case.go`:
+2. **Add use case** to interface in `internal/application/uc/`:
 ```go
 // internal/application/uc/use_case.go
 type UseCases interface {
@@ -276,7 +277,7 @@ type UseCases interface {
 }
 ```
 
-3. **Implement use case** in `internal/application/uc/uc_task.go`:
+3. **Implement use case** in `internal/application/uc/`:
 ```go
 // internal/application/uc/uc_task.go
 func (uc *UseCase) CreateTask(ctx context.Context, req dto.CreateTaskRequest) (dto.Result[dto.TaskResponse], error) {
@@ -284,36 +285,36 @@ func (uc *UseCase) CreateTask(ctx context.Context, req dto.CreateTaskRequest) (d
 }
 ```
 
-4. **Add transport handler** in `internal/transport/handle_task.go`:
+4. **Add transport handler** in `internal/transport/handlers/`:
 ```go
-// internal/transport/handle_task.go
-func (h *BaseHandler) HandleCreateTask(req TransportRequest[dto.CreateTaskRequest]) TransportResponse[dto.TaskResponse] {
+// internal/transport/handlers/handle_task.go
+func (h *BaseHandler) HandleCreateTask(req envelopes.TransportRequest[dto.CreateTaskRequest]) envelopes.TransportResponse[dto.TaskResponse] {
     // Handler implementation
 }
 ```
 
 5. **Add transport adapters**:
 
-**Interactive CLI** in `internal/transport/cli/cli_task.go`:
+**Interactive CLI** in `internal/transport/adapters/`:
 ```go
-// internal/transport/cli/cli_task.go
+// internal/transport/adapters/cli/cli_task.go
 func (s *SurveyController) createTaskFlow() error {
     // Interactive implementation
 }
 ```
 
-**Classic CLI command** in `internal/transport/cmd/cmd_task.go`:
+**Classic CLI command** in `internal/transport/adapters/`:
 ```go
-// internal/transport/cmd/cmd_task.go
+// internal/transport/adapters/cmd/cmd_task.go
 var createTaskCmd = &cobra.Command{
     Use:   "create-task [title] [description]",
     // ...
 }
 ```
 
-**API endpoint** in `internal/transport/api/api_task.go`:
+**API endpoint** in `internal/transport/adapters/`:
 ```go
-// internal/transport/api/api_task.go
+// internal/transport/adapters/api/api_task.go
 func (s *Server) createTask(c *gin.Context) {
     // API implementation
 }

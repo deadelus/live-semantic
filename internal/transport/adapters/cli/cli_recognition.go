@@ -4,7 +4,7 @@ import (
 	"context"
 	"fmt"
 	"live-semantic/internal/application/dto"
-	"live-semantic/internal/transport/envelope"
+	"live-semantic/internal/transport/envelopes"
 
 	"github.com/AlecAivazis/survey/v2"
 )
@@ -49,7 +49,7 @@ func (s *SurveyController) createRecognitionFlow() error {
 	}
 
 	// Créer via le handler
-	req := envelope.TransportRequest[dto.RecognitionRequest]{
+	req := envelopes.TransportRequest[dto.RecognitionRequest]{
 		Data: dto.RecognitionRequest{
 			Filter:              answers.Filter,
 			SimilarityThreshold: answers.SimilarityThreshold,

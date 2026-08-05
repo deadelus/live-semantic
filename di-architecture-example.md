@@ -56,9 +56,12 @@ livesemantic/
 │   │   └── dto/                       # DTOs (contrat input/output des use cases)
 │   │
 │   └── 📁 transport/                  # 🌐 TRANSPORT LAYER
-│       ├── http/                      # HTTP handlers + Use Case builders
-│       ├── grpc/                      # gRPC handlers + Use Case builders
-│       └── cli/                       # CLI handlers + Use Case builders
+│       ├── handlers/                  # BaseHandler partagé par tous les canaux
+│       ├── envelopes/                 # Request/Response agnostiques (Source, Context)
+│       └── adapters/                  # Implémentations par canal
+│           ├── http/                  # HTTP handlers + Use Case builders
+│           ├── grpc/                  # gRPC handlers + Use Case builders
+│           └── cli/                   # CLI handlers + Use Case builders
 │
 └── 📁 pkg/                           # Packages utilitaires
     ├── logger/                        # Logger global

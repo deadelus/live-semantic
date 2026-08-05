@@ -1,5 +1,5 @@
 // Package envelope provides transport-agnostic request/response wrappers.
-package envelope
+package envelopes
 
 import "context"
 
