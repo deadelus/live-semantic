@@ -35,9 +35,9 @@ LiveSemantic vise à analyser des flux vidéo en langage naturel ("person walkin
 ├─────────────────────┤
 │     DOMAIN          │  entités pures (Frame, Class...) — zéro dépendance externe
 ├─────────────────────┤
-│  INFRASTRUCTURE     │  ports (interfaces) ai.AI, streamer.InputStream/OutputStream, notifier.Notifier ✅
+│  INFRASTRUCTURE     │  ports (interfaces) inference.ObjectDetector, streamer.InputStream/OutputStream, notifier.Notifier ✅
 ├─────────────────────┤
-│  IMPLEMENTATION     │  yolo11s (ONNX natif) ✅, camera gocv ✅, window gocv ✅, log-notifier ✅
+│  IMPLEMENTATION     │  inference/onnx/yolo11s (ONNX natif) ✅, camera gocv ✅, window gocv ✅, log-notifier ✅
 └─────────────────────┘
 ```
 
@@ -207,8 +207,14 @@ live-semantic/
     ├── application/                # Orchestre domain + ports
     │   ├── uc/                     # Use cases (RecognitionUseCase)
     │   └── dto/                    # Contrats input/output des use cases
-    ├── infrastructure/             # Interfaces / ports (ai, notifier, streamer)
-    ├── implementation/             # Adapters concrets (yolo11s, gocv camera/window, drawer, log-notifier)
+    ├── infrastructure/             # Interfaces / ports (inference, notifier, streamer)
+    ├── implementation/             # Adapters concrets
+    │   ├── inference/onnx/          # backend ONNX Runtime, agnostique du modèle
+    │   │   ├── runtime/              # résolution lib native + (à venir) validation version ORT
+    │   │   └── yolo11s/              # config + AnalyzeFrame spécifiques au modèle
+    │   ├── streamer/                 # camera (gocv) + window (gocv)
+    │   ├── notifier/                 # log-notifier
+    │   └── drawer/                   # dessin des bounding boxes
     └── transport/                  # CLI (cobra + interactif) ✅, API (gin) et WebSocket ❌ squelettes
         ├── handlers/                # BaseHandler partagé par les transports
         ├── envelopes/               # TransportRequest/Response — enveloppe agnostique (Source, Context)

@@ -5,7 +5,7 @@ import (
 	"context"
 	"live-semantic/internal/domain"
 	"live-semantic/internal/application/dto"
-	"live-semantic/internal/infrastructure/ai"
+	"live-semantic/internal/infrastructure/inference"
 	"live-semantic/internal/infrastructure/notifier"
 	"live-semantic/internal/infrastructure/streamer"
 
@@ -23,11 +23,11 @@ type UseCase struct {
 	streamingInput  streamer.InputStream
 	streamingOutput streamer.OutputStream
 	notifier        notifier.Notifier
-	ai              ai.AI
+	ai              inference.ObjectDetector
 }
 
 // NewUseCase initializes your use cases with all the necessary dependencies
-func NewUseCase(ctx context.Context, logger logger.Logger, streamingInput streamer.InputStream, streamingOutput streamer.OutputStream, notifier notifier.Notifier, ai ai.AI) (UseCases, error) {
+func NewUseCase(ctx context.Context, logger logger.Logger, streamingInput streamer.InputStream, streamingOutput streamer.OutputStream, notifier notifier.Notifier, ai inference.ObjectDetector) (UseCases, error) {
 
 	if ctx == nil {
 		return nil, domain.ErrNilContext

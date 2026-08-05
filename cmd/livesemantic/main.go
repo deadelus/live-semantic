@@ -4,11 +4,11 @@ import (
 	"context"
 	"fmt"
 	"live-semantic/internal/application/uc"
-	"live-semantic/internal/implementation/ai/yolo11s"
+	"live-semantic/internal/implementation/inference/onnx/yolo11s"
 	lognotifier "live-semantic/internal/implementation/notifier/log-notifier"
 	"live-semantic/internal/implementation/streamer/input"
 	"live-semantic/internal/implementation/streamer/output"
-	"live-semantic/internal/infrastructure/ai"
+	"live-semantic/internal/infrastructure/inference"
 	"live-semantic/internal/infrastructure/notifier"
 	"live-semantic/internal/infrastructure/streamer"
 	"live-semantic/internal/transport/adapters/api"
@@ -134,12 +134,12 @@ func main() {
 	}
 }
 
-func initDependencies() (streamer.InputStream, streamer.OutputStream, notifier.Notifier, ai.AI) {
+func initDependencies() (streamer.InputStream, streamer.OutputStream, notifier.Notifier, inference.ObjectDetector) {
 	cameraInput := input.NewCameraInput()
 	windowOutput := output.NewWindowOutput()
 
 	logNotifier := lognotifier.NewLogNotifier()
-	ai := yolo11s.NewNeuralNetwork()
+	ai := yolo11s.New()
 	return cameraInput, windowOutput, logNotifier, ai
 }
 

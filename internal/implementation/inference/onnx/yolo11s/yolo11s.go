@@ -5,9 +5,8 @@ import (
 	"fmt"
 	"live-semantic/internal/domain"
 	"live-semantic/internal/domain/entities"
-	"live-semantic/internal/infrastructure/ai"
-	"path/filepath"
-	"runtime"
+	"live-semantic/internal/implementation/inference/onnx/runtime"
+	"live-semantic/internal/infrastructure/inference"
 
 	"github.com/deadelus/go-clean-onnxruntime/src/onnx"
 )
@@ -36,48 +35,17 @@ var (
 // This is the list of classes that the YOLOv8 model can detect.
 var yoloClasses = entities.Yolo11sClasses()
 
-// Yolo11sNeuralNetwork represents the YOLOv11s neural implementation.
-type Yolo11sNeuralNetwork struct {
+// Detector represents the YOLOv11s neural implementation.
+type Detector struct {
 	Session *onnx.ONNXSession
 }
 
-func getOnnxLibrary() string {
-	var absPath string
-
-	switch runtime.GOOS {
-	case "windows":
-		switch runtime.GOARCH {
-		case "amd64":
-			absPath, _ = filepath.Abs("assets/libraries/win/onnxruntime.dll")
-		}
-	case "darwin":
-		switch runtime.GOARCH {
-		case "arm64":
-			absPath, _ = filepath.Abs("assets/libraries/osx/onnxruntime_arm64.dylib")
-		case "amd64":
-			absPath, _ = filepath.Abs("assets/libraries/osx/onnxruntime_amd64.dylib")
-		}
-	case "linux":
-		switch runtime.GOARCH {
-		case "arm64":
-			absPath, _ = filepath.Abs("assets/libraries/linux/onnxruntime_arm64.so")
-		default:
-			absPath, _ = filepath.Abs("assets/libraries/linux/onnxruntime.so")
-		}
-	}
-
-	if absPath == "" {
-		panic("Unable to find a version of the onnxruntime library supporting this system.")
-	}
-	return absPath
-}
-
-// NewNeuralNetwork initializes the ONNX runtime for YOLOv11s entities.
-func NewNeuralNetwork() *Yolo11sNeuralNetwork {
+// New initializes the ONNX runtime for the YOLOv11s detector.
+func New() *Detector {
 	// Initialize the ONNX runtime with the model path and input/output shapes
 	onnxRuntime := onnx.NewOnnxRuntime(
 		yolo11sModelPath,
-		getOnnxLibrary(),
+		runtime.LibraryPath(),
 		onnx.TensorInputShape{
 			BatchSize: int64(batchSize),
 			Channels:  int64(modelInputChannels),
@@ -91,21 +59,21 @@ func NewNeuralNetwork() *Yolo11sNeuralNetwork {
 		},
 	)
 	if onnxRuntime == nil {
-		fmt.Println(domain.ErrNilRuntime.Error(), "Yolo11sNeuralNetwork", yolo11sModelPath)
+		fmt.Println(domain.ErrNilRuntime.Error(), "Detector", yolo11sModelPath)
 	}
 
 	// Create a new ONNX session
 	session, err := onnx.NewONNXSession(onnxRuntime)
 	if err != nil {
-		fmt.Println(domain.ErrModelInitialization.Error(), "Yolo11sNeuralNetwork", yolo11sModelPath, err)
+		fmt.Println(domain.ErrModelInitialization.Error(), "Detector", yolo11sModelPath, err)
 	}
-	return &Yolo11sNeuralNetwork{
+	return &Detector{
 		Session: session,
 	}
 }
 
-// AnalyzeFrame implements the AI.AnalyzeFrame for Yolo11sNeuralNetwork.
-func (m *Yolo11sNeuralNetwork) AnalyzeFrame(frame *entities.Frame) (*ai.DetectionResult, error) {
+// AnalyzeFrame implements the ObjectDetector.AnalyzeFrame for Detector.
+func (m *Detector) AnalyzeFrame(frame *entities.Frame) (*inference.DetectionResult, error) {
 	processor := &onnx.Processor{
 		Image:               frame.Image,
 		ModelClasses:        yoloClasses,
@@ -130,16 +98,16 @@ func (m *Yolo11sNeuralNetwork) AnalyzeFrame(frame *entities.Frame) (*ai.Detectio
 
 	boxes := processor.Output(m.Session.TensorOutput)
 
-	return &ai.DetectionResult{
+	return &inference.DetectionResult{
 		Frame:         frame,
 		BoundingBoxes: boxes,
 	}, nil
 }
 
-// Cleanup implements the AI.Cleanup for Yolo11sNeuralNetwork.
-func (m *Yolo11sNeuralNetwork) Cleanup() {
+// Cleanup implements the ObjectDetector.Cleanup for Detector.
+func (m *Detector) Cleanup() {
 	if m.Session != nil {
 		m.Session.Close()
 	}
-	fmt.Println("Yolo11sNeuralNetwork resources cleaned up successfully.")
+	fmt.Println("Detector resources cleaned up successfully.")
 }

@@ -1,5 +1,6 @@
-// Package ai defines the interface for AI-related functionalities.
-package ai
+// Package inference defines the port for inference (object detection, and
+// future semantic encoding) functionalities.
+package inference
 
 import (
 	"live-semantic/internal/domain/entities"
@@ -15,8 +16,8 @@ type DetectionResult struct {
 	BoundingBoxes []onnx.BoundingBox
 }
 
-// AI defines all the methods required for neural network stuff.
-type AI interface {
+// ObjectDetector defines all the methods required to run object detection inference.
+type ObjectDetector interface {
 	// AnalyzeFrame runs inference on a single frame and returns detected bounding boxes.
 	AnalyzeFrame(frame *entities.Frame) (*DetectionResult, error)
 	// Cleanup performs any necessary cleanup operations.
