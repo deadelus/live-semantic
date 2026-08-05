@@ -164,17 +164,26 @@ Ces trois s'utilisent de deux façons : **en direct** via leur propre API, ou
 comme **Execution Provider d'ORT**.
 
 La seconde valide la décision d'architecture (§7). Le code Go appelle toujours
-`onnxruntime_go` ; seule la liste d'EP change à l'initialisation de la session :
+`onnxruntime_go` ; seule la liste d'EP change, via un `*ort.SessionOptions`
+construit **avant** la création de la session — rien d'autre ne bouge, ni le
+decode, ni l'appelant :
 
 ```go
+sessionOptions, err := ort.NewSessionOptions()
+// ...
+
 // Serveur CPU Intel
-opts.AppendExecutionProviderOpenVINO(...)
+sessionOptions.AppendExecutionProviderOpenVINO(map[string]string{"device_type": "CPU"})
 
 // Serveur GPU NVIDIA
-opts.AppendExecutionProviderTensorRT(...)
+trtOpts, err := ort.NewTensorRTProviderOptions()
+sessionOptions.AppendExecutionProviderTensorRT(trtOpts)
+
+// Au lieu du `nil` passé aujourd'hui :
+session, err := ort.NewAdvancedSession(modelPath, inputNames, outputNames, inputs, outputs, sessionOptions)
 ```
 
-Le domaine ne bouge pas. L'adapter `ONNXEmbedder` ne bouge pas. On passe d'un
+Le domaine ne bouge pas. L'adapter `ObjectDetector` ne bouge pas. On passe d'un
 déploiement CPU à un déploiement GPU **par configuration**.
 
 Coût : quelques pourcents de perf perdus face à un TensorRT utilisé en direct.
@@ -184,6 +193,13 @@ est tranché.
 ⚠️ Rappel du piège §3.3 : avec l'EP TensorRT, les opérateurs non supportés
 retombent **silencieusement** sur CPU. Sans profiling, on peut croire tourner
 sur GPU alors que la moitié du graphe est sur processeur.
+
+**État actuel du code** (2026-08-05) : `internal/implementation/inference/onnx/yolo11s.go`
+passe encore `nil` en dernier argument de `ort.NewAdvancedSession` — CPU par
+défaut, aucun EP configurable. `internal/implementation/inference/onnx/runtime/`
+(aujourd'hui : `LibraryPath()` + `InitEnvironment()`) est l'endroit naturel où
+faire atterrir la construction du `*ort.SessionOptions` le jour où un EP est
+réellement nécessaire — voir item backlog ci-dessous.
 
 ---
 
@@ -279,7 +295,7 @@ Triton Inference Server (gRPC)    ← si scaling multi-modèles
 - [ ] Valider la version d'ORT au démarrage, échouer explicitement si incompatible
 - [ ] Activer le profiling ORT en mode debug pour vérifier le placement des nœuds
 - [ ] Benchmarker la quantification INT8 sur le backend cible réel
-- [ ] Exposer la liste d'Execution Providers en configuration, jamais en dur
+- [ ] Exposer la liste d'Execution Providers en configuration, jamais en dur — remplacer le `nil` de `ort.NewAdvancedSession` dans `internal/implementation/inference/onnx/yolo11s.go` par un `*ort.SessionOptions` construit dans `internal/implementation/inference/onnx/runtime/`
 - [ ] Benchmarker ORT-CPU vs OpenVINO sur la cible de déploiement réelle
 - [ ] Documenter la procédure de cross-compilation avec CGo
 
