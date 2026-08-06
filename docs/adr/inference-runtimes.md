@@ -145,6 +145,33 @@ sans optimisation dédiée.
 Choix pertinent pour un déploiement serveur **sans GPU** — cas très courant en
 surveillance installée sur site.
 
+#### Décision : pas bundlé pour l'instant (2026-08-06)
+
+Vérifié concrètement avant de trancher :
+
+- **Aucun build macOS n'existe.** Les wheels PyPI `onnxruntime-openvino` (1.24.1)
+  ne sont publiées que pour `manylinux_2_28_x86_64` et `win_amd64` — rien pour
+  macOS, ni Intel ni Apple Silicon. OpenVINO cible du hardware Intel (CPU x86,
+  iGPU, NPU Core Ultra) qu'Intel ne fournit pas pour macOS. Impossible de
+  tester cet EP en local sur une machine de dev macOS, quoi qu'on fasse.
+- **Le plugin n'est pas autonome.** Inspection du wheel Linux :
+  `libonnxruntime_providers_openvino.so` (2 Mo) dépend de 8 bibliothèques
+  OpenVINO supplémentaires pour fonctionner (`libopenvino.so`,
+  `libopenvino_intel_cpu_plugin.so`, `..._gpu_plugin.so`, `..._npu_plugin.so`,
+  etc.) — **~127 Mo au total**, rien que pour Linux x86_64. Windows exigerait
+  un second lot équivalent. C'est ~3× le poids actuel de tout
+  `assets/libraries/` pour un seul Execution Provider.
+
+**Décision** : ne pas bundler tant que la décision H (topologie de déploiement,
+voir `AUDIT.md`) n'est pas tranchée — bundler ~127-250 Mo de binaires pour un
+EP qu'on ne peut même pas exercer en local n'est pas justifié tant que la
+cible "serveur Linux/Windows x86 Intel" n'est pas confirmée.
+
+**Si la cible se confirme** : télécharger ces bibliothèques **au moment du
+build/déploiement** (script CI, pas committées dans `assets/`) plutôt que les
+vendoriser en dur — cohérent avec la remarque déjà faite dans `TODO.md`/`AUDIT.md`
+sur le poids des binaires ONNX committés dans l'historique Git.
+
 ### LiteRT
 
 Nouveau nom de TensorFlow Lite depuis septembre 2024. Même runtime, même format
@@ -292,10 +319,18 @@ Triton Inference Server (gRPC)    ← si scaling multi-modèles
 
 - [x] Figer et documenter l'opset ONNX utilisé à l'export — extrait du protobuf du modèle : **opset 19**, IR version 9, exporté depuis PyTorch 2.7.0. Documenté en commentaire sur `yolo11sModelPath` dans `internal/implementation/inference/onnx/yolo11s.go`.
 - [x] Valider la version d'ORT au démarrage, échouer explicitement si incompatible — `runtime.RequireMinVersion()` (`internal/implementation/inference/onnx/runtime/version.go`, testé), appelé dans `yolo11s.New()`. Minimum fixé à 1.20.0 ; libs bundlées actuelles = 1.22.0.
-- [ ] Activer le profiling ORT en mode debug pour vérifier le placement des nœuds — **bloqué** : le binding `onnxruntime_go` v1.21.0 n'expose aucune API de profiling (pas de `EnableProfiling`/équivalent trouvé dans le binding). Pour débloquer : soit contribuer cette fonctionnalité au binding en amont, soit l'ajouter via cgo direct dans le projet — pas fait, effort non trivial pour un gain qui n'est utile qu'une fois un vrai doute de placement de nœuds se présente (aujourd'hui : CPU only, la question ne se pose pas encore).
-- [ ] Benchmarker la quantification INT8 sur le backend cible réel — **bloqué** : aucun modèle quantifié n'existe dans `assets/models/` (seul `yolo11s.onnx` en float32). Préalable côté export Python (PyTorch/onnx quantization), pas un travail côté `live-semantic`.
+- [ ] Activer le profiling ORT en mode debug pour vérifier le placement des nœuds
+
+  > ⚠️ **Bloqué** : le binding `onnxruntime_go` v1.21.0 n'expose aucune API de profiling (pas de `EnableProfiling`/équivalent trouvé dans le binding). Pour débloquer : soit contribuer cette fonctionnalité au binding en amont, soit l'ajouter via cgo direct dans le projet — pas fait, effort non trivial pour un gain qui n'est utile qu'une fois un vrai doute de placement de nœuds se présente (aujourd'hui : CPU only, la question ne se pose pas encore).
+
+- [ ] Benchmarker la quantification INT8 sur le backend cible réel
+
+  > ⚠️ **Bloqué** : aucun modèle quantifié n'existe dans `assets/models/` (seul `yolo11s.onnx` en float32). Préalable côté export Python (PyTorch/onnx quantization), pas un travail côté `live-semantic`.
+
 - [x] Exposer la liste d'Execution Providers en configuration, jamais en dur — `runtime.Option` (`internal/implementation/inference/onnx/runtime/options.go`) : `WithCUDA()`, `WithTensorRT()`, `WithOpenVINO(deviceType)`. `yolo11s.New(opts ...runtime.Option)` les accepte, défaut CPU inchangé.
-- [ ] Benchmarker ORT-CPU vs OpenVINO sur la cible de déploiement réelle — **bloqué** : vérifié par `strings` sur `assets/libraries/osx/onnxruntime_arm64.dylib`, le plugin `libonnxruntime_providers_openvino.dylib` n'est pas bundlé (l'EP échouerait au chargement avec "Failed to load shared library"). CUDA/TensorRT présents dans le binaire mais inutilisables sans GPU NVIDIA (ce Mac n'en a pas). Pour débloquer : obtenir une distribution ORT avec le plugin OpenVINO inclus, ou la compiler soi-même.
+- [ ] Benchmarker ORT-CPU vs OpenVINO sur la cible de déploiement réelle
+
+  > ⚠️ **Bloqué** : décision explicite de ne pas bundler le plugin pour l'instant (aucun build macOS n'existe, ~127 Mo pour Linux seul). Détail et conditions de déblocage : §5 "Décision : pas bundlé pour l'instant".
 - [x] Documenter la procédure de cross-compilation avec CGo — `docs/development/cross-compilation.md`. Testé réellement (pas supposé) : `GOOS=linux GOARCH=amd64 go build` échoue dès le runtime cgo (headers macOS incompatibles avec la cible Linux), avant même d'atteindre gocv/OpenCV. Exemple trompeur dans `readme.md` corrigé en conséquence.
 
 ---
