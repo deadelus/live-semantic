@@ -90,7 +90,11 @@ func main() {
 		},
 	)
 
-	streamingInput, windowOutput, notifier, ai := initDependencies()
+	streamingInput, windowOutput, notifier, ai, err := initDependencies()
+	if err != nil {
+		engine.Logger().Error("Failed to initialize dependencies", err)
+		return
+	}
 
 	engine.Gracefull().Register("Stopping application gracefully", func() error {
 		fmt.Println("🔒 Stopping application gracefully...")
@@ -134,13 +138,16 @@ func main() {
 	}
 }
 
-func initDependencies() (streamer.InputStream, streamer.OutputStream, notifier.Notifier, inference.ObjectDetector) {
+func initDependencies() (streamer.InputStream, streamer.OutputStream, notifier.Notifier, inference.ObjectDetector, error) {
 	cameraInput := input.NewCameraInput()
 	windowOutput := output.NewWindowOutput()
 
 	logNotifier := lognotifier.NewLogNotifier()
-	ai := yolo11s.New()
-	return cameraInput, windowOutput, logNotifier, ai
+	ai, err := yolo11s.New()
+	if err != nil {
+		return nil, nil, nil, nil, err
+	}
+	return cameraInput, windowOutput, logNotifier, ai, nil
 }
 
 func determinePort(flagPort, defaultPort int) int {

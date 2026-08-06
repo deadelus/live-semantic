@@ -59,21 +59,24 @@ type Detector struct {
 // New initializes the ONNX runtime for the YOLOv11s detector. By default it
 // runs on CPU; pass runtime.Option (e.g. runtime.WithCUDA()) to select a
 // different Execution Provider — see docs/adr/inference-runtimes.md §5.
-func New(opts ...runtime.Option) *Detector {
+//
+// Returns a non-nil error on any initialization failure (missing runtime
+// library, missing/invalid model file, ORT session setup) instead of a
+// zero-value *Detector — callers must check the error and fail fast rather
+// than proceed with a Detector whose tensors are nil (AnalyzeFrame would
+// otherwise panic on first use, deep in the video loop).
+func New(opts ...runtime.Option) (*Detector, error) {
 	if err := runtime.InitEnvironment(runtime.LibraryPath()); err != nil {
-		fmt.Println(domain.ErrNilRuntime.Error(), "Detector", err)
-		return &Detector{}
+		return nil, fmt.Errorf("%w: %v", domain.ErrNilRuntime, err)
 	}
 
 	if err := runtime.RequireMinVersion(minORTVersion); err != nil {
-		fmt.Println(domain.ErrNilRuntime.Error(), "Detector", err)
-		return &Detector{}
+		return nil, fmt.Errorf("%w: %v", domain.ErrNilRuntime, err)
 	}
 
 	sessionOptions, err := runtime.NewSessionOptions(opts...)
 	if err != nil {
-		fmt.Println(domain.ErrModelInitialization.Error(), "Detector", err)
-		return &Detector{}
+		return nil, fmt.Errorf("%w: %v", domain.ErrModelInitialization, err)
 	}
 	defer sessionOptions.Destroy()
 
@@ -81,8 +84,7 @@ func New(opts ...runtime.Option) *Detector {
 		int64(batchSize), int64(modelInputChannels), int64(modelHeight), int64(modelWidth),
 	))
 	if err != nil {
-		fmt.Println(domain.ErrModelInitialization.Error(), "Detector", yolo11sModelPath, err)
-		return &Detector{}
+		return nil, fmt.Errorf("%w: %s: %v", domain.ErrModelInitialization, yolo11sModelPath, err)
 	}
 
 	outputTensor, err := ort.NewEmptyTensor[float32](ort.NewShape(
@@ -90,8 +92,7 @@ func New(opts ...runtime.Option) *Detector {
 	))
 	if err != nil {
 		inputTensor.Destroy()
-		fmt.Println(domain.ErrModelInitialization.Error(), "Detector", yolo11sModelPath, err)
-		return &Detector{}
+		return nil, fmt.Errorf("%w: %s: %v", domain.ErrModelInitialization, yolo11sModelPath, err)
 	}
 
 	session, err := ort.NewAdvancedSession(
@@ -103,15 +104,14 @@ func New(opts ...runtime.Option) *Detector {
 	if err != nil {
 		inputTensor.Destroy()
 		outputTensor.Destroy()
-		fmt.Println(domain.ErrModelInitialization.Error(), "Detector", yolo11sModelPath, err)
-		return &Detector{}
+		return nil, fmt.Errorf("%w: %s: %v", domain.ErrModelInitialization, yolo11sModelPath, err)
 	}
 
 	return &Detector{
 		session:      session,
 		inputTensor:  inputTensor,
 		outputTensor: outputTensor,
-	}
+	}, nil
 }
 
 // AnalyzeFrame implements the ObjectDetector.AnalyzeFrame for Detector.
