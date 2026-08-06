@@ -21,14 +21,14 @@ Référence matrice : G — restructuration absente partout, problèmes d'hygiè
 
 ## E — Ports (inversion de dépendance complète)
 
-Référence matrice : E — PARTIEL/DIVERGENT. La DI existe déjà (`infrastructure/ai.AI`, `streamer.{Input,Output}Stream`, `notifier.Notifier`), mais la forme ne correspond pas à la cible.
+Référence matrice : E — **Phase terminée le 2026-08-06.** Les 5 ports cibles existent (`ObjectDetector`, `ObjectTracker`, `SemanticEncoder`, `AlertSender`, `MetricsCollector`) avec la forme voulue (pas de fuite vendor). `ObjectTracker`/`SemanticEncoder`/`MetricsCollector` sont des interfaces sans implémentation câblée — normal, ils dépendent respectivement de B, A, et de points d'instrumentation qui n'existent pas encore.
 
 - [x] Renommer `infrastructure/ai.AI` en `infrastructure/inference.ObjectDetector` (fait le 2026-08-05, avant même le reste de la phase E — l'occasion s'est présentée en réorganisant `implementation/ai` → `implementation/inference/onnx/{runtime,yolo11s}`).
 - [x] Corriger la fuite d'abstraction — **fait de facto le 2026-08-05, effet de bord du commit `4cad31d`** (remplacement de `go-clean-onnxruntime` par `onnxruntime_go`) : `decodeDetections` (`yolo11s.go`) construit directement `[]entities.BoundingBox` (`Label`, `Confidence`, `X1/Y1/X2/Y2`), plus aucune trace de `onnx.BoundingBox` dans le code (vérifié par grep le 2026-08-06). `DetectionResult.BoundingBoxes []entities.BoundingBox` est déjà un type domaine propre. Item non coché jusqu'ici par oubli de mise à jour de cette TODO après le refacto — pas un travail restant.
-- [ ] Créer `ports.ObjectTracker` (`Init(frame, box)` / `Update(frame)`) — nouveau, rien à récupérer. **Dépendance : choix du tracker gocv, voir B. Effort : XS (juste l'interface).**
-- [ ] Créer `ports.SemanticEncoder` (retourne `Embedding`) — nouveau. **Dépendance : aucune pour l'interface seule ; l'implémentation dépend de A. Effort : XS.**
+- [x] Créer `ObjectTracker` (`internal/infrastructure/tracking/tracker.go`) : `Init(frame, box) error` / `Update(frame) (entities.BoundingBox, bool)`. Interface seule, non implémentée (**dépend du choix du tracker gocv, voir B**), non câblée dans `main.go`/`UseCase` — rien à instancier tant qu'aucun adapter n'existe.
+- [x] Créer `SemanticEncoder` (`internal/infrastructure/inference/semantic_encoder.go`) : `EncodeImage(frame)`/`EncodeText(text)` → `entities.Embedding` (nouveau type, `internal/domain/entities/embedding.go`, `[]float32`). Interface seule, non implémentée (**dépend du backend CLIP, voir A**), non câblée.
 - [x] `AlertSender` : `notifier.Notifier` renommé `notifier.AlertSender` (`internal/infrastructure/notifier/notification.go`). Contrat inchangé (`Notify(msg entities.Message) error` + `Cleanup()`) — il correspondait déjà à la cible, pas d'adaptation nécessaire. `LogNotifier` et tous les appelants (`uc.UseCase`, `main.go`) mis à jour.
-- [ ] Créer `ports.MetricsCollector` — nouveau, rien n'existe. **Dépendance : aucune pour l'interface ; implémentation console d'abord (cohérent avec Phase 1 du roadmap `overview.md`). Effort : S.**
+- [x] Créer `MetricsCollector` (`internal/infrastructure/metrics/metrics.go`) : `RecordLatency(stage, duration)` / `IncrementCounter(name)`. Implémentation console fournie (`internal/implementation/metrics/console-metrics`, `ConsoleMetrics`, logge via `logger.Logger` injecté). **Non câblée dans `UseCase`/`main.go`** : aucun point d'instrumentation n'existe encore dans le pipeline (rien à mesurer avant B/C), le câblage est un suivi à faire quand il y aura une latence réelle à observer — pas un travail perdu, juste prématuré de forcer un appel sans rien à instrumenter.
 
 ## B — Tracking-by-detection
 
@@ -66,6 +66,10 @@ Référence matrice : A — cascade et CLIP ABSENTS. Segmentation **[DÉJÀ FAIT
 - [ ] Crop de la frame sur la bbox YOLO avant envoi à CLIP (pas la frame entière). **Dépendance : tracker (B) pour avoir une bbox stable à chaque frame, sinon crop sur la bbox de détection brute en attendant. Effort : S.**
 - [ ] Calcul des embeddings texte des filtres une seule fois au démarrage (pas par frame). **Dépendance : CLIP intégré ci-dessus. Effort : XS.**
 - [ ] Garder la segmentation (masque pixel, récupérée du stash) en option explicite, pas en comportement par défaut — seulement utile sur scènes très encombrées. **Dépendance : intégration du stash. Effort : XS, il s'agit surtout de ne pas l'activer par défaut.**
+
+## Bugs UX ponctuels (indépendants du séquencement G→F)
+
+- [ ] Effet miroir sur le flux webcam : l'image rendue est inversée gauche/droite par rapport à l'utilisateur (comportement webcam brut, non-mirroré). Flip horizontal à appliquer sur le `gocv.Mat` lu (`gocv.Flip(imgMat, &imgMat, 1)`) dans `internal/implementation/streamer/input/camera.go` (`CameraInput.Start`, après `ci.camera.Read(&imgMat)` ligne ~45), avant la conversion `ToImage()`. **Dépendance : aucune. Effort : XS.**
 
 ## F — Optimisations transverses (en continu, pas une phase isolée)
 
