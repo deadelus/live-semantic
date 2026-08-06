@@ -238,8 +238,8 @@ go build -o livesemantic ./cmd/livesemantic
 # Production build with optimizations
 go build -ldflags="-s -w" -o livesemantic ./cmd/livesemantic
 
-# Cross-compilation for Linux
-GOOS=linux GOARCH=amd64 go build -o livesemantic-linux ./cmd/livesemantic
+# Cross-compilation : GOOS/GOARCH seuls ne suffisent PAS (CGo : gocv + onnxruntime_go).
+# Voir docs/development/cross-compilation.md — testé, ça échoue tel quel.
 
 # Run tests
 go test ./...

@@ -8,9 +8,6 @@
 
 ## 1. Clarification de vocabulaire
 
-ONNX et TensorFlow ne sont pas au même niveau d'abstraction. Les comparer
-directement revient à comparer « le format PDF » et « Microsoft Word ».
-
 | Terme | Nature | Rôle |
 |---|---|---|
 | **TensorFlow** | Framework complet | Définir, entraîner, exporter, servir |
@@ -291,13 +288,15 @@ Triton Inference Server (gRPC)    ← si scaling multi-modèles
 
 ### Points de vigilance à intégrer au backlog
 
-- [ ] Figer et documenter l'opset ONNX utilisé à l'export
-- [ ] Valider la version d'ORT au démarrage, échouer explicitement si incompatible
-- [ ] Activer le profiling ORT en mode debug pour vérifier le placement des nœuds
-- [ ] Benchmarker la quantification INT8 sur le backend cible réel
-- [ ] Exposer la liste d'Execution Providers en configuration, jamais en dur — remplacer le `nil` de `ort.NewAdvancedSession` dans `internal/implementation/inference/onnx/yolo11s.go` par un `*ort.SessionOptions` construit dans `internal/implementation/inference/onnx/runtime/`
-- [ ] Benchmarker ORT-CPU vs OpenVINO sur la cible de déploiement réelle
-- [ ] Documenter la procédure de cross-compilation avec CGo
+État au 2026-08-06 :
+
+- [x] Figer et documenter l'opset ONNX utilisé à l'export — extrait du protobuf du modèle : **opset 19**, IR version 9, exporté depuis PyTorch 2.7.0. Documenté en commentaire sur `yolo11sModelPath` dans `internal/implementation/inference/onnx/yolo11s.go`.
+- [x] Valider la version d'ORT au démarrage, échouer explicitement si incompatible — `runtime.RequireMinVersion()` (`internal/implementation/inference/onnx/runtime/version.go`, testé), appelé dans `yolo11s.New()`. Minimum fixé à 1.20.0 ; libs bundlées actuelles = 1.22.0.
+- [ ] Activer le profiling ORT en mode debug pour vérifier le placement des nœuds — **bloqué** : le binding `onnxruntime_go` v1.21.0 n'expose aucune API de profiling (pas de `EnableProfiling`/équivalent trouvé dans le binding). Pour débloquer : soit contribuer cette fonctionnalité au binding en amont, soit l'ajouter via cgo direct dans le projet — pas fait, effort non trivial pour un gain qui n'est utile qu'une fois un vrai doute de placement de nœuds se présente (aujourd'hui : CPU only, la question ne se pose pas encore).
+- [ ] Benchmarker la quantification INT8 sur le backend cible réel — **bloqué** : aucun modèle quantifié n'existe dans `assets/models/` (seul `yolo11s.onnx` en float32). Préalable côté export Python (PyTorch/onnx quantization), pas un travail côté `live-semantic`.
+- [x] Exposer la liste d'Execution Providers en configuration, jamais en dur — `runtime.Option` (`internal/implementation/inference/onnx/runtime/options.go`) : `WithCUDA()`, `WithTensorRT()`, `WithOpenVINO(deviceType)`. `yolo11s.New(opts ...runtime.Option)` les accepte, défaut CPU inchangé.
+- [ ] Benchmarker ORT-CPU vs OpenVINO sur la cible de déploiement réelle — **bloqué** : vérifié par `strings` sur `assets/libraries/osx/onnxruntime_arm64.dylib`, le plugin `libonnxruntime_providers_openvino.dylib` n'est pas bundlé (l'EP échouerait au chargement avec "Failed to load shared library"). CUDA/TensorRT présents dans le binaire mais inutilisables sans GPU NVIDIA (ce Mac n'en a pas). Pour débloquer : obtenir une distribution ORT avec le plugin OpenVINO inclus, ou la compiler soi-même.
+- [x] Documenter la procédure de cross-compilation avec CGo — `docs/development/cross-compilation.md`. Testé réellement (pas supposé) : `GOOS=linux GOARCH=amd64 go build` échoue dès le runtime cgo (headers macOS incompatibles avec la cible Linux), avant même d'atteindre gocv/OpenCV. Exemple trompeur dans `readme.md` corrigé en conséquence.
 
 ---
 

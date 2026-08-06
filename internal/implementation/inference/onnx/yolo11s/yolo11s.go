@@ -17,7 +17,14 @@ import (
 
 var (
 	// yolo11sModelPath is the path to the YOLOv11s ONNX model file.
+	// Exported from PyTorch 2.7.0, opset 19, IR version 9 (checked 2026-08-06
+	// via the model's own protobuf header — see docs/adr/inference-runtimes.md
+	// §3.1). Re-verify this comment if the .onnx file is ever re-exported.
 	yolo11sModelPath = "assets/models/yolo11s.onnx"
+	// minORTVersion is the lowest onnxruntime shared library version this
+	// detector is known to work with (linked libs were 1.22.0 as of
+	// 2026-08-06). New() refuses to start below this.
+	minORTVersion = "1.20.0"
 	// modelHeight and modelWidth are the dimensions to which input images are resized.
 	// The YOLOv11s model expects input images to be 640x640 pixels.
 	// https://docs.ultralytics.com/fr/tasks/detect/
@@ -49,12 +56,26 @@ type Detector struct {
 	outputTensor *ort.Tensor[float32]
 }
 
-// New initializes the ONNX runtime for the YOLOv11s detector.
-func New() *Detector {
+// New initializes the ONNX runtime for the YOLOv11s detector. By default it
+// runs on CPU; pass runtime.Option (e.g. runtime.WithCUDA()) to select a
+// different Execution Provider — see docs/adr/inference-runtimes.md §5.
+func New(opts ...runtime.Option) *Detector {
 	if err := runtime.InitEnvironment(runtime.LibraryPath()); err != nil {
 		fmt.Println(domain.ErrNilRuntime.Error(), "Detector", err)
 		return &Detector{}
 	}
+
+	if err := runtime.RequireMinVersion(minORTVersion); err != nil {
+		fmt.Println(domain.ErrNilRuntime.Error(), "Detector", err)
+		return &Detector{}
+	}
+
+	sessionOptions, err := runtime.NewSessionOptions(opts...)
+	if err != nil {
+		fmt.Println(domain.ErrModelInitialization.Error(), "Detector", err)
+		return &Detector{}
+	}
+	defer sessionOptions.Destroy()
 
 	inputTensor, err := ort.NewEmptyTensor[float32](ort.NewShape(
 		int64(batchSize), int64(modelInputChannels), int64(modelHeight), int64(modelWidth),
@@ -77,7 +98,7 @@ func New() *Detector {
 		yolo11sModelPath,
 		[]string{"images"}, []string{"output0"},
 		[]ort.Value{inputTensor}, []ort.Value{outputTensor},
-		nil,
+		sessionOptions,
 	)
 	if err != nil {
 		inputTensor.Destroy()
