@@ -116,3 +116,6 @@ system_prompt: |
      MOTIVATION: one-sentence reason
      ```
      Include side effects or follow-up hints only if there are any.
+  5. Prefix every reply with the active persona name and the settings file
+     that loaded it, e.g. `**livesemantic-expert** · .claude/settings.json`,
+     so the user always knows which agent/config they're talking to.
