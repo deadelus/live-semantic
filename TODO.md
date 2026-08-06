@@ -27,7 +27,7 @@ Référence matrice : E — PARTIEL/DIVERGENT. La DI existe déjà (`infrastruct
 - [x] Corriger la fuite d'abstraction — **fait de facto le 2026-08-05, effet de bord du commit `4cad31d`** (remplacement de `go-clean-onnxruntime` par `onnxruntime_go`) : `decodeDetections` (`yolo11s.go`) construit directement `[]entities.BoundingBox` (`Label`, `Confidence`, `X1/Y1/X2/Y2`), plus aucune trace de `onnx.BoundingBox` dans le code (vérifié par grep le 2026-08-06). `DetectionResult.BoundingBoxes []entities.BoundingBox` est déjà un type domaine propre. Item non coché jusqu'ici par oubli de mise à jour de cette TODO après le refacto — pas un travail restant.
 - [ ] Créer `ports.ObjectTracker` (`Init(frame, box)` / `Update(frame)`) — nouveau, rien à récupérer. **Dépendance : choix du tracker gocv, voir B. Effort : XS (juste l'interface).**
 - [ ] Créer `ports.SemanticEncoder` (retourne `Embedding`) — nouveau. **Dépendance : aucune pour l'interface seule ; l'implémentation dépend de A. Effort : XS.**
-- [ ] `ports.AlertSender` : renommer/formaliser l'actuel `notifier.Notifier` si le contrat correspond déjà, sinon l'adapter. **Dépendance : aucune. Effort : XS.**
+- [x] `AlertSender` : `notifier.Notifier` renommé `notifier.AlertSender` (`internal/infrastructure/notifier/notification.go`). Contrat inchangé (`Notify(msg entities.Message) error` + `Cleanup()`) — il correspondait déjà à la cible, pas d'adaptation nécessaire. `LogNotifier` et tous les appelants (`uc.UseCase`, `main.go`) mis à jour.
 - [ ] Créer `ports.MetricsCollector` — nouveau, rien n'existe. **Dépendance : aucune pour l'interface ; implémentation console d'abord (cohérent avec Phase 1 du roadmap `overview.md`). Effort : S.**
 
 ## B — Tracking-by-detection

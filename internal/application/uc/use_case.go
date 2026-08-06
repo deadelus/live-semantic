@@ -22,12 +22,12 @@ type UseCase struct {
 	logger          logger.Logger
 	streamingInput  streamer.InputStream
 	streamingOutput streamer.OutputStream
-	notifier        notifier.Notifier
+	notifier        notifier.AlertSender
 	ai              inference.ObjectDetector
 }
 
 // NewUseCase initializes your use cases with all the necessary dependencies
-func NewUseCase(ctx context.Context, logger logger.Logger, streamingInput streamer.InputStream, streamingOutput streamer.OutputStream, notifier notifier.Notifier, ai inference.ObjectDetector) (UseCases, error) {
+func NewUseCase(ctx context.Context, logger logger.Logger, streamingInput streamer.InputStream, streamingOutput streamer.OutputStream, notifier notifier.AlertSender, ai inference.ObjectDetector) (UseCases, error) {
 
 	if ctx == nil {
 		return nil, domain.ErrNilContext

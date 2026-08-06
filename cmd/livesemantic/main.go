@@ -138,7 +138,7 @@ func main() {
 	}
 }
 
-func initDependencies() (streamer.InputStream, streamer.OutputStream, notifier.Notifier, inference.ObjectDetector, error) {
+func initDependencies() (streamer.InputStream, streamer.OutputStream, notifier.AlertSender, inference.ObjectDetector, error) {
 	cameraInput := input.NewCameraInput()
 	windowOutput := output.NewWindowOutput()
 
