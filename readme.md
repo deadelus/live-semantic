@@ -104,6 +104,10 @@ cd live-semantic
 # Install Go dependencies
 go mod tidy
 
+# Placer le modèle YOLO11s (ONNX, opset 19) dans assets/models/
+# — non fourni dans le dépôt (*.onnx gitignored, voir assets/models/.gitkeep)
+cp /path/to/yolo11s.onnx assets/models/yolo11s.onnx
+
 # Build the application
 go build -o livesemantic ./cmd/livesemantic
 ```
@@ -196,7 +200,9 @@ live-semantic/
 ├── readme.md / overview.md / AUDIT.md / TODO.md / MIGRATION.md
 ├── assets/                       # Assets binaires (non compilés) : modèles ONNX, libs natives, fonts
 │   ├── fonts/
-│   ├── models/
+│   ├── models/                   # Modèles ONNX (ex. yolo11s.onnx) — non versionnés (*.onnx gitignored,
+│   │                             #   trop volumineux pour git), dossier préservé via .gitkeep. À déposer
+│   │                             #   manuellement avant le premier lancement (voir Installation ci-dessous).
 │   └── libraries/{linux,osx,win}/
 ├── cmd/
 │   └── livesemantic/

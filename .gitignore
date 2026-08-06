@@ -1,3 +1,7 @@
 .roo/
 .DS_Store
 .env
+
+# Modèles ONNX : trop volumineux pour git, à placer manuellement dans assets/models/
+# (voir readme.md § Project Structure). Le dossier est préservé via .gitkeep.
+*.onnx
