@@ -48,11 +48,16 @@ Nouveau package `internal/implementation/inference/onnx/clip/`, même patron que
 
 **Ordre décidé avec l'utilisateur (2026-08-10)** : filtre texte d'abord (ce plan), reconnaissance par référence image ensuite (TODO.md § D, nouvel item) — sélection d'une box en direct + label → `EncodeImage` sur le crop → galerie locale `{label, embedding}`, comparaison par similarité cosinus. N'utilise que `EncodeImage` (pas de tokenizer nécessaire pour ce mode), mais demande une UI d'interaction pendant que le flux tourne, pas encore conçue. Le garder en tête en concevant `Encoder` : les deux modes doivent pouvoir réutiliser la même méthode `EncodeImage`, pas de couplage à prévoir spécifiquement au texte.
 
-## 6. Risques / inconnues restantes
+## 6. Vérifié en conditions réelles le 2026-08-10
 
-- Compatibilité opset ONNX de ces fichiers avec `onnxruntime_go`/la lib native bundlée (1.22.0) — pas vérifiée, à faire au premier chargement réel (même démarche que pour YOLO11s, `docs/adr/inference-runtimes.md` § 3.1).
-- Précision réelle de la version quantized sur ce projet — pas mesurée, benchmark à faire une fois intégré (TODO.md § F).
-- Téléchargement des poids : pas de mécanisme automatisé dans ce projet (comme pour `yolo11s.onnx`, dépôt manuel dans `assets/models/`) — à documenter dans le `readme.md` § Installation au moment de l'intégration, même pattern que le fix précédent sur les `.onnx` gitignored.
+Poids quantized téléchargés (`assets/models/clip/{vision,text}_model.onnx`, 89 Mo + 64.5 Mo), premier run réel :
+
+- **`attention_mask` n'existe pas sur ce graphe** — ORT rejette avec `Invalid input name: attention_mask`. Corrigé : `text_model.onnx` prend seulement `input_ids`. Cohérent avec le design original de CLIP (pooling par position du token eot, pas de masque explicite nécessaire).
+- Compatibilité opset avec `onnxruntime_go`/lib bundlée (1.22.0) : OK, chargement et inférence sans erreur.
+- `EncodeText` : normes L2 = 1.0000 (normalisation correcte). Similarité texte-texte élevée (~0.94-0.95 entre "a photo of a dog/cat/car") — attendu, le préfixe partagé "a photo of a" domine sur des prompts courts, pas un signe de bug.
+- `EncodeImage` sur une vraie frame (non recadrée — test rapide, pas encore le pipeline final avec crop YOLO) : ordre de similarité correct (`person` 0.2165 > `car` 0.2130 > `cat` 0.1926) mais marges faibles. Attendu : le crop sur la bbox YOLO (prévu, pas encore câblé) devrait nettement renforcer le signal en retirant le fond de la frame.
+- **Crash SIGABRT à la sortie reproduit** (même bug que celui corrigé pour `yolo11s.Detector`, TODO.md bug critique) — `clip.Encoder.Cleanup()` n'appelait pas `runtime.DestroyEnvironment()`. Corrigé de la même façon. 3/3 sorties propres après fix.
+- Précision réelle de la version quantized vs fp32 : pas comparée, benchmark à faire (TODO.md § F).
 
 ## 7. Références
 

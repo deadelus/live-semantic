@@ -108,6 +108,13 @@ go mod tidy
 # — non fourni dans le dépôt (*.onnx gitignored, voir assets/models/.gitkeep)
 cp /path/to/yolo11s.onnx assets/models/yolo11s.onnx
 
+# CLIP (ViT-B/32, cascade sémantique § A) — même traitement, non fourni.
+# Version quantized recommandée (~150 Mo au total vs ~577 Mo en fp32) :
+# https://huggingface.co/Xenova/clip-vit-base-patch32/tree/main/onnx
+mkdir -p assets/models/clip
+cp /path/to/vision_model_quantized.onnx assets/models/clip/vision_model.onnx
+cp /path/to/text_model_quantized.onnx assets/models/clip/text_model.onnx
+
 # Build the application
 go build -o livesemantic ./cmd/livesemantic
 ```

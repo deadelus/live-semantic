@@ -55,14 +55,12 @@ var (
 // graph to split ourselves (Xenova's export already ships vision_model.onnx
 // and text_model.onnx separately).
 //
-// UNVERIFIED as of 2026-08-10: written against the documented Optimum
-// export contract (pixel_values -> image_embeds, input_ids+attention_mask
-// -> text_embeds — researched, see docs/adr/clip-backend.md), but never
-// run against the actual model files (not downloaded yet, fp32 vs
-// quantized decision pending). Treat the exact input/output tensor names
-// and whether attention_mask is truly required as unconfirmed until a real
-// run against the weights succeeds — this is not "done", it's "ready to
-// verify".
+// Verified 2026-08-10 against the real (quantized) weights: pixel_values ->
+// image_embeds on the vision side; input_ids alone (no attention_mask —
+// tried, ORT rejects it with "Invalid input name: attention_mask", the
+// graph genuinely doesn't have one, confirming CLIP's original
+// eot-position pooling design doesn't need one here) -> text_embeds on the
+// text side. See docs/adr/clip-backend.md.
 type Encoder struct {
 	tokenizer *tokenizer
 
@@ -70,14 +68,12 @@ type Encoder struct {
 	visionInput   *ort.Tensor[float32]
 	visionOutput  *ort.Tensor[float32]
 
-	textSession       *ort.AdvancedSession
-	textInputIDs      *ort.Tensor[int64]
-	textAttentionMask *ort.Tensor[int64]
-	textOutput        *ort.Tensor[float32]
+	textSession  *ort.AdvancedSession
+	textInputIDs *ort.Tensor[int64]
+	textOutput   *ort.Tensor[float32]
 }
 
-// New initializes both CLIP ONNX sessions and the tokenizer. See Encoder's
-// doc comment re: unverified status.
+// New initializes both CLIP ONNX sessions and the tokenizer.
 func New(opts ...runtime.Option) (*Encoder, error) {
 	tok, err := newTokenizer()
 	if err != nil {
@@ -102,7 +98,7 @@ func New(opts ...runtime.Option) (*Encoder, error) {
 		return nil, err
 	}
 
-	textSession, textInputIDs, textAttentionMask, textOutput, err := newTextSession(sessionOptions)
+	textSession, textInputIDs, textOutput, err := newTextSession(sessionOptions)
 	if err != nil {
 		visionSession.Destroy()
 		visionInput.Destroy()
@@ -111,14 +107,13 @@ func New(opts ...runtime.Option) (*Encoder, error) {
 	}
 
 	return &Encoder{
-		tokenizer:         tok,
-		visionSession:     visionSession,
-		visionInput:       visionInput,
-		visionOutput:      visionOutput,
-		textSession:       textSession,
-		textInputIDs:      textInputIDs,
-		textAttentionMask: textAttentionMask,
-		textOutput:        textOutput,
+		tokenizer:     tok,
+		visionSession: visionSession,
+		visionInput:   visionInput,
+		visionOutput:  visionOutput,
+		textSession:   textSession,
+		textInputIDs:  textInputIDs,
+		textOutput:    textOutput,
 	}, nil
 }
 
@@ -149,39 +144,31 @@ func newVisionSession(sessionOptions *ort.SessionOptions) (*ort.AdvancedSession,
 	return session, input, output, nil
 }
 
-func newTextSession(sessionOptions *ort.SessionOptions) (*ort.AdvancedSession, *ort.Tensor[int64], *ort.Tensor[int64], *ort.Tensor[float32], error) {
+func newTextSession(sessionOptions *ort.SessionOptions) (*ort.AdvancedSession, *ort.Tensor[int64], *ort.Tensor[float32], error) {
 	inputIDs, err := ort.NewEmptyTensor[int64](ort.NewShape(1, contextLength))
 	if err != nil {
-		return nil, nil, nil, nil, fmt.Errorf("%w: %s: %v", domain.ErrModelInitialization, textModelPath, err)
-	}
-
-	attentionMask, err := ort.NewEmptyTensor[int64](ort.NewShape(1, contextLength))
-	if err != nil {
-		inputIDs.Destroy()
-		return nil, nil, nil, nil, fmt.Errorf("%w: %s: %v", domain.ErrModelInitialization, textModelPath, err)
+		return nil, nil, nil, fmt.Errorf("%w: %s: %v", domain.ErrModelInitialization, textModelPath, err)
 	}
 
 	output, err := ort.NewEmptyTensor[float32](ort.NewShape(1, embeddingDim))
 	if err != nil {
 		inputIDs.Destroy()
-		attentionMask.Destroy()
-		return nil, nil, nil, nil, fmt.Errorf("%w: %s: %v", domain.ErrModelInitialization, textModelPath, err)
+		return nil, nil, nil, fmt.Errorf("%w: %s: %v", domain.ErrModelInitialization, textModelPath, err)
 	}
 
 	session, err := ort.NewAdvancedSession(
 		textModelPath,
-		[]string{"input_ids", "attention_mask"}, []string{"text_embeds"},
-		[]ort.Value{inputIDs, attentionMask}, []ort.Value{output},
+		[]string{"input_ids"}, []string{"text_embeds"},
+		[]ort.Value{inputIDs}, []ort.Value{output},
 		sessionOptions,
 	)
 	if err != nil {
 		inputIDs.Destroy()
-		attentionMask.Destroy()
 		output.Destroy()
-		return nil, nil, nil, nil, fmt.Errorf("%w: %s: %v", domain.ErrModelInitialization, textModelPath, err)
+		return nil, nil, nil, fmt.Errorf("%w: %s: %v", domain.ErrModelInitialization, textModelPath, err)
 	}
 
-	return session, inputIDs, attentionMask, output, nil
+	return session, inputIDs, output, nil
 }
 
 // EncodeImage implements SemanticEncoder.EncodeImage for Encoder. frame is
@@ -209,17 +196,8 @@ func (e *Encoder) EncodeText(text string) (entities.Embedding, error) {
 	ids := e.tokenizer.Encode(text)
 
 	inputData := e.textInputIDs.GetData()
-	maskData := e.textAttentionMask.GetData()
 	for i, id := range ids {
 		inputData[i] = int64(id)
-		// All-ones: see Encoder's doc comment — whether the exported graph
-		// actually needs a padding-aware mask isn't confirmed yet. CLIP's
-		// original design pools via the eot token position rather than an
-		// explicit mask, so all-ones is the safe default either way (a
-		// real padding mask would only matter if the model applies it to
-		// attention internally, which an all-ones mask trivially satisfies
-		// without masking anything out).
-		maskData[i] = 1
 	}
 
 	if err := e.textSession.Run(); err != nil {
@@ -325,11 +303,16 @@ func (e *Encoder) Cleanup() {
 	if e.textInputIDs != nil {
 		e.textInputIDs.Destroy()
 	}
-	if e.textAttentionMask != nil {
-		e.textAttentionMask.Destroy()
-	}
 	if e.textOutput != nil {
 		e.textOutput.Destroy()
+	}
+	// Same fix as yolo11s.Detector.Cleanup (see its doc comment / TODO.md
+	// bug critique SIGABRT) — required here too, independently: whichever
+	// of the two Cleanup()s runs first actually destroys the shared ORT
+	// environment, runtime.DestroyEnvironment() is a no-op if already
+	// destroyed, so having both call it is safe, not redundant risk.
+	if err := runtime.DestroyEnvironment(); err != nil {
+		fmt.Println("Warning: failed to destroy ORT environment:", err)
 	}
 	fmt.Println("CLIP encoder resources cleaned up successfully.")
 }
