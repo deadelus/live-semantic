@@ -46,6 +46,11 @@ func (ci *CameraInput) Start(frameActionCallback func(*entities.Frame) (*entitie
 		if !ok || imgMat.Empty() {
 			break
 		}
+		// Mirror horizontally: raw webcam feed isn't mirrored, which reads
+		// as "backwards" to the person facing the camera (TODO.md bug UX).
+		if err := gocv.Flip(imgMat, &imgMat, 1); err != nil {
+			fmt.Println("Warning: could not mirror frame:", err)
+		}
 		image, err := imgMat.ToImage()
 		if err != nil {
 			continue

@@ -8,6 +8,7 @@ package gocvtracker
 
 import (
 	"fmt"
+	"time"
 
 	"live-semantic/internal/domain/entities"
 
@@ -80,7 +81,14 @@ func matForFrame(frame *entities.Frame) (gocv.Mat, error) {
 		return sharedFrameMat.mat, nil
 	}
 
+	start := time.Now()
 	mat, err := gocv.ImageToMatRGB(frame.Image)
+	// TEMP diagnostic (TODO.md § F perf investigation, 2026-08-09): confirm
+	// the cache is actually hit in real usage and measure the conversion
+	// cost at real camera resolution — remove once the perf question is
+	// settled either way.
+	bounds := frame.Image.Bounds()
+	fmt.Printf("gocvtracker: cache MISS, converting frame (%dx%d) in %v\n", bounds.Dx(), bounds.Dy(), time.Since(start))
 	if err != nil {
 		return gocv.Mat{}, err
 	}
@@ -154,7 +162,12 @@ func (t *Tracker) Update(frame *entities.Frame) (entities.BoundingBox, bool) {
 		return entities.BoundingBox{}, false
 	}
 
+	// TEMP diagnostic (TODO.md § F perf investigation, 2026-08-09): isolate
+	// backend.Update() (KCF/CSRT correlation filter) cost from conversion
+	// cost — remove once the perf question is settled either way.
+	backendStart := time.Now()
 	rect, ok := t.backend.Update(mat)
+	fmt.Printf("gocvtracker: %s backend.Update in %v\n", t.algorithm, time.Since(backendStart))
 	if !ok {
 		return entities.BoundingBox{}, false
 	}
