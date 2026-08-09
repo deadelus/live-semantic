@@ -41,8 +41,13 @@ var (
 	// thresholdConfidence is the minimum confidence threshold for detections.
 	thresholdConfidence float32 = 0.5
 	// nmsIoUThreshold is the overlap above which two detections are considered
-	// duplicates and merged by non-max suppression.
-	nmsIoUThreshold float32 = 0.7
+	// duplicates and merged by non-max suppression. Lowered 0.7 -> 0.45
+	// (YOLO's usual default) on 2026-08-09: found in real usage — one
+	// person produced 2 surviving "person" boxes at very different scales
+	// (a tight face-only box + a wider torso box), IoU between them well
+	// under 0.7 so both survived NMS untouched. 0.45 catches nested/
+	// partially-overlapping same-object detections much more reliably.
+	nmsIoUThreshold float32 = 0.45
 )
 
 // Array of YOLOv8 class labels
@@ -203,8 +208,13 @@ func decodeDetections(output []float32, originalBounds image.Rectangle) []entiti
 		})
 	}
 
+	// Highest confidence first: standard NMS keeps the best-scoring box in
+	// each overlapping group and suppresses the rest. This used to sort
+	// ascending, which kept whichever box happened to be *lowest*
+	// confidence in a group instead — found alongside the threshold fix
+	// above, same investigation (2026-08-09).
 	sort.Slice(boxes, func(i, j int) bool {
-		return boxes[i].Confidence < boxes[j].Confidence
+		return boxes[i].Confidence > boxes[j].Confidence
 	})
 
 	merged := make([]entities.BoundingBox, 0, len(boxes))
