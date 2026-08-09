@@ -1,0 +1,195 @@
+package entities
+
+import "time"
+
+// TrackState represents where a Track is in its lifecycle (TODO.md § D).
+type TrackState int
+
+const (
+	// StateTentative: just created, not yet confirmed by enough consecutive
+	// detection matches — avoids spawning a track for one spurious
+	// detection.
+	StateTentative TrackState = iota
+	// StateConfirmed: matched by fresh detections consistently enough,
+	// considered a real tracked object.
+	StateConfirmed
+	// StateCoasting: not matched by a fresh detection this cycle, position
+	// held by the tracker (§ B) alone between two re-detections. Still
+	// alive, but degrading.
+	StateCoasting
+	// StateLost: too many consecutive misses (neither a fresh detection nor
+	// the tracker could locate the object) — dead, callers should drop it.
+	StateLost
+)
+
+// String implements fmt.Stringer for TrackState, useful for logging.
+func (s TrackState) String() string {
+	switch s {
+	case StateTentative:
+		return "Tentative"
+	case StateConfirmed:
+		return "Confirmed"
+	case StateCoasting:
+		return "Coasting"
+	case StateLost:
+		return "Lost"
+	default:
+		return "Unknown"
+	}
+}
+
+// TrackEventType distinguishes the lifecycle transitions a Track can emit.
+// Callers (application layer) translate these into AlertSender
+// notifications instead of alerting on every single frame (TODO.md § D).
+type TrackEventType int
+
+const (
+	// EventTrackEntered: a track was just confirmed for the first time
+	// (Tentative → Confirmed).
+	EventTrackEntered TrackEventType = iota
+	// EventTrackMatched: an already-confirmed track was re-anchored by a
+	// fresh detection (including recovering from Coasting).
+	EventTrackMatched
+	// EventTrackLost: a track transitioned to StateLost.
+	EventTrackLost
+)
+
+// String implements fmt.Stringer for TrackEventType, useful for logging.
+func (e TrackEventType) String() string {
+	switch e {
+	case EventTrackEntered:
+		return "TrackEntered"
+	case EventTrackMatched:
+		return "TrackMatched"
+	case EventTrackLost:
+		return "TrackLost"
+	default:
+		return "Unknown"
+	}
+}
+
+// TrackEvent is emitted by Track's state-transition methods when a
+// lifecycle-significant change happens (as opposed to routine
+// coasting/matching that doesn't change state). nil means "nothing worth
+// alerting on happened".
+type TrackEvent struct {
+	Type  TrackEventType
+	Track *Track
+}
+
+// Tuning constants for the state machine. Not yet backed by real-world
+// measurement (TODO.md § F) — chosen as reasonable SORT-like defaults,
+// revisit once the re-anchoring loop (§ B) runs on real footage.
+const (
+	minHitsToConfirm    = 3
+	maxMissesBeforeLost = 5
+)
+
+// Track is the domain aggregate for one physical object followed across
+// frames (TODO.md § D). It aggregates a class label, a position history and
+// semantic embeddings (Embeddings stays empty until § A / CLIP exists —
+// nothing populates it yet).
+type Track struct {
+	ID         string
+	Class      string
+	State      TrackState
+	Trajectory []BoundingBox
+	Embeddings []Embedding
+	FirstSeen  time.Time
+	LastSeen   time.Time
+
+	hits   int // consecutive successful matches (detection or tracker)
+	misses int // consecutive frames with neither a detection nor tracker match
+}
+
+// NewTrack creates a new Track in StateTentative from an initial detection.
+// id is caller-provided: Track stays dependency-free (no uuid generator),
+// callers are responsible for uniqueness.
+func NewTrack(id string, box BoundingBox, at time.Time) *Track {
+	return &Track{
+		ID:         id,
+		Class:      box.Label,
+		State:      StateTentative,
+		Trajectory: []BoundingBox{box},
+		FirstSeen:  at,
+		LastSeen:   at,
+		hits:       1,
+	}
+}
+
+// MatchDetection records a fresh detection that was IoU-associated to this
+// track (§ B re-anchoring). Resets the miss streak; once enough consecutive
+// hits accumulate, promotes StateTentative → StateConfirmed. Returns the
+// TrackEvent to alert on, or nil if the match didn't change anything worth
+// alerting on (e.g. still Tentative, not enough hits yet).
+func (t *Track) MatchDetection(box BoundingBox, at time.Time) *TrackEvent {
+	wasTentative := t.State == StateTentative
+	wasCoasting := t.State == StateCoasting
+
+	t.Trajectory = append(t.Trajectory, box)
+	t.LastSeen = at
+	t.hits++
+	t.misses = 0
+
+	switch {
+	case wasTentative && t.hits >= minHitsToConfirm:
+		t.State = StateConfirmed
+		return &TrackEvent{Type: EventTrackEntered, Track: t}
+	case wasTentative:
+		return nil
+	case wasCoasting:
+		t.State = StateConfirmed
+		return &TrackEvent{Type: EventTrackMatched, Track: t}
+	default:
+		return &TrackEvent{Type: EventTrackMatched, Track: t}
+	}
+}
+
+// Coast records a tracker-only update (§ B): no fresh detection matched
+// this track this cycle, but the tracker still reports a position. Moves
+// StateConfirmed → StateCoasting. No-op on a StateLost track.
+func (t *Track) Coast(box BoundingBox, at time.Time) {
+	if t.State == StateLost {
+		return
+	}
+	t.Trajectory = append(t.Trajectory, box)
+	t.LastSeen = at
+
+	if t.State == StateConfirmed {
+		t.State = StateCoasting
+	}
+}
+
+// Miss records a frame where neither a fresh detection nor the tracker (§ B)
+// could locate the object. Past maxMissesBeforeLost consecutive misses,
+// transitions to StateLost and returns the corresponding TrackEvent — nil
+// otherwise, or if the track is already StateLost.
+func (t *Track) Miss(at time.Time) *TrackEvent {
+	if t.State == StateLost {
+		return nil
+	}
+	t.misses++
+	t.hits = 0
+
+	if t.misses >= maxMissesBeforeLost {
+		t.State = StateLost
+		return &TrackEvent{Type: EventTrackLost, Track: t}
+	}
+	return nil
+}
+
+// AddEmbedding appends a semantic embedding to this track's aggregate.
+// Populated once § A (CLIP) is integrated — no caller does this yet.
+func (t *Track) AddEmbedding(e Embedding) {
+	t.Embeddings = append(t.Embeddings, e)
+}
+
+// LastBox returns the most recently recorded bounding box for this track,
+// or the zero value if the track has no history (shouldn't happen — NewTrack
+// always seeds Trajectory with one box).
+func (t *Track) LastBox() BoundingBox {
+	if len(t.Trajectory) == 0 {
+		return BoundingBox{}
+	}
+	return t.Trajectory[len(t.Trajectory)-1]
+}

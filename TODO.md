@@ -42,10 +42,10 @@ Référence matrice : B — tracker ABSENT. La primitive IoU (ex-vendorisée dan
 
 ## D — Agrégat `Track`
 
-Référence matrice : D — ABSENT partout, dépend de B.
+Référence matrice : D — **type domaine + événements faits le 2026-08-09.** Le 3e item (scission `SemanticFilter`) reste hors scope tant que A n'a pas de CLIP qui tourne, volontairement non commencé.
 
-- [ ] Créer le type domaine `Track` (id, classe, trajectoire, embeddings agrégés, first/last seen) et sa machine à états `Tentative → Confirmed → Coasting → Lost`. **Dépendance : tracker fonctionnel (B), au moins en version minimale. Effort : M (0.5-1 j pour le type + tests unitaires de transition d'état).**
-- [ ] Émettre les événements `TrackEntered` / `TrackMatched` / `TrackLost` au lieu d'une alerte par frame. **Dépendance : Track ci-dessus + `AlertSender` (E). Effort : S.**
+- [x] Créer le type domaine `Track` (`internal/domain/entities/track.go`) : `ID`, `Class`, `Trajectory []BoundingBox`, `Embeddings []Embedding` (vide tant que A n'existe pas), `FirstSeen`/`LastSeen`, machine à états `StateTentative → StateConfirmed → StateCoasting → StateLost` via `MatchDetection`/`Coast`/`Miss`. Seuils `minHitsToConfirm=3`/`maxMissesBeforeLost=5` posés en dur (valeurs SORT-like par défaut, **non mesurées** — à revoir une fois la boucle de ré-ancrage tournant sur vidéo réelle, cf. F). 11 tests table-driven (`track_test.go`), 100% des transitions couvertes.
+- [x] Émettre les événements `TrackEntered`/`TrackMatched`/`TrackLost` — mécanisme créé : `MatchDetection`/`Miss` retournent un `*TrackEvent{Type, Track}` (nil si rien à notifier), pur/sans I/O côté domaine. **Câblage réel vers `AlertSender` pas encore fait** : rien ne produit de `Track` dans le pipeline vivant, ça arrive avec la boucle de ré-ancrage ci-dessous (item B suivant).
 - [ ] Scinder `SemanticFilter` en filtres **instantanés** (crop) et filtres **temporels** (règles sur trajectoire). **Dépendance : Track + décision A (CLIP) pour les filtres instantanés. Effort : M, et dépend fortement de la forme finale de A — ne pas figer le design avant d'avoir un CLIP qui tourne.**
 
 ## C — Découplage async 3 boucles
