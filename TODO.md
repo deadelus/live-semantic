@@ -90,7 +90,7 @@ Référence matrice : A — cascade et CLIP ABSENTS. Segmentation **[DÉJÀ FAIT
 
 ## Bugs UX ponctuels (indépendants du séquencement G→F)
 
-- [ ] Effet miroir sur le flux webcam : l'image rendue est inversée gauche/droite par rapport à l'utilisateur (comportement webcam brut, non-mirroré). Flip horizontal à appliquer sur le `gocv.Mat` lu (`gocv.Flip(imgMat, &imgMat, 1)`) dans `internal/implementation/streamer/input/camera.go` (`CameraInput.Start`, après `ci.camera.Read(&imgMat)` ligne ~45), avant la conversion `ToImage()`. **Dépendance : aucune. Effort : XS.**
+- [x] Effet miroir sur le flux webcam — fait (`ae577b5`) : `gocv.Flip(imgMat, &imgMat, 1)` dans `camera.go` après `Read()`, avant `ToImage()`. Coché tardivement ici, l'implémentation datait d'avant cette relecture.
 
 ## F — Optimisations transverses (en continu, pas une phase isolée)
 
