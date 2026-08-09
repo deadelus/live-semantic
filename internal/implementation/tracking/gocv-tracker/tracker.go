@@ -52,6 +52,47 @@ type Tracker struct {
 	confidence float32
 }
 
+// sharedFrameMat caches the last image.Image -> gocv.Mat conversion, keyed
+// by *entities.Frame pointer identity. gocv.ImageToMatRGB is a pure-Go,
+// per-pixel loop — expensive on a real camera frame (~100ms measured on
+// 1280x720, see TODO.md § F) — and every Tracker instance used to redo it
+// independently on every Init/Update call. trackManager (application/uc/
+// tracking.go) always passes the *same* *entities.Frame pointer to every
+// active track within one advance()/reanchor() cycle (the video loop is
+// single-threaded, confirmed by trackManager's own doc comment), so
+// caching by pointer identity is safe and turns N conversions/frame into 1.
+//
+// Deliberately package-level, not per-Tracker: multiple Tracker instances
+// (one per track) must share the same cache to benefit. The only
+// consequence is a single Mat's worth of native memory held until the next
+// distinct frame arrives — bounded, reclaimed by the OS at process exit,
+// not worth a cross-package release hook for.
+var sharedFrameMat struct {
+	frame *entities.Frame
+	mat   gocv.Mat
+}
+
+// matForFrame returns a gocv.Mat view of frame's image, converting once per
+// distinct *entities.Frame and reusing it on subsequent calls with the same
+// pointer. See sharedFrameMat's doc comment for the safety argument.
+func matForFrame(frame *entities.Frame) (gocv.Mat, error) {
+	if sharedFrameMat.frame == frame {
+		return sharedFrameMat.mat, nil
+	}
+
+	mat, err := gocv.ImageToMatRGB(frame.Image)
+	if err != nil {
+		return gocv.Mat{}, err
+	}
+
+	if sharedFrameMat.frame != nil {
+		sharedFrameMat.mat.Close()
+	}
+	sharedFrameMat.frame = frame
+	sharedFrameMat.mat = mat
+	return mat, nil
+}
+
 // New creates a Tracker backed by the given algorithm. The underlying
 // OpenCV tracker instance is only created on Init — OpenCV trackers are
 // single-use (see gocv.Tracker.Init godoc: once lost, you must Close() and
@@ -79,11 +120,10 @@ func (t *Tracker) Init(frame *entities.Frame, box entities.BoundingBox) error {
 		return fmt.Errorf("gocvtracker: nil frame")
 	}
 
-	mat, err := gocv.ImageToMatRGB(frame.Image)
+	mat, err := matForFrame(frame)
 	if err != nil {
 		return fmt.Errorf("gocvtracker: image to mat: %w", err)
 	}
-	defer mat.Close()
 
 	// Discard any previous backend before creating a new one (single-use
 	// constraint, see New's doc comment).
@@ -109,11 +149,10 @@ func (t *Tracker) Update(frame *entities.Frame) (entities.BoundingBox, bool) {
 		return entities.BoundingBox{}, false
 	}
 
-	mat, err := gocv.ImageToMatRGB(frame.Image)
+	mat, err := matForFrame(frame)
 	if err != nil {
 		return entities.BoundingBox{}, false
 	}
-	defer mat.Close()
 
 	rect, ok := t.backend.Update(mat)
 	if !ok {
