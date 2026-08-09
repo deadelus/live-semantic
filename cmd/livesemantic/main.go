@@ -151,10 +151,15 @@ func initDependencies() (streamer.InputStream, streamer.OutputStream, notifier.A
 		return nil, nil, nil, nil, nil, err
 	}
 
-	// KCF for now — the drift test to pick a default between KCF/CSRT
-	// hasn't run yet (docs/adr/object-tracking.md § 5, TODO.md § B).
+	// CSRT: switched from KCF on 2026-08-09 after lowering
+	// maxTrackingDimension to 320 (gocv-tracker/tracker.go) — at that scale
+	// KCF's tracker_failures rate roughly quadrupled on cmd/tracking-drift's
+	// person.mp4 (avg IoU 0.631 -> 0.353), CSRT held up better (0.704 ->
+	// 0.729, actually improved). CSRT is costlier per the ADR, but the
+	// perf fix (OpenCL disabled + downscale) already closed most of that
+	// gap — see docs/adr/object-tracking.md § 5/8, TODO.md § B/F.
 	trackerFactory := func() (tracking.ObjectTracker, error) {
-		return gocvtracker.New(gocvtracker.KCF)
+		return gocvtracker.New(gocvtracker.CSRT)
 	}
 
 	return cameraInput, windowOutput, logNotifier, ai, trackerFactory, nil

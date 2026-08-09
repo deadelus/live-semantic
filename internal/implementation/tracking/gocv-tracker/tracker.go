@@ -49,7 +49,13 @@ func init() {
 // Downscaling before tracking (standard practice in real-time CV — track
 // on a cheap proxy, scale the result back up) trades a little geometric
 // precision for a roughly quadratic reduction in FFT cost.
-const maxTrackingDimension = 640
+//
+// Lowered 640 -> 320 on 2026-08-09 (real-world request, more speed traded
+// for more precision loss) — not re-measured on real webcam footage at
+// this value yet, only reasoned from the same quadratic-cost argument that
+// held for 640. Revert or tune per TODO.md § F if tracking gets flaky on
+// small/far subjects.
+const maxTrackingDimension = 320
 
 // scaleFor returns the downscale factor (<=1.0) to bring w or h under
 // maxTrackingDimension, or 1.0 if already small enough (no upscaling).
