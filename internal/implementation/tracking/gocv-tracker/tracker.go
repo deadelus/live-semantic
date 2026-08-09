@@ -8,7 +8,8 @@ package gocvtracker
 
 import (
 	"fmt"
-	"time"
+	"image"
+	"os"
 
 	"live-semantic/internal/domain/entities"
 
@@ -16,25 +17,58 @@ import (
 	"gocv.io/x/gocv/contrib"
 )
 
-// init forces OpenCV's internal parallel_for_ down to a single thread.
+// init tunes OpenCV for real-time tracking of one webcam frame at a time,
+// found across a real perf investigation on 2026-08-09 (TODO.md § F —
+// history kept there, this comment only states the current understanding):
 //
-// Found via instrumentation on a real webcam session (TODO.md § F,
-// 2026-08-09): with 1 active track, KCF.Update() costs ~10-20ms (expected).
-// With 2+ concurrent tracks, the same call explodes to 280-540ms — not a
-// linear x2, an ~x15-25 cliff. Each Tracker instance's Update() spins up
-// its own OpenCV-internal thread pool (HOG/FFT feature computation);
-// nothing in gocv/OpenCV shares that pool across Tracker instances, so 2+
-// trackers fight over the same cores every frame — classic thread-pool
-// oversubscription. cmd/tracking-drift never reproduced this because it
-// only ever tracks one object at a time.
-//
-// gocv.SetNumThreads(1) trades a little single-track speed (OpenCV loses
-// its own internal parallelism) for eliminating the multi-track cliff.
-// Global and process-wide — acceptable here, gocv's other uses in this
-// project (camera capture, window display, one Flip per frame) are cheap
-// and don't benefit from OpenCV's threading anyway.
+//   - OPENCV_OPENCL_DEVICE=disabled: KCF's updateProjectionMatrix dispatches
+//     a matrix transpose to the GPU via OpenCV's T-API (UMat/OpenCL). On an
+//     Intel Kaby Lake iGPU, `sample` (macOS CLI profiler) showed the GPU
+//     sync alone (clFinish -> AppleIntelKBLGraphicsGLDriver -> mach IPC)
+//     costing hundreds of ms — far more than doing the transpose on CPU.
+//     Confirmed both via env var and by re-profiling after. Must be set
+//     before any OpenCV/OpenCL call — os.Setenv here, in this package's
+//     init(), runs before any gocv function does (OpenCL context is lazy,
+//     created on first actual use).
+//   - gocv.SetNumThreads(1): defensive, not confirmed to matter once the
+//     OpenCL issue above is fixed — kept because it's cheap and a genuine
+//     multi-track slowdown was observed before the real cause was found,
+//     may still help avoid oversubscription with 2+ concurrent trackers.
 func init() {
+	os.Setenv("OPENCV_OPENCL_DEVICE", "disabled")
 	gocv.SetNumThreads(1)
+}
+
+// maxTrackingDimension bounds the longest side (px) of the image actually
+// fed to the tracking algorithm. KCF/CSRT's correlation filter is FFT-based
+// — cost scales with the tracked region (and the frame it's read from),
+// confirmed via `sample`: on a real webcam frame with someone standing
+// close to the camera (large bounding box), denseGaussKernel/getSubWindow
+// alone cost 150-200ms/frame even with OpenCL disabled — 20-40x the 2-9ms
+// seen on cmd/tracking-drift's test footage (smaller, farther subjects).
+// Downscaling before tracking (standard practice in real-time CV — track
+// on a cheap proxy, scale the result back up) trades a little geometric
+// precision for a roughly quadratic reduction in FFT cost.
+const maxTrackingDimension = 640
+
+// scaleFor returns the downscale factor (<=1.0) to bring w or h under
+// maxTrackingDimension, or 1.0 if already small enough (no upscaling).
+func scaleFor(w, h int) float64 {
+	longest := w
+	if h > longest {
+		longest = h
+	}
+	if longest <= maxTrackingDimension {
+		return 1.0
+	}
+	return float64(maxTrackingDimension) / float64(longest)
+}
+
+func scaleRect(r image.Rectangle, s float64) image.Rectangle {
+	return image.Rect(
+		int(float64(r.Min.X)*s), int(float64(r.Min.Y)*s),
+		int(float64(r.Max.X)*s), int(float64(r.Max.Y)*s),
+	)
 }
 
 // Algorithm selects which OpenCV tracking algorithm backs a Tracker. Which
@@ -74,15 +108,16 @@ type Tracker struct {
 	confidence float32
 }
 
-// sharedFrameMat caches the last image.Image -> gocv.Mat conversion, keyed
-// by *entities.Frame pointer identity. gocv.ImageToMatRGB is a pure-Go,
-// per-pixel loop — expensive on a real camera frame (~100ms measured on
-// 1280x720, see TODO.md § F) — and every Tracker instance used to redo it
-// independently on every Init/Update call. trackManager (application/uc/
-// tracking.go) always passes the *same* *entities.Frame pointer to every
-// active track within one advance()/reanchor() cycle (the video loop is
-// single-threaded, confirmed by trackManager's own doc comment), so
-// caching by pointer identity is safe and turns N conversions/frame into 1.
+// sharedFrameMat caches the last image.Image -> gocv.Mat conversion (already
+// downscaled to maxTrackingDimension), keyed by *entities.Frame pointer
+// identity. gocv.ImageToMatRGB is a pure-Go, per-pixel loop, and every
+// Tracker instance used to redo it independently on every Init/Update call.
+// trackManager (application/uc/tracking.go) always passes the *same*
+// *entities.Frame pointer to every active track within one
+// advance()/reanchor() cycle (the video loop is single-threaded, confirmed
+// by trackManager's own doc comment), so caching by pointer identity is
+// safe and turns N conversions/frame into 1 — and doing the downscale here
+// too means it also only happens once per frame, not once per track.
 //
 // Deliberately package-level, not per-Tracker: multiple Tracker instances
 // (one per track) must share the same cache to benefit. The only
@@ -92,26 +127,34 @@ type Tracker struct {
 var sharedFrameMat struct {
 	frame *entities.Frame
 	mat   gocv.Mat
+	scale float64
 }
 
-// matForFrame returns a gocv.Mat view of frame's image, converting once per
+// matForFrame returns a downscaled gocv.Mat view of frame's image (see
+// maxTrackingDimension) and the scale factor applied, converting once per
 // distinct *entities.Frame and reusing it on subsequent calls with the same
 // pointer. See sharedFrameMat's doc comment for the safety argument.
-func matForFrame(frame *entities.Frame) (gocv.Mat, error) {
+func matForFrame(frame *entities.Frame) (gocv.Mat, float64, error) {
 	if sharedFrameMat.frame == frame {
-		return sharedFrameMat.mat, nil
+		return sharedFrameMat.mat, sharedFrameMat.scale, nil
 	}
 
-	start := time.Now()
-	mat, err := gocv.ImageToMatRGB(frame.Image)
-	// TEMP diagnostic (TODO.md § F perf investigation, 2026-08-09): confirm
-	// the cache is actually hit in real usage and measure the conversion
-	// cost at real camera resolution — remove once the perf question is
-	// settled either way.
-	bounds := frame.Image.Bounds()
-	fmt.Printf("gocvtracker: cache MISS, converting frame (%dx%d) in %v\n", bounds.Dx(), bounds.Dy(), time.Since(start))
+	full, err := gocv.ImageToMatRGB(frame.Image)
 	if err != nil {
-		return gocv.Mat{}, err
+		return gocv.Mat{}, 0, err
+	}
+
+	scale := scaleFor(full.Cols(), full.Rows())
+	mat := full
+	if scale < 1.0 {
+		resized := gocv.NewMat()
+		if err := gocv.Resize(full, &resized, image.Point{}, scale, scale, gocv.InterpolationLinear); err != nil {
+			full.Close()
+			resized.Close()
+			return gocv.Mat{}, 0, fmt.Errorf("gocvtracker: resize: %w", err)
+		}
+		full.Close()
+		mat = resized
 	}
 
 	if sharedFrameMat.frame != nil {
@@ -119,7 +162,8 @@ func matForFrame(frame *entities.Frame) (gocv.Mat, error) {
 	}
 	sharedFrameMat.frame = frame
 	sharedFrameMat.mat = mat
-	return mat, nil
+	sharedFrameMat.scale = scale
+	return mat, scale, nil
 }
 
 // New creates a Tracker backed by the given algorithm. The underlying
@@ -149,7 +193,7 @@ func (t *Tracker) Init(frame *entities.Frame, box entities.BoundingBox) error {
 		return fmt.Errorf("gocvtracker: nil frame")
 	}
 
-	mat, err := matForFrame(frame)
+	mat, scale, err := matForFrame(frame)
 	if err != nil {
 		return fmt.Errorf("gocvtracker: image to mat: %w", err)
 	}
@@ -159,7 +203,7 @@ func (t *Tracker) Init(frame *entities.Frame, box entities.BoundingBox) error {
 	t.Cleanup()
 
 	backend := t.newBackend()
-	if ok := backend.Init(mat, box.ToRect()); !ok {
+	if ok := backend.Init(mat, scaleRect(box.ToRect(), scale)); !ok {
 		backend.Close()
 		return fmt.Errorf("gocvtracker: %s init failed on box %s", t.algorithm, box.ToString())
 	}
@@ -178,20 +222,18 @@ func (t *Tracker) Update(frame *entities.Frame) (entities.BoundingBox, bool) {
 		return entities.BoundingBox{}, false
 	}
 
-	mat, err := matForFrame(frame)
+	mat, scale, err := matForFrame(frame)
 	if err != nil {
 		return entities.BoundingBox{}, false
 	}
 
-	// TEMP diagnostic (TODO.md § F perf investigation, 2026-08-09): isolate
-	// backend.Update() (KCF/CSRT correlation filter) cost from conversion
-	// cost — remove once the perf question is settled either way.
-	backendStart := time.Now()
 	rect, ok := t.backend.Update(mat)
-	fmt.Printf("gocvtracker: %s backend.Update in %v\n", t.algorithm, time.Since(backendStart))
 	if !ok {
 		return entities.BoundingBox{}, false
 	}
+	// Scale back up to the original frame's coordinate space (mat is
+	// downscaled to maxTrackingDimension, see matForFrame).
+	rect = scaleRect(rect, 1/scale)
 
 	return entities.BoundingBox{
 		Label:      t.label,
