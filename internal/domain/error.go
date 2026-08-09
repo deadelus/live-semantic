@@ -13,7 +13,7 @@ var (
 	ErrNilLogger         = errors.New("logger not initialized")
 	ErrNilVideoSource    = errors.New("video source not initialized")
 	ErrNilDisplayHandler = errors.New("display handler not initialized")
-	ErrNilAI             = errors.New("AI not initialized")
+	ErrNilObjectDetector = errors.New("object detector not initialized")
 	ErrNilNotifier       = errors.New("notifier not initialized")
 	ErrNilUtils          = errors.New("utils not initialized")
 	ErrNilTrackerFactory = errors.New("tracker factory not initialized")

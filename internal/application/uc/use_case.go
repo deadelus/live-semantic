@@ -24,12 +24,12 @@ type UseCase struct {
 	streamingInput  streamer.InputStream
 	streamingOutput streamer.OutputStream
 	notifier        notifier.AlertSender
-	ai              inference.ObjectDetector
+	objectDetector  inference.ObjectDetector
 	trackerFactory  tracking.TrackerFactory
 }
 
 // NewUseCase initializes your use cases with all the necessary dependencies
-func NewUseCase(ctx context.Context, logger logger.Logger, streamingInput streamer.InputStream, streamingOutput streamer.OutputStream, notifier notifier.AlertSender, ai inference.ObjectDetector, trackerFactory tracking.TrackerFactory) (UseCases, error) {
+func NewUseCase(ctx context.Context, logger logger.Logger, streamingInput streamer.InputStream, streamingOutput streamer.OutputStream, notifier notifier.AlertSender, objectDetector inference.ObjectDetector, trackerFactory tracking.TrackerFactory) (UseCases, error) {
 
 	if ctx == nil {
 		return nil, domain.ErrNilContext
@@ -50,8 +50,8 @@ func NewUseCase(ctx context.Context, logger logger.Logger, streamingInput stream
 		return nil, domain.ErrNilNotifier
 	}
 
-	if ai == nil {
-		return nil, domain.ErrNilAI
+	if objectDetector == nil {
+		return nil, domain.ErrNilObjectDetector
 	}
 
 	if trackerFactory == nil {
@@ -63,7 +63,7 @@ func NewUseCase(ctx context.Context, logger logger.Logger, streamingInput stream
 		streamingInput:  streamingInput,
 		streamingOutput: streamingOutput,
 		notifier:        notifier,
-		ai:              ai,
+		objectDetector:  objectDetector,
 		trackerFactory:  trackerFactory,
 	}, nil
 }

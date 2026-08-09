@@ -180,7 +180,7 @@ func boxWithinFrame(box entities.BoundingBox, bounds image.Rectangle) bool {
 // on the video loop blocks for the full YOLO duration on every reanchor
 // cycle, defeating the point of running detection on a separate goroutine.
 func (m *trackManager) reanchor(frame *entities.Frame, req dto.RecognitionRequest) error {
-	result, err := m.uc.ai.AnalyzeFrame(frame)
+	result, err := m.uc.objectDetector.AnalyzeFrame(frame)
 	if err != nil {
 		return err
 	}

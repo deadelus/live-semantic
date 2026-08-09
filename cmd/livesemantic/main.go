@@ -93,7 +93,7 @@ func main() {
 		},
 	)
 
-	streamingInput, windowOutput, notifier, ai, trackerFactory, err := initDependencies()
+	streamingInput, windowOutput, notifier, objectDetector, trackerFactory, err := initDependencies()
 	if err != nil {
 		engine.Logger().Error("Failed to initialize dependencies", err)
 		return
@@ -104,21 +104,21 @@ func main() {
 		if notifier != nil {
 			fmt.Println("Cleaning up notifier...")
 		}
-		if ai != nil {
-			fmt.Println("Cleaning up AI resources...")
+		if objectDetector != nil {
+			fmt.Println("Cleaning up object detector resources...")
 		}
 		// Cleanup resources
 		if notifier != nil {
 			notifier.Cleanup()
 		}
-		if ai != nil {
-			ai.Cleanup()
+		if objectDetector != nil {
+			objectDetector.Cleanup()
 		}
 		fmt.Println("Application stopped gracefully.")
 		return nil
 	})
 
-	useCases, err := uc.NewUseCase(engine.Context(), engine.Logger(), streamingInput, windowOutput, notifier, ai, trackerFactory)
+	useCases, err := uc.NewUseCase(engine.Context(), engine.Logger(), streamingInput, windowOutput, notifier, objectDetector, trackerFactory)
 	if err != nil {
 		engine.Logger().Error("Failed to create use cases", err)
 		return
@@ -146,7 +146,7 @@ func initDependencies() (streamer.InputStream, streamer.OutputStream, notifier.A
 	windowOutput := output.NewWindowOutput()
 
 	logNotifier := lognotifier.NewLogNotifier()
-	ai, err := yolo11s.New()
+	objectDetector, err := yolo11s.New()
 	if err != nil {
 		return nil, nil, nil, nil, nil, err
 	}
@@ -165,7 +165,7 @@ func initDependencies() (streamer.InputStream, streamer.OutputStream, notifier.A
 		return gocvtracker.New(gocvtracker.KCF)
 	}
 
-	return cameraInput, windowOutput, logNotifier, ai, trackerFactory, nil
+	return cameraInput, windowOutput, logNotifier, objectDetector, trackerFactory, nil
 }
 
 func determinePort(flagPort, defaultPort int) int {
