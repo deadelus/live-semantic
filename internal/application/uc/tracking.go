@@ -3,9 +3,8 @@ package uc
 import (
 	"fmt"
 	"image"
-	"os"
-	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"live-semantic/internal/application/dto"
@@ -24,49 +23,27 @@ func normalizeFilter(filter string) string {
 	return strings.ToLower(strings.TrimSpace(filter))
 }
 
-const (
-	// defaultReanchorInterval: how many frames between full YOLO
-	// re-detections. Between re-detections, active tracks are advanced via
-	// the cheaper per-object tracker (TODO.md § B).
-	//
-	// Lowered 45 -> 15 on 2026-08-09, found in real usage: reanchor is now
-	// also the only realistic signal that a tracked object is actually gone
-	// (CSRT almost never self-reports failure, see maxMissesBeforeLost's
-	// doc comment in entities/track.go) — at 45 frames and the ~7 FPS this
-	// session achieved, a track that left frame took a measured ~6s to
-	// disappear (one reanchor cycle at maxMissesBeforeLost=2). The YOLO
-	// cost per reanchor call (~150-270ms measured) is small enough after
-	// the OpenCL/downscale perf fixes that running it 3x more often is an
-	// acceptable trade for responsiveness — revisit if this makes the
-	// steady-state framerate noticeably worse than the tracking-only cost.
-	defaultReanchorInterval = 15
+// iouAssociationThreshold: minimum IoU for a fresh detection to be
+// considered the same object as an existing track (TODO.md § B calls for
+// 0.3-0.5). Lowered 0.4 -> 0.3 on 2026-08-09: real-world duplicate tracks
+// observed (same physical person spawning a 2nd/3rd/4th track every
+// reanchor cycle instead of re-anchoring the existing one) — matches
+// cmd/tracking-drift's own measurement of CSRT's min IoU (0.328) on
+// person.mp4, just under the old 0.4 threshold. A failed match doesn't
+// just miss a re-anchor, it spawns a visible duplicate box and the stale
+// track lingers (maxMissesBeforeLost in entities/track.go) — worth staying
+// at the permissive end of the documented range.
+const iouAssociationThreshold = 0.3
 
-	// iouAssociationThreshold: minimum IoU for a fresh detection to be
-	// considered the same object as an existing track (TODO.md § B calls
-	// for 0.3-0.5). Lowered 0.4 -> 0.3 on 2026-08-09: real-world duplicate
-	// tracks observed (same physical person spawning a 2nd/3rd/4th track
-	// every reanchor cycle instead of re-anchoring the existing one) —
-	// matches cmd/tracking-drift's own measurement of CSRT's min IoU
-	// (0.328) on person.mp4, just under the old 0.4 threshold. A failed
-	// match doesn't just miss a re-anchor, it spawns a visible duplicate
-	// box and the stale track lingers ~5 reanchor cycles before dying
-	// (maxMissesBeforeLost in entities/track.go) — worth staying at the
-	// permissive end of the documented range.
-	iouAssociationThreshold = 0.3
-)
-
-// reanchorInterval reads LIVESEMANTIC_REANCHOR_INTERVAL if set (TEMP, perf
-// investigation TODO.md § F, 2026-08-09) — e.g. =1 forces YOLO on every
-// frame (pre-tracking behavior), for an easy A/B against the default 45
-// without a rebuild. Falls back to defaultReanchorInterval otherwise.
-func reanchorInterval() int {
-	if v := os.Getenv("LIVESEMANTIC_REANCHOR_INTERVAL"); v != "" {
-		if n, err := strconv.Atoi(v); err == nil && n > 0 {
-			return n
-		}
-	}
-	return defaultReanchorInterval
-}
+// Note on reanchor cadence: there used to be an explicit
+// defaultReanchorInterval (frame-count-based gate, plus a
+// LIVESEMANTIC_REANCHOR_INTERVAL env var for A/B testing during the perf
+// investigation, TODO.md § F). Both are gone as of the async pipeline
+// (TODO.md § C, 2026-08-09): the detection loop now pulls from a buffer-1
+// overwrite-on-full channel and processes whatever's latest as fast as it
+// can — reanchor's own cost (~150-270ms measured) self-paces it to roughly
+// the target 2-5 FPS without needing an explicit interval. See
+// uc_recognition.go's RecognitionUseCase doc comment for the full picture.
 
 // trackedObject pairs a domain Track with the tracker instance following it
 // between re-detections. One per active track — trackers are single-object,
@@ -76,11 +53,22 @@ type trackedObject struct {
 	tracker tracking.ObjectTracker
 }
 
-// trackManager owns the set of active tracks for one RecognitionUseCase run.
-// Not safe for concurrent use — the video loop is single-threaded today
-// (TODO.md § C, the async 3-loop pipeline, doesn't exist yet).
+// trackManager owns the set of active tracks, shared between the video loop
+// (advance/boxes, per frame) and the detection loop (reanchor, whenever a
+// frame is handed off — TODO.md § C, the async 3-loop pipeline). mu serializes
+// every public method: coarse-grained on purpose for a first version — the
+// underlying tracker.ObjectTracker instances are themselves not safe for
+// concurrent use (native OpenCV handles), so advance() and reanchor() must
+// never touch the same trackedObject at once regardless of map-level
+// locking granularity. The actual win from splitting the loops isn't
+// parallelism (there's none, gocv is intentionally single-threaded — see
+// gocv-tracker's SetNumThreads(1)), it's that AnalyzeFrame (YOLO, the
+// dominant cost of reanchor) runs fully unlocked, so advance()/render()
+// only ever wait for the comparatively cheap post-processing, never the
+// full detection call.
 type trackManager struct {
 	uc          *UseCase
+	mu          sync.Mutex
 	active      map[string]*trackedObject
 	nextTrackID uint64
 }
@@ -89,10 +77,22 @@ func newTrackManager(uc *UseCase) *trackManager {
 	return &trackManager{uc: uc, active: make(map[string]*trackedObject)}
 }
 
+// count returns the number of active tracks — safe accessor for logging
+// from either loop (TODO.md § C), avoids reaching into m.active directly
+// from outside the package/lock.
+func (m *trackManager) count() int {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	return len(m.active)
+}
+
 // boxes returns the current bounding box of every active track, for
 // drawing — regardless of state (Tentative tracks are drawn too, they're
 // still a real detection, just not confirmed as stable yet).
 func (m *trackManager) boxes() []entities.BoundingBox {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
 	boxes := make([]entities.BoundingBox, 0, len(m.active))
 	for _, obj := range m.active {
 		boxes = append(boxes, obj.track.LastBox())
@@ -103,6 +103,9 @@ func (m *trackManager) boxes() []entities.BoundingBox {
 // cleanup releases every active tracker. Call once when the video loop
 // exits.
 func (m *trackManager) cleanup() {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
 	for _, obj := range m.active {
 		obj.tracker.Cleanup()
 	}
@@ -113,6 +116,9 @@ func (m *trackManager) cleanup() {
 // detection this frame) — the cheap path run on most frames between
 // re-detections.
 func (m *trackManager) advance(frame *entities.Frame, req dto.RecognitionRequest) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
 	now := time.Now()
 	bounds := frame.Image.Bounds()
 	for id, obj := range m.active {
@@ -122,10 +128,10 @@ func (m *trackManager) advance(frame *entities.Frame, req dto.RecognitionRequest
 		// guess for whatever's now under the last known region. Found in
 		// real usage: a track's box stayed on screen long after the
 		// person walked out of frame, because the only other way to drop
-		// a track is failing re-anchor association 5 times in a row
+		// a track is failing re-anchor association enough times in a row
 		// (entities.maxMissesBeforeLost), which only gets evaluated once
-		// per reanchorInterval — ~225 frames of a stale box in the
-		// default config. A box entirely outside the frame is an
+		// per detection-loop cycle — several seconds of a stale box before
+		// this check existed. A box entirely outside the frame is an
 		// unambiguous, immediate signal, no need to wait for that.
 		if ok && !boxWithinFrame(box, bounds) {
 			ok = false
@@ -148,13 +154,23 @@ func boxWithinFrame(box entities.BoundingBox, bounds image.Rectangle) bool {
 
 // reanchor runs a full YOLO detection and IoU-associates the results
 // against active tracks, spawning new tracks for unmatched detections and
-// missing tracks that weren't matched this cycle. The expensive path, run
-// every reanchorInterval frames.
+// missing tracks that weren't matched this cycle. The expensive path — runs
+// on the detection loop's own goroutine, not gated by a frame count
+// (TODO.md § C, see uc_recognition.go's RecognitionUseCase doc comment).
+//
+// AnalyzeFrame deliberately runs before the lock is taken: it's the
+// dominant cost (~150-270ms measured) and touches no trackManager state at
+// all (result is a local value) — locking around it would mean advance()
+// on the video loop blocks for the full YOLO duration on every reanchor
+// cycle, defeating the point of running detection on a separate goroutine.
 func (m *trackManager) reanchor(frame *entities.Frame, req dto.RecognitionRequest) error {
 	result, err := m.uc.ai.AnalyzeFrame(frame)
 	if err != nil {
 		return err
 	}
+
+	m.mu.Lock()
+	defer m.mu.Unlock()
 
 	now := time.Now()
 	matchedTrackIDs := make(map[string]bool, len(m.active))
@@ -202,6 +218,11 @@ func (m *trackManager) reanchor(frame *entities.Frame, req dto.RecognitionReques
 // already matched this cycle). Greedy per-detection association, not a
 // global optimum (Hungarian algorithm) — sufficient for a first version,
 // revisit if the drift test (TODO.md § B) shows association errors.
+//
+// bestMatch/spawn/miss/emit below are internal helpers: only ever called
+// from advance()/reanchor() while m.mu is already held. They don't lock
+// themselves — sync.Mutex isn't reentrant, a second Lock() from the same
+// goroutine would deadlock.
 func (m *trackManager) bestMatch(box entities.BoundingBox, taken map[string]bool) (string, bool) {
 	bestID := ""
 	bestIoU := float32(iouAssociationThreshold)

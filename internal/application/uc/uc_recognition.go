@@ -10,12 +10,28 @@ import (
 	"live-semantic/internal/implementation/drawer"
 )
 
-// RecognitionUseCase starts the continuous analysis of the video stream.
-// It periodically re-detects objects (YOLO, every reanchorInterval frames)
-// and tracks them in between via a per-object tracker (TODO.md § B),
-// instead of running detection on every single frame. Alerts fire once per
-// track lifecycle event (TrackEntered/TrackMatched, TODO.md § D) rather
-// than once per frame.
+// RecognitionUseCase starts the continuous analysis of the video stream, as
+// two decoupled loops (TODO.md § C) sharing one trackManager:
+//
+//   - Video loop (this goroutine, driven by streamingInput.Start): per
+//     frame, advances existing tracks via the cheap per-object tracker
+//     (TODO.md § B) and renders — never waits on detection.
+//   - Detection loop (goroutine spawned below): re-detects via YOLO
+//     (reanchor) whenever a frame is available, at its own pace. Frames are
+//     handed off through a buffer-1, overwrite-on-full channel — the video
+//     loop never blocks trying to hand off, and the detection loop always
+//     works on the most recent frame rather than queueing up stale ones.
+//     No explicit rate cap: reanchor's own cost (~150-270ms measured)
+//     naturally self-paces it to roughly the 2-5 FPS this was meant to run
+//     at, without needing a ticker.
+//
+// V1 "naive resync" (TODO.md § C): a reanchored frame can be a few tens of
+// ms stale by the time the detection loop gets to it — accepted, the
+// tracker (running continuously on the video loop) catches up on its own.
+// No ring buffer / replay (V2) yet.
+//
+// Alerts fire once per track lifecycle event (TrackEntered/TrackMatched,
+// TODO.md § D) rather than once per frame.
 func (uc *UseCase) RecognitionUseCase(ctx context.Context, req dto.RecognitionRequest) (dto.Result[dto.RecognitionResponse], error) {
 	defer func() {
 		// Ensure cleanup is called only after loop exits
@@ -34,9 +50,29 @@ func (uc *UseCase) RecognitionUseCase(ctx context.Context, req dto.RecognitionRe
 	tracks := newTrackManager(uc)
 	defer tracks.cleanup()
 
+	frameChan := make(chan *entities.Frame, 1)
+	detectionDone := make(chan struct{})
+
+	go func() {
+		defer close(detectionDone)
+		for frame := range frameChan {
+			start := time.Now()
+			err := tracks.reanchor(frame, req)
+			duration := time.Since(start)
+			if err != nil {
+				uc.logger.Info("Detection loop error", map[string]interface{}{"error": err.Error()})
+				continue
+			}
+			uc.logger.Info("Frame timing", map[string]interface{}{
+				"kind":               "reanchor",
+				"detect_or_track_ms": duration.Milliseconds(),
+				"active_tracks":      tracks.count(),
+			})
+		}
+	}()
+
 	frameCount := 0
 	lastFrameAt := time.Now()
-	interval := reanchorInterval()
 
 	uc.streamingInput.Start(func(frame *entities.Frame) (*entities.Frame, error) {
 		frameStart := time.Now()
@@ -45,25 +81,25 @@ func (uc *UseCase) RecognitionUseCase(ctx context.Context, req dto.RecognitionRe
 		// so isn't otherwise visible from in here.
 		interFrameGap := frameStart.Sub(lastFrameAt)
 		lastFrameAt = frameStart
-
 		frameCount++
-		isReanchorFrame := frameCount == 1 || frameCount%interval == 0
-		kind := "advance"
-		if isReanchorFrame {
-			kind = "reanchor"
-		}
 
-		trackingStart := time.Now()
-		var err error
-		if isReanchorFrame {
-			err = tracks.reanchor(frame, req)
-		} else {
-			tracks.advance(frame, req)
-		}
-		trackingDuration := time.Since(trackingStart)
-		if err != nil {
-			uc.logger.Info("AI analysis error", map[string]interface{}{"error": err.Error()})
-			return nil, err
+		advanceStart := time.Now()
+		tracks.advance(frame, req)
+		advanceDuration := time.Since(advanceStart)
+
+		// Non-blocking hand-off to the detection loop — drop whatever's
+		// pending (not yet picked up) and replace it, never wait.
+		select {
+		case frameChan <- frame:
+		default:
+			select {
+			case <-frameChan:
+			default:
+			}
+			select {
+			case frameChan <- frame:
+			default:
+			}
 		}
 
 		renderStart := time.Now()
@@ -105,11 +141,11 @@ func (uc *UseCase) RecognitionUseCase(ctx context.Context, req dto.RecognitionRe
 
 		uc.logger.Info("Frame timing", map[string]interface{}{
 			"frame":              frameCount,
-			"kind":               kind,
+			"kind":               "advance",
 			"inter_frame_gap_ms": interFrameGap.Milliseconds(),
-			"detect_or_track_ms": trackingDuration.Milliseconds(),
+			"detect_or_track_ms": advanceDuration.Milliseconds(),
 			"draw_and_render_ms": renderDuration.Milliseconds(),
-			"active_tracks":      len(tracks.active),
+			"active_tracks":      tracks.count(),
 		})
 
 		// Handle key events (e.g., for stopping the stream)
@@ -124,6 +160,8 @@ func (uc *UseCase) RecognitionUseCase(ctx context.Context, req dto.RecognitionRe
 	// Stop all processing before cleanup
 	uc.streamingInput.Stop()
 	uc.streamingOutput.Stop()
+	close(frameChan)
+	<-detectionDone
 
 	fmt.Println("Recognition completed successfully.")
 	return dto.Success(dto.RecognitionResponse{}), nil

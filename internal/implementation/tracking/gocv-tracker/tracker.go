@@ -10,6 +10,7 @@ import (
 	"fmt"
 	"image"
 	"os"
+	"sync"
 
 	"live-semantic/internal/domain/entities"
 
@@ -120,17 +121,26 @@ type Tracker struct {
 // Tracker instance used to redo it independently on every Init/Update call.
 // trackManager (application/uc/tracking.go) always passes the *same*
 // *entities.Frame pointer to every active track within one
-// advance()/reanchor() cycle (the video loop is single-threaded, confirmed
-// by trackManager's own doc comment), so caching by pointer identity is
-// safe and turns N conversions/frame into 1 — and doing the downscale here
-// too means it also only happens once per frame, not once per track.
+// advance()/reanchor() cycle, so caching by pointer identity is safe and
+// turns N conversions/frame into 1 — and doing the downscale here too means
+// it also only happens once per frame, not once per track.
 //
 // Deliberately package-level, not per-Tracker: multiple Tracker instances
 // (one per track) must share the same cache to benefit. The only
 // consequence is a single Mat's worth of native memory held until the next
 // distinct frame arrives — bounded, reclaimed by the OS at process exit,
 // not worth a cross-package release hook for.
+//
+// mu guards the cache fields themselves (avoids corrupting frame/mat/scale
+// if this package were ever called from two goroutines at once). It does
+// NOT by itself make concurrent Init/Update calls on different Tracker
+// instances safe — the actual guarantee against that comes from
+// trackManager's coarser lock (application/uc/tracking.go), which
+// serializes every advance()/reanchor() call and therefore every path that
+// reaches into this package. This mutex is defense-in-depth for the cache
+// state, not a substitute for that.
 var sharedFrameMat struct {
+	mu    sync.Mutex
 	frame *entities.Frame
 	mat   gocv.Mat
 	scale float64
@@ -141,6 +151,9 @@ var sharedFrameMat struct {
 // distinct *entities.Frame and reusing it on subsequent calls with the same
 // pointer. See sharedFrameMat's doc comment for the safety argument.
 func matForFrame(frame *entities.Frame) (gocv.Mat, float64, error) {
+	sharedFrameMat.mu.Lock()
+	defer sharedFrameMat.mu.Unlock()
+
 	if sharedFrameMat.frame == frame {
 		return sharedFrameMat.mat, sharedFrameMat.scale, nil
 	}
