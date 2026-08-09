@@ -9,3 +9,7 @@
 # Vidéos de test (cmd/tracking-drift, docs/adr/object-tracking.md § 7) :
 # mêmes raisons, à fournir localement. Dossier préservé via .gitkeep.
 assets/videos/*.mp4
+
+# Logs applicatifs (cmd/livesemantic/logging.go, withFileLogging) : générés
+# à l'exécution, jamais versionnés. Dossier préservé via .gitkeep.
+logs/*.log

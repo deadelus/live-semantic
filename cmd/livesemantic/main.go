@@ -23,7 +23,6 @@ import (
 	"time"
 
 	"github.com/deadelus/go-clean-app/v2/application"
-	"github.com/deadelus/go-clean-app/v2/logger/zaplogger"
 	"github.com/joho/godotenv"
 	"github.com/spf13/pflag"
 )
@@ -69,11 +68,13 @@ func main() {
 
 	isCliMode := !*web && !*ws && !*interactive
 	if isCliMode {
-		// Use a console-friendly logger for CLI mode
-		options = append(options, zaplogger.SetZapLoggerForCLI(), application.WithCLIMode())
+		// Console-friendly logger for CLI mode, also teed to logs/livesemantic.log
+		// (withFileLogging, cmd/livesemantic/logging.go — not the vendored
+		// zaplogger.SetZapLoggerForCLI, which only writes to the console).
+		options = append(options, withFileLogging(true), application.WithCLIMode())
 	} else {
-		// Use a web-friendly logger for web or websocket mode
-		options = append(options, zaplogger.SetZapLogger())
+		// Web-friendly (JSON) logger for web/websocket mode, same file teeing.
+		options = append(options, withFileLogging(false))
 	}
 
 	// Create the engine with the appropriate options

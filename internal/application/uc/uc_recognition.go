@@ -35,22 +35,37 @@ func (uc *UseCase) RecognitionUseCase(ctx context.Context, req dto.RecognitionRe
 	defer tracks.cleanup()
 
 	frameCount := 0
+	lastFrameAt := time.Now()
 
 	uc.streamingInput.Start(func(frame *entities.Frame) (*entities.Frame, error) {
+		frameStart := time.Now()
+		// Proxy for real achieved FPS: includes camera capture wait, which
+		// happens in the input stream's loop before this callback runs and
+		// so isn't otherwise visible from in here.
+		interFrameGap := frameStart.Sub(lastFrameAt)
+		lastFrameAt = frameStart
+
 		frameCount++
 		isReanchorFrame := frameCount == 1 || frameCount%reanchorInterval == 0
+		kind := "advance"
+		if isReanchorFrame {
+			kind = "reanchor"
+		}
 
+		trackingStart := time.Now()
 		var err error
 		if isReanchorFrame {
 			err = tracks.reanchor(frame, req)
 		} else {
 			tracks.advance(frame, req)
 		}
+		trackingDuration := time.Since(trackingStart)
 		if err != nil {
 			uc.logger.Info("AI analysis error", map[string]interface{}{"error": err.Error()})
 			return nil, err
 		}
 
+		renderStart := time.Now()
 		outImage := frame.Image
 		if boxes := tracks.boxes(); len(boxes) > 0 {
 			drawBoxes := make([]drawer.Box, 0, len(boxes))
@@ -85,6 +100,16 @@ func (uc *UseCase) RecognitionUseCase(ctx context.Context, req dto.RecognitionRe
 		// Output the frame — always, even with zero active tracks, so the
 		// window keeps refreshing and key events (below) keep being polled.
 		uc.streamingOutput.Render(outFrame)
+		renderDuration := time.Since(renderStart)
+
+		uc.logger.Info("Frame timing", map[string]interface{}{
+			"frame":              frameCount,
+			"kind":               kind,
+			"inter_frame_gap_ms": interFrameGap.Milliseconds(),
+			"detect_or_track_ms": trackingDuration.Milliseconds(),
+			"draw_and_render_ms": renderDuration.Milliseconds(),
+			"active_tracks":      len(tracks.active),
+		})
 
 		// Handle key events (e.g., for stopping the stream)
 		if key := uc.streamingOutput.HandleKeyEvent(); key == 27 { // 'q' or Escape to quit
