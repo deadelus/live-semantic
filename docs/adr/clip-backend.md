@@ -46,6 +46,8 @@ Nouveau package `internal/implementation/inference/onnx/clip/`, même patron que
 - Embeddings texte des filtres calculés une fois au démarrage (déjà planifié, TODO.md § A).
 - Crop de la frame sur la bbox YOLO avant `EncodeImage` (déjà planifié, dépend du tracker — fait, § B).
 
+**Ordre décidé avec l'utilisateur (2026-08-10)** : filtre texte d'abord (ce plan), reconnaissance par référence image ensuite (TODO.md § D, nouvel item) — sélection d'une box en direct + label → `EncodeImage` sur le crop → galerie locale `{label, embedding}`, comparaison par similarité cosinus. N'utilise que `EncodeImage` (pas de tokenizer nécessaire pour ce mode), mais demande une UI d'interaction pendant que le flux tourne, pas encore conçue. Le garder en tête en concevant `Encoder` : les deux modes doivent pouvoir réutiliser la même méthode `EncodeImage`, pas de couplage à prévoir spécifiquement au texte.
+
 ## 6. Risques / inconnues restantes
 
 - Compatibilité opset ONNX de ces fichiers avec `onnxruntime_go`/la lib native bundlée (1.22.0) — pas vérifiée, à faire au premier chargement réel (même démarche que pour YOLO11s, `docs/adr/inference-runtimes.md` § 3.1).
