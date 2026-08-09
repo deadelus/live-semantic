@@ -27,10 +27,19 @@ func normalizeFilter(filter string) string {
 const (
 	// defaultReanchorInterval: how many frames between full YOLO
 	// re-detections. Between re-detections, active tracks are advanced via
-	// the cheaper per-object tracker (TODO.md § B). Not measured yet
-	// (TODO.md § F) — chosen to land roughly every 1.5s on a typical 30fps
-	// webcam feed.
-	defaultReanchorInterval = 45
+	// the cheaper per-object tracker (TODO.md § B).
+	//
+	// Lowered 45 -> 15 on 2026-08-09, found in real usage: reanchor is now
+	// also the only realistic signal that a tracked object is actually gone
+	// (CSRT almost never self-reports failure, see maxMissesBeforeLost's
+	// doc comment in entities/track.go) — at 45 frames and the ~7 FPS this
+	// session achieved, a track that left frame took a measured ~6s to
+	// disappear (one reanchor cycle at maxMissesBeforeLost=2). The YOLO
+	// cost per reanchor call (~150-270ms measured) is small enough after
+	// the OpenCL/downscale perf fixes that running it 3x more often is an
+	// acceptable trade for responsiveness — revisit if this makes the
+	// steady-state framerate noticeably worse than the tracking-only cost.
+	defaultReanchorInterval = 15
 
 	// iouAssociationThreshold: minimum IoU for a fresh detection to be
 	// considered the same object as an existing track (TODO.md § B calls
