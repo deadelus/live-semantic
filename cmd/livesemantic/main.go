@@ -151,15 +151,18 @@ func initDependencies() (streamer.InputStream, streamer.OutputStream, notifier.A
 		return nil, nil, nil, nil, nil, err
 	}
 
-	// CSRT: switched from KCF on 2026-08-09 after lowering
-	// maxTrackingDimension to 320 (gocv-tracker/tracker.go) — at that scale
-	// KCF's tracker_failures rate roughly quadrupled on cmd/tracking-drift's
-	// person.mp4 (avg IoU 0.631 -> 0.353), CSRT held up better (0.704 ->
-	// 0.729, actually improved). CSRT is costlier per the ADR, but the
-	// perf fix (OpenCL disabled + downscale) already closed most of that
-	// gap — see docs/adr/object-tracking.md § 5/8, TODO.md § B/F.
+	// KCF: reverted from CSRT on 2026-08-09 — CSRT's own drift-test numbers
+	// were better (avg IoU 0.729 vs KCF 0.353 at maxTrackingDimension=320),
+	// but in real usage CSRT's near-total refusal to self-report a lost
+	// track (0 tracker_failures measured, see maxMissesBeforeLost's doc
+	// comment in entities/track.go) made "object left frame" take several
+	// seconds to resolve even after lowering maxMissesBeforeLost and
+	// reanchorInterval — still not acceptable in practice. KCF fails more
+	// honestly, which this project's loss-detection logic actually depends
+	// on more than raw IoU accuracy. Revisit per TODO.md § B/F if KCF's
+	// weaker accuracy at 320px becomes the bigger problem instead.
 	trackerFactory := func() (tracking.ObjectTracker, error) {
-		return gocvtracker.New(gocvtracker.CSRT)
+		return gocvtracker.New(gocvtracker.KCF)
 	}
 
 	return cameraInput, windowOutput, logNotifier, ai, trackerFactory, nil
