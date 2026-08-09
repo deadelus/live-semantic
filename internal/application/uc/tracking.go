@@ -2,6 +2,7 @@ package uc
 
 import (
 	"fmt"
+	"image"
 	"os"
 	"strconv"
 	"strings"
@@ -104,14 +105,36 @@ func (m *trackManager) cleanup() {
 // re-detections.
 func (m *trackManager) advance(frame *entities.Frame, req dto.RecognitionRequest) {
 	now := time.Now()
+	bounds := frame.Image.Bounds()
 	for id, obj := range m.active {
 		box, ok := obj.tracker.Update(frame)
+		// KCF/CSRT almost never report failure (ok=false) when the
+		// physical object leaves the frame — they just keep reporting a
+		// guess for whatever's now under the last known region. Found in
+		// real usage: a track's box stayed on screen long after the
+		// person walked out of frame, because the only other way to drop
+		// a track is failing re-anchor association 5 times in a row
+		// (entities.maxMissesBeforeLost), which only gets evaluated once
+		// per reanchorInterval — ~225 frames of a stale box in the
+		// default config. A box entirely outside the frame is an
+		// unambiguous, immediate signal, no need to wait for that.
+		if ok && !boxWithinFrame(box, bounds) {
+			ok = false
+		}
 		if !ok {
 			m.miss(id, obj, now, req)
 			continue
 		}
 		obj.track.Coast(box, now)
 	}
+}
+
+// boxWithinFrame reports whether box has any overlap at all with bounds —
+// false once the tracker's reported position has drifted (or the real
+// object walked) fully outside the visible frame.
+func boxWithinFrame(box entities.BoundingBox, bounds image.Rectangle) bool {
+	return box.X2 > float32(bounds.Min.X) && box.X1 < float32(bounds.Max.X) &&
+		box.Y2 > float32(bounds.Min.Y) && box.Y1 < float32(bounds.Max.Y)
 }
 
 // reanchor runs a full YOLO detection and IoU-associates the results
