@@ -77,12 +77,25 @@ type TrackEvent struct {
 	Track *Track
 }
 
-// Tuning constants for the state machine. Not yet backed by real-world
-// measurement (TODO.md § F) — chosen as reasonable SORT-like defaults,
-// revisit once the re-anchoring loop (§ B) runs on real footage.
+// Tuning constants for the state machine.
 const (
-	minHitsToConfirm    = 3
-	maxMissesBeforeLost = 5
+	minHitsToConfirm = 3
+
+	// maxMissesBeforeLost: lowered 5 -> 2 on 2026-08-09, found in real
+	// usage. Misses are almost always driven by reanchor() failing to
+	// re-associate a track (Miss() from advance()'s own tracker.Update()
+	// failure is rare in practice — CSRT in particular almost never
+	// reports failure on its own, see docs/adr/object-tracking.md § 7:
+	// 0 tracker_failures across both test videos, it just keeps reporting
+	// a guess, often clamped to the frame edge, for whatever's now under
+	// the last known region). With reanchor only running every
+	// reanchorInterval frames, 5 meant a track that genuinely left frame
+	// stayed drawn for ~5 reanchor cycles (~225 frames, several seconds)
+	// before disappearing. 2 trades some flicker risk (a track dies after
+	// 2 consecutive frames where YOLO just didn't detect it, e.g. brief
+	// occlusion/motion blur) for a much faster response to the common case
+	// of the object actually being gone.
+	maxMissesBeforeLost = 2
 )
 
 // Track is the domain aggregate for one physical object followed across
