@@ -18,4 +18,8 @@ type ObjectTracker interface {
 	// bounding box and whether the track is still considered valid (false
 	// signals drift/loss — caller should re-anchor via detection).
 	Update(frame *entities.Frame) (entities.BoundingBox, bool)
+	// Cleanup releases any resources held by the tracker (e.g. native OpenCV
+	// tracker handles, which must be closed manually). Safe to call even if
+	// Init was never called.
+	Cleanup()
 }

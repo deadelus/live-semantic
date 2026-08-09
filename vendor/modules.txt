@@ -239,6 +239,7 @@ go.uber.org/zap/zapcore
 # gocv.io/x/gocv v0.42.0
 ## explicit; go 1.21
 gocv.io/x/gocv
+gocv.io/x/gocv/contrib
 # golang.org/x/arch v0.19.0
 ## explicit; go 1.23.0
 golang.org/x/arch/x86/x86asm
