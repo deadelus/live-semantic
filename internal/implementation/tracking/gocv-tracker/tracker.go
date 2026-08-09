@@ -16,6 +16,27 @@ import (
 	"gocv.io/x/gocv/contrib"
 )
 
+// init forces OpenCV's internal parallel_for_ down to a single thread.
+//
+// Found via instrumentation on a real webcam session (TODO.md § F,
+// 2026-08-09): with 1 active track, KCF.Update() costs ~10-20ms (expected).
+// With 2+ concurrent tracks, the same call explodes to 280-540ms — not a
+// linear x2, an ~x15-25 cliff. Each Tracker instance's Update() spins up
+// its own OpenCV-internal thread pool (HOG/FFT feature computation);
+// nothing in gocv/OpenCV shares that pool across Tracker instances, so 2+
+// trackers fight over the same cores every frame — classic thread-pool
+// oversubscription. cmd/tracking-drift never reproduced this because it
+// only ever tracks one object at a time.
+//
+// gocv.SetNumThreads(1) trades a little single-track speed (OpenCV loses
+// its own internal parallelism) for eliminating the multi-track cliff.
+// Global and process-wide — acceptable here, gocv's other uses in this
+// project (camera capture, window display, one Flip per frame) are cheap
+// and don't benefit from OpenCV's threading anyway.
+func init() {
+	gocv.SetNumThreads(1)
+}
+
 // Algorithm selects which OpenCV tracking algorithm backs a Tracker. Which
 // one performs best on real footage is an open question (TODO.md § B, drift
 // test not run yet) — both are wired behind the same adapter so the choice
