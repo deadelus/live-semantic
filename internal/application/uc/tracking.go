@@ -51,7 +51,23 @@ const iouAssociationThreshold = 0.3
 type trackedObject struct {
 	track   *entities.Track
 	tracker tracking.ObjectTracker
+
+	// lastNotifiedAt debounces AlertSender.Notify for this track — see
+	// notifyDebounce's doc comment.
+	lastNotifiedAt time.Time
 }
+
+// notifyDebounce: minimum time between two Notify calls for the same
+// track. Found necessary after decoupling the detection loop (TODO.md § C,
+// 2026-08-10): reanchor now runs continuously (~200ms cadence, self-paced
+// by its own cost) instead of being gated by a frame count tied to camera
+// FPS (~1-2s before) — every reanchor cycle that still matches a confirmed
+// track emits EventTrackMatched, which used to alert roughly once every
+// 1-2s and now would alert ~5x/s. That directly contradicts the original
+// intent (TODO.md § D: "one alert per meaningful lifecycle transition
+// instead of one per frame") — reanchor became frequent enough to
+// effectively become "per frame" again from the alerting point of view.
+const notifyDebounce = 5 * time.Second
 
 // trackManager owns the set of active tracks, shared between the video loop
 // (advance/boxes, per frame) and the detection loop (reanchor, whenever a
@@ -196,7 +212,7 @@ func (m *trackManager) reanchor(frame *entities.Frame, req dto.RecognitionReques
 				m.uc.logger.Info("Tracker re-init failed", map[string]interface{}{"track_id": id, "error": err.Error()})
 			}
 			matchedTrackIDs[id] = true
-			m.emit(evt, req)
+			m.emit(obj, evt, req)
 			continue
 		}
 
@@ -266,7 +282,7 @@ func (m *trackManager) spawn(frame *entities.Frame, box entities.BoundingBox, no
 // it transitions to StateLost.
 func (m *trackManager) miss(id string, obj *trackedObject, now time.Time, req dto.RecognitionRequest) {
 	evt := obj.track.Miss(now)
-	m.emit(evt, req)
+	m.emit(obj, evt, req)
 	if obj.track.State == entities.StateLost {
 		obj.tracker.Cleanup()
 		delete(m.active, id)
@@ -276,8 +292,10 @@ func (m *trackManager) miss(id string, obj *trackedObject, now time.Time, req dt
 // emit logs every track event and forwards it to AlertSender when the
 // track's class matches the requested filter above the similarity
 // threshold — one alert per meaningful lifecycle transition (TODO.md § D)
-// instead of the old per-frame alert.
-func (m *trackManager) emit(evt *entities.TrackEvent, req dto.RecognitionRequest) {
+// instead of the old per-frame alert, debounced per track (notifyDebounce)
+// since the async detection loop (TODO.md § C) made EventTrackMatched fire
+// far more often than the original "per lifecycle transition" intent.
+func (m *trackManager) emit(obj *trackedObject, evt *entities.TrackEvent, req dto.RecognitionRequest) {
 	if evt == nil {
 		return
 	}
@@ -298,6 +316,12 @@ func (m *trackManager) emit(evt *entities.TrackEvent, req dto.RecognitionRequest
 	if filter == "" || box.Label != filter || box.Confidence < req.SimilarityThreshold {
 		return
 	}
+
+	now := time.Now()
+	if !obj.lastNotifiedAt.IsZero() && now.Sub(obj.lastNotifiedAt) < notifyDebounce {
+		return
+	}
+	obj.lastNotifiedAt = now
 
 	if err := m.uc.notifier.Notify(entities.Message{
 		MatchedFilter: filter,
