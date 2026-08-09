@@ -47,7 +47,10 @@ func (uc *UseCase) RecognitionUseCase(ctx context.Context, req dto.RecognitionRe
 	uc.streamingInput.Initialize()
 	uc.streamingOutput.Initialize()
 
-	tracks := newTrackManager(uc)
+	tracks, err := newTrackManager(uc, req)
+	if err != nil {
+		return dto.Failure[dto.RecognitionResponse]("failed to prepare semantic filter"), err
+	}
 	defer tracks.cleanup()
 
 	frameChan := make(chan *entities.Frame, 1)

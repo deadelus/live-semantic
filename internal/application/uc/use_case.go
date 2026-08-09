@@ -3,8 +3,8 @@ package uc
 
 import (
 	"context"
-	"live-semantic/internal/domain"
 	"live-semantic/internal/application/dto"
+	"live-semantic/internal/domain"
 	"live-semantic/internal/infrastructure/inference"
 	"live-semantic/internal/infrastructure/notifier"
 	"live-semantic/internal/infrastructure/streamer"
@@ -25,11 +25,12 @@ type UseCase struct {
 	streamingOutput streamer.OutputStream
 	notifier        notifier.AlertSender
 	objectDetector  inference.ObjectDetector
+	semanticEncoder inference.SemanticEncoder
 	trackerFactory  tracking.TrackerFactory
 }
 
 // NewUseCase initializes your use cases with all the necessary dependencies
-func NewUseCase(ctx context.Context, logger logger.Logger, streamingInput streamer.InputStream, streamingOutput streamer.OutputStream, notifier notifier.AlertSender, objectDetector inference.ObjectDetector, trackerFactory tracking.TrackerFactory) (UseCases, error) {
+func NewUseCase(ctx context.Context, logger logger.Logger, streamingInput streamer.InputStream, streamingOutput streamer.OutputStream, notifier notifier.AlertSender, objectDetector inference.ObjectDetector, semanticEncoder inference.SemanticEncoder, trackerFactory tracking.TrackerFactory) (UseCases, error) {
 
 	if ctx == nil {
 		return nil, domain.ErrNilContext
@@ -54,6 +55,10 @@ func NewUseCase(ctx context.Context, logger logger.Logger, streamingInput stream
 		return nil, domain.ErrNilObjectDetector
 	}
 
+	if semanticEncoder == nil {
+		return nil, domain.ErrNilSemanticEncoder
+	}
+
 	if trackerFactory == nil {
 		return nil, domain.ErrNilTrackerFactory
 	}
@@ -64,6 +69,7 @@ func NewUseCase(ctx context.Context, logger logger.Logger, streamingInput stream
 		streamingOutput: streamingOutput,
 		notifier:        notifier,
 		objectDetector:  objectDetector,
+		semanticEncoder: semanticEncoder,
 		trackerFactory:  trackerFactory,
 	}, nil
 }

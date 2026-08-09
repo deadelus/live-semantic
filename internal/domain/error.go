@@ -9,14 +9,15 @@ var (
 	ErrModelOptionInitialization = errors.New("model option initialization failed")
 
 	// Implementation errors
-	ErrNilContext        = errors.New("context not initialized")
-	ErrNilLogger         = errors.New("logger not initialized")
-	ErrNilVideoSource    = errors.New("video source not initialized")
-	ErrNilDisplayHandler = errors.New("display handler not initialized")
-	ErrNilObjectDetector = errors.New("object detector not initialized")
-	ErrNilNotifier       = errors.New("notifier not initialized")
-	ErrNilUtils          = errors.New("utils not initialized")
-	ErrNilTrackerFactory = errors.New("tracker factory not initialized")
+	ErrNilContext         = errors.New("context not initialized")
+	ErrNilLogger          = errors.New("logger not initialized")
+	ErrNilVideoSource     = errors.New("video source not initialized")
+	ErrNilDisplayHandler  = errors.New("display handler not initialized")
+	ErrNilObjectDetector  = errors.New("object detector not initialized")
+	ErrNilSemanticEncoder = errors.New("semantic encoder not initialized")
+	ErrNilNotifier        = errors.New("notifier not initialized")
+	ErrNilUtils           = errors.New("utils not initialized")
+	ErrNilTrackerFactory  = errors.New("tracker factory not initialized")
 
 	// Error for camera-related issues
 	ErrNoCameraFound        = errors.New("no camera found")

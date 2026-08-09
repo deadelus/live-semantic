@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"live-semantic/internal/application/uc"
+	"live-semantic/internal/implementation/inference/onnx/clip"
 	"live-semantic/internal/implementation/inference/onnx/yolo11s"
 	lognotifier "live-semantic/internal/implementation/notifier/log-notifier"
 	"live-semantic/internal/implementation/streamer/input"
@@ -93,7 +94,7 @@ func main() {
 		},
 	)
 
-	streamingInput, windowOutput, notifier, objectDetector, trackerFactory, err := initDependencies()
+	streamingInput, windowOutput, notifier, objectDetector, semanticEncoder, trackerFactory, err := initDependencies()
 	if err != nil {
 		engine.Logger().Error("Failed to initialize dependencies", err)
 		return
@@ -107,6 +108,9 @@ func main() {
 		if objectDetector != nil {
 			fmt.Println("Cleaning up object detector resources...")
 		}
+		if semanticEncoder != nil {
+			fmt.Println("Cleaning up semantic encoder resources...")
+		}
 		// Cleanup resources
 		if notifier != nil {
 			notifier.Cleanup()
@@ -114,11 +118,14 @@ func main() {
 		if objectDetector != nil {
 			objectDetector.Cleanup()
 		}
+		if semanticEncoder != nil {
+			semanticEncoder.Cleanup()
+		}
 		fmt.Println("Application stopped gracefully.")
 		return nil
 	})
 
-	useCases, err := uc.NewUseCase(engine.Context(), engine.Logger(), streamingInput, windowOutput, notifier, objectDetector, trackerFactory)
+	useCases, err := uc.NewUseCase(engine.Context(), engine.Logger(), streamingInput, windowOutput, notifier, objectDetector, semanticEncoder, trackerFactory)
 	if err != nil {
 		engine.Logger().Error("Failed to create use cases", err)
 		return
@@ -141,14 +148,19 @@ func main() {
 	}
 }
 
-func initDependencies() (streamer.InputStream, streamer.OutputStream, notifier.AlertSender, inference.ObjectDetector, tracking.TrackerFactory, error) {
+func initDependencies() (streamer.InputStream, streamer.OutputStream, notifier.AlertSender, inference.ObjectDetector, inference.SemanticEncoder, tracking.TrackerFactory, error) {
 	cameraInput := input.NewCameraInput()
 	windowOutput := output.NewWindowOutput()
 
 	logNotifier := lognotifier.NewLogNotifier()
 	objectDetector, err := yolo11s.New()
 	if err != nil {
-		return nil, nil, nil, nil, nil, err
+		return nil, nil, nil, nil, nil, nil, err
+	}
+
+	semanticEncoder, err := clip.New()
+	if err != nil {
+		return nil, nil, nil, nil, nil, nil, err
 	}
 
 	// KCF: reverted from CSRT on 2026-08-09 — CSRT's own drift-test numbers
@@ -165,7 +177,7 @@ func initDependencies() (streamer.InputStream, streamer.OutputStream, notifier.A
 		return gocvtracker.New(gocvtracker.KCF)
 	}
 
-	return cameraInput, windowOutput, logNotifier, objectDetector, trackerFactory, nil
+	return cameraInput, windowOutput, logNotifier, objectDetector, semanticEncoder, trackerFactory, nil
 }
 
 func determinePort(flagPort, defaultPort int) int {

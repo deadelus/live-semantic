@@ -3,6 +3,7 @@ package uc
 import (
 	"fmt"
 	"image"
+	"math"
 	"strings"
 	"sync"
 	"time"
@@ -87,10 +88,54 @@ type trackManager struct {
 	mu          sync.Mutex
 	active      map[string]*trackedObject
 	nextTrackID uint64
+
+	// filterEmbedding is CLIP's text embedding for req.Filter, computed
+	// once here (not per frame — TODO.md § A) rather than in NewUseCase:
+	// the filter is only known per RecognitionUseCase call. nil means "no
+	// filter requested" — reanchor() then skips the semantic gate entirely
+	// (tracks everything YOLO finds, same as before CLIP existed).
+	filterEmbedding entities.Embedding
 }
 
-func newTrackManager(uc *UseCase) *trackManager {
-	return &trackManager{uc: uc, active: make(map[string]*trackedObject)}
+// newTrackManager computes the filter's text embedding once (TODO.md § A:
+// "pas par frame") — the one call in this whole file that can be slow
+// (a real ONNX inference) and is deliberately made synchronously here,
+// before the video/detection loops start, not hidden inside a hot path.
+func newTrackManager(uc *UseCase, req dto.RecognitionRequest) (*trackManager, error) {
+	m := &trackManager{uc: uc, active: make(map[string]*trackedObject)}
+
+	if filter := normalizeFilter(req.Filter); filter != "" {
+		emb, err := uc.semanticEncoder.EncodeText(filter)
+		if err != nil {
+			return nil, fmt.Errorf("encode filter text %q: %w", filter, err)
+		}
+		m.filterEmbedding = emb
+	}
+
+	return m, nil
+}
+
+// cosineSimilarity returns the cosine similarity of a and b, in [-1, 1] for
+// well-formed embeddings (0 for mismatched/empty inputs). Doesn't assume
+// its inputs are already unit vectors (clip.Encoder happens to L2-normalize
+// its output, but the SemanticEncoder port doesn't contractually guarantee
+// that — computing the true cosine similarity here keeps this package
+// decoupled from that implementation detail).
+func cosineSimilarity(a, b entities.Embedding) float32 {
+	if len(a) != len(b) || len(a) == 0 {
+		return 0
+	}
+
+	var dot, normA, normB float64
+	for i := range a {
+		dot += float64(a[i]) * float64(b[i])
+		normA += float64(a[i]) * float64(a[i])
+		normB += float64(b[i]) * float64(b[i])
+	}
+	if normA == 0 || normB == 0 {
+		return 0
+	}
+	return float32(dot / (math.Sqrt(normA) * math.Sqrt(normB)))
 }
 
 // count returns the number of active tracks — safe accessor for logging
@@ -192,15 +237,28 @@ func (m *trackManager) reanchor(frame *entities.Frame, req dto.RecognitionReques
 	matchedTrackIDs := make(map[string]bool, len(m.active))
 
 	for _, box := range result.BoundingBoxes {
-		// Only track what was actually requested — req.Filter == "" means
-		// "everything" (e.g. transports with no filter concept yet), but a
-		// real filter must actually restrict what gets tracked/drawn, not
-		// just what gets alerted on (that part alone was already handled
-		// by emit(), the rest of the pipeline ignored req.Filter entirely
-		// until now — a lingering pre-tracking bug, the filter check block
-		// used to be dead code commented out in the original per-frame loop).
-		if filter := normalizeFilter(req.Filter); filter != "" && box.Label != filter {
-			continue
+		// Semantic gate (TODO.md § A, decision 2026-08-10: CLIP decides
+		// alone, YOLO only proposes candidate regions — no more "does the
+		// COCO label match the filter string" check). req.Filter == "" ->
+		// filterEmbedding is nil -> no gate at all, track everything YOLO
+		// finds, same as before CLIP existed.
+		//
+		// This is real per-detection cost (crop + one CLIP image encode)
+		// at reanchor cadence — not per video frame, but not free either.
+		// Not benchmarked yet (TODO.md § F).
+		if m.filterEmbedding != nil {
+			crop, ok := frame.Crop(box)
+			if !ok {
+				continue
+			}
+			embedding, err := m.uc.semanticEncoder.EncodeImage(crop)
+			if err != nil {
+				m.uc.logger.Info("Semantic encode failed", map[string]interface{}{"error": err.Error()})
+				continue
+			}
+			if cosineSimilarity(embedding, m.filterEmbedding) < req.SimilarityThreshold {
+				continue
+			}
 		}
 
 		if id, ok := m.bestMatch(box, matchedTrackIDs); ok {
@@ -289,12 +347,17 @@ func (m *trackManager) miss(id string, obj *trackedObject, now time.Time, req dt
 	}
 }
 
-// emit logs every track event and forwards it to AlertSender when the
-// track's class matches the requested filter above the similarity
-// threshold — one alert per meaningful lifecycle transition (TODO.md § D)
-// instead of the old per-frame alert, debounced per track (notifyDebounce)
-// since the async detection loop (TODO.md § C) made EventTrackMatched fire
-// far more often than the original "per lifecycle transition" intent.
+// emit logs every track event and forwards it to AlertSender — one alert
+// per meaningful lifecycle transition (TODO.md § D) instead of the old
+// per-frame alert, debounced per track (notifyDebounce) since the async
+// detection loop (TODO.md § C) made EventTrackMatched fire far more often
+// than the original "per lifecycle transition" intent.
+//
+// No re-check of the filter here on purpose: by construction, every track
+// that exists already passed the semantic gate in reanchor() (or no filter
+// was requested at all, in which case there's nothing to alert on either —
+// that's what the req.Filter == "" check below is for, not a redundant
+// semantic re-check).
 func (m *trackManager) emit(obj *trackedObject, evt *entities.TrackEvent, req dto.RecognitionRequest) {
 	if evt == nil {
 		return
@@ -311,9 +374,8 @@ func (m *trackManager) emit(obj *trackedObject, evt *entities.TrackEvent, req dt
 		return
 	}
 
-	box := evt.Track.LastBox()
 	filter := normalizeFilter(req.Filter)
-	if filter == "" || box.Label != filter || box.Confidence < req.SimilarityThreshold {
+	if filter == "" {
 		return
 	}
 
@@ -323,6 +385,11 @@ func (m *trackManager) emit(obj *trackedObject, evt *entities.TrackEvent, req dt
 	}
 	obj.lastNotifiedAt = now
 
+	// Confidence here is YOLO's own detection confidence, not the CLIP
+	// similarity score that actually decided this track passed the
+	// semantic gate — the score isn't threaded through TrackEvent/Track
+	// today. Known simplification, not fixed in this pass (TODO.md § A).
+	box := evt.Track.LastBox()
 	if err := m.uc.notifier.Notify(entities.Message{
 		MatchedFilter: filter,
 		Confidence:    box.Confidence,
