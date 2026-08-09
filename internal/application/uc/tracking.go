@@ -108,6 +108,17 @@ func (m *trackManager) reanchor(frame *entities.Frame, req dto.RecognitionReques
 	matchedTrackIDs := make(map[string]bool, len(m.active))
 
 	for _, box := range result.BoundingBoxes {
+		// Only track what was actually requested — req.Filter == "" means
+		// "everything" (e.g. transports with no filter concept yet), but a
+		// real filter must actually restrict what gets tracked/drawn, not
+		// just what gets alerted on (that part alone was already handled
+		// by emit(), the rest of the pipeline ignored req.Filter entirely
+		// until now — a lingering pre-tracking bug, the filter check block
+		// used to be dead code commented out in the original per-frame loop).
+		if req.Filter != "" && box.Label != req.Filter {
+			continue
+		}
+
 		if id, ok := m.bestMatch(box, matchedTrackIDs); ok {
 			obj := m.active[id]
 			evt := obj.track.MatchDetection(box, now)
