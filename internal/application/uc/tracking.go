@@ -2,6 +2,8 @@ package uc
 
 import (
 	"fmt"
+	"os"
+	"strconv"
 	"time"
 
 	"live-semantic/internal/application/dto"
@@ -10,17 +12,31 @@ import (
 )
 
 const (
-	// reanchorInterval: how many frames between full YOLO re-detections.
-	// Between re-detections, active tracks are advanced via the cheaper
-	// per-object tracker (TODO.md § B). Not measured yet (TODO.md § F) —
-	// chosen to land roughly every 1.5s on a typical 30fps webcam feed.
-	reanchorInterval = 45
+	// defaultReanchorInterval: how many frames between full YOLO
+	// re-detections. Between re-detections, active tracks are advanced via
+	// the cheaper per-object tracker (TODO.md § B). Not measured yet
+	// (TODO.md § F) — chosen to land roughly every 1.5s on a typical 30fps
+	// webcam feed.
+	defaultReanchorInterval = 45
 
 	// iouAssociationThreshold: minimum IoU for a fresh detection to be
 	// considered the same object as an existing track (TODO.md § B calls
 	// for 0.3-0.5, picked the middle).
 	iouAssociationThreshold = 0.4
 )
+
+// reanchorInterval reads LIVESEMANTIC_REANCHOR_INTERVAL if set (TEMP, perf
+// investigation TODO.md § F, 2026-08-09) — e.g. =1 forces YOLO on every
+// frame (pre-tracking behavior), for an easy A/B against the default 45
+// without a rebuild. Falls back to defaultReanchorInterval otherwise.
+func reanchorInterval() int {
+	if v := os.Getenv("LIVESEMANTIC_REANCHOR_INTERVAL"); v != "" {
+		if n, err := strconv.Atoi(v); err == nil && n > 0 {
+			return n
+		}
+	}
+	return defaultReanchorInterval
+}
 
 // trackedObject pairs a domain Track with the tracker instance following it
 // between re-detections. One per active track — trackers are single-object,

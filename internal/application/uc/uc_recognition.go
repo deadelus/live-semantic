@@ -36,6 +36,7 @@ func (uc *UseCase) RecognitionUseCase(ctx context.Context, req dto.RecognitionRe
 
 	frameCount := 0
 	lastFrameAt := time.Now()
+	interval := reanchorInterval()
 
 	uc.streamingInput.Start(func(frame *entities.Frame) (*entities.Frame, error) {
 		frameStart := time.Now()
@@ -46,7 +47,7 @@ func (uc *UseCase) RecognitionUseCase(ctx context.Context, req dto.RecognitionRe
 		lastFrameAt = frameStart
 
 		frameCount++
-		isReanchorFrame := frameCount == 1 || frameCount%reanchorInterval == 0
+		isReanchorFrame := frameCount == 1 || frameCount%interval == 0
 		kind := "advance"
 		if isReanchorFrame {
 			kind = "reanchor"
