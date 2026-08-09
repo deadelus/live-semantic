@@ -80,13 +80,13 @@ Référence matrice : C — **vidéo + détection découplées le 2026-08-10.** 
 
 ## A — Cascade YOLO → crop → CLIP
 
-Référence matrice : A — cascade et CLIP ABSENTS. Segmentation **[DÉJÀ FAIT → À INTÉGRER]** dans `stash@{0}`.
+Référence matrice : A — cascade et CLIP ABSENTS. Segmentation volontairement non portée (décision ci-dessous) — le vrai travail restant est CLIP.
 
-- [x] Récupérer `stash@{0}` — **fait le 2026-08-06, mais pas comme prévu** : le stash lui-même avait déjà disparu (`git stash list` vide, reflog absent) au moment de reprendre ce chantier, seul le commit orphelin (`fb02e91`, objet non garbage-collecté) subsistait. Récupéré sur `recover/yoloe11s-seg-stash`. Contient : `yoloe11s-seg` complet (détection + segmentation), `AI.AnalyzeFrame(frame, filters)` avec filtrage par classe, `Render()` renvoyant `(bool, error)`. **Reste à faire** : merger/porter ce contenu dans la structure actuelle (`internal/implementation/inference/...`), le stash date d'avant la migration Phase G donc son arborescence (`src/...`) est obsolète.
-- [ ] Choisir et intégrer un backend CLIP en ONNX (ViT-B/32 ou équivalent léger) suivant le même schéma que `yolo11s.go`/`yoloe11s-seg.go` (déjà éprouvé deux fois). **Dépendance : aucune technique, mais logiquement après la récupération du stash pour éviter le travail en double sur la structure `implementation/ai/`. Effort : L (2-3 j, includes export du modèle + intégration Go).**
-- [ ] Crop de la frame sur la bbox YOLO avant envoi à CLIP (pas la frame entière). **Dépendance : tracker (B) pour avoir une bbox stable à chaque frame, sinon crop sur la bbox de détection brute en attendant. Effort : S.**
+- [x] Récupérer `stash@{0}` — **fait le 2026-08-06, mais pas comme prévu** : le stash lui-même avait déjà disparu (`git stash list` vide, reflog absent) au moment de reprendre ce chantier, seul le commit orphelin (`fb02e91`, objet non garbage-collecté) subsistait. Récupéré sur `recover/yoloe11s-seg-stash`. Contient : `yoloe11s-seg` complet (détection + segmentation), `AI.AnalyzeFrame(frame, filters)` avec filtrage par classe, `Render()` renvoyant `(bool, error)`.
+- [x] **Décision 2026-08-10 : segmentation `yoloe11s-seg` volontairement pas portée.** Inspecté : le code du stash utilise `github.com/deadelus/go-clean-onnxruntime`, entièrement supprimé du projet au commit `4cad31d` (remplacé par `onnxruntime_go` en binding direct) — ce n'est pas un portage copier-coller, ce serait une réécriture complète au même effort qu'écrire le module de zéro. Vu que la TODO elle-même classe la segmentation comme optionnelle ("seulement utile sur scènes très encombrées", pas le comportement par défaut) et que ça n'apporte rien à la cascade CLIP (qui n'a besoin que de YOLO détection + crop, déjà là), le travail est reporté indéfiniment plutôt que fait maintenant pour du confort. `recover/yoloe11s-seg-stash` reste disponible si un besoin réel se présente.
+- [ ] Choisir et intégrer un backend CLIP en ONNX (ViT-B/32 ou équivalent léger) suivant le même schéma que `yolo11s.go`. **Dépendance : aucune. Effort : L (2-3 j, export du modèle + tokenizer texte + intégration Go).**
+- [ ] Crop de la frame sur la bbox YOLO avant envoi à CLIP (pas la frame entière). **Dépendance : tracker (B, fait) pour avoir une bbox stable à chaque frame. Effort : S.**
 - [ ] Calcul des embeddings texte des filtres une seule fois au démarrage (pas par frame). **Dépendance : CLIP intégré ci-dessus. Effort : XS.**
-- [ ] Garder la segmentation (masque pixel, récupérée du stash) en option explicite, pas en comportement par défaut — seulement utile sur scènes très encombrées. **Dépendance : intégration du stash. Effort : XS, il s'agit surtout de ne pas l'activer par défaut.**
 
 ## Bugs UX ponctuels (indépendants du séquencement G→F)
 
