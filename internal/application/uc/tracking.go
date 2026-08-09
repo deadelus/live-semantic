@@ -4,12 +4,24 @@ import (
 	"fmt"
 	"os"
 	"strconv"
+	"strings"
 	"time"
 
 	"live-semantic/internal/application/dto"
 	"live-semantic/internal/domain/entities"
 	"live-semantic/internal/infrastructure/tracking"
 )
+
+// normalizeFilter trims and lowercases a user-supplied class filter before
+// comparing it against a COCO label (always lowercase, entities.class.go).
+// Found in real usage (2026-08-09): an untrimmed CLI survey answer (a
+// single leading space, "person" typed as " person") silently filtered out
+// every detection — exact string comparison, no error, looked exactly like
+// "detection is broken" from the user's side. Applied at every comparison
+// site rather than trusting callers to normalize req.Filter once.
+func normalizeFilter(filter string) string {
+	return strings.ToLower(strings.TrimSpace(filter))
+}
 
 const (
 	// defaultReanchorInterval: how many frames between full YOLO
@@ -115,7 +127,7 @@ func (m *trackManager) reanchor(frame *entities.Frame, req dto.RecognitionReques
 		// by emit(), the rest of the pipeline ignored req.Filter entirely
 		// until now — a lingering pre-tracking bug, the filter check block
 		// used to be dead code commented out in the original per-frame loop).
-		if req.Filter != "" && box.Label != req.Filter {
+		if filter := normalizeFilter(req.Filter); filter != "" && box.Label != filter {
 			continue
 		}
 
@@ -221,12 +233,13 @@ func (m *trackManager) emit(evt *entities.TrackEvent, req dto.RecognitionRequest
 	}
 
 	box := evt.Track.LastBox()
-	if req.Filter == "" || box.Label != req.Filter || box.Confidence < req.SimilarityThreshold {
+	filter := normalizeFilter(req.Filter)
+	if filter == "" || box.Label != filter || box.Confidence < req.SimilarityThreshold {
 		return
 	}
 
 	if err := m.uc.notifier.Notify(entities.Message{
-		MatchedFilter: req.Filter,
+		MatchedFilter: filter,
 		Confidence:    box.Confidence,
 	}); err != nil {
 		m.uc.logger.Info("Notify failed", map[string]interface{}{"error": err.Error()})
