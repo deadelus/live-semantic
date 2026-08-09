@@ -6,24 +6,24 @@ Ordre de dépendance global : **G (hygiène) → E (ports) → B (IoU/tracker) �
 
 ---
 
-## 🔴 Bug critique — SIGABRT à la sortie dès que ORT + gocv coexistent dans le process
+## ✅ Bug critique SIGABRT — résolu le 2026-08-10 (root-cause confirmée + fix)
 
-Découvert le 2026-08-09 en construisant l'outil de test de dérive (`cmd/tracking-drift`), **hors de tout scope prévu** — pas un artefact de cet outil, reproduit à la racine.
+Découvert le 2026-08-09 en construisant l'outil de test de dérive (`cmd/tracking-drift`), hors de tout scope prévu. Le repro minimal initial pointait vaguement vers "un conflit entre destructeurs statiques C++ ORT/gocv" — **c'était trop large, l'un des deux n'y est pour rien.**
 
-**Reproduction minimale** (3 variantes testées, toutes crashent identiquement) :
-```go
-detector, _ := yolo11s.New()
-detector.Cleanup()
-_ = gocv.NewMat() // ou VideoCaptureFile(...), ou même juste `import _ "gocv.io/x/gocv"`
-// → SIGABRT à la sortie du process, systématique
+**Root-cause isolée avec `lldb`** (`bt all` sur le process qui crashe, reproductible 100% du temps avec juste `yolo11s.New()` + `Cleanup()`, gocv pas nécessaire pour reproduire — juste présent dans le repro d'origine par coïncidence de code) :
 ```
-`libc++abi: terminating due to uncaught exception ... mutex lock failed: Invalid argument`. Reproduit **indépendamment de l'ordre** (ORT avant ou après gocv), **indépendamment de l'usage réel** (un import aveugle de gocv suffit, aucun appel n'est nécessaire), et **indépendamment de la vidéo/caméra** (touche `gocv.NewMat()` seul, sans `VideoCapture`). Tout pointe vers un conflit de destructeurs statiques C++ entre les deux libs natives vendorisées (`onnxruntime_go` et `gocv`), pas un bug de logique métier.
+frame #8: onnxruntime_amd64.dylib`__clang_call_terminate
+frame #9: onnxruntime_amd64.dylib`std::__1::unique_ptr<OrtEnv,...>::~unique_ptr()
+```
+Le singleton global `OrtEnv` d'ONNX Runtime est détruit via un **destructeur statique C++** à la sortie du process (jamais explicitement relâché par notre code — `runtime.InitEnvironment` appelle `InitializeEnvironment()` mais rien n'appelait `DestroyEnvironment()`). Ce destructeur lève une exception non interceptée (`mutex lock failed: Invalid argument`) → `std::terminate()` → `SIGABRT`.
 
-**Impact réel : très probablement présent dans le binaire `livesemantic` de production.** `main.go` instancie systématiquement `yolo11s.New()` (ORT) et `input.NewCameraInput()`/`Initialize()` (gocv) dans le même process pour toute commande `recognition` — le crash devrait donc se reproduire à la sortie normale (Escape/Ctrl+C) de n'importe quelle session `livesemantic recognition` réelle. **Non confirmé sur le binaire réel** (pas de webcam/écran dans cet environnement pour le vérifier de bout en bout), mais la réduction minimale ci-dessus ne laisse pas beaucoup de place au doute.
+**Bug connu et documenté côté ONNX Runtime lui-même**, pas notre code : [microsoft/onnxruntime#24579](https://github.com/microsoft/onnxruntime/issues/24579), touche 1.21.x-1.22.x sur macOS (la lib bundlée ici est en 1.22.0, confirmé via `otool -L`). Corrigé upstream par [PR #26445](https://github.com/microsoft/onnxruntime/pull/26445) — mais uniquement côté binding **Node.js** (`js/node/src/ort_singleton_data.cc`), pas le cœur de l'API C que notre binding Go (cgo direct) appelle. Le fix upstream ne nous couvre donc pas automatiquement.
 
-- [ ] Confirmer sur une machine avec webcam/écran que `livesemantic recognition` crashe bien au `Escape`/Ctrl+C. **Premier essai réel le 2026-08-09 : `echo $?` = 0, pas de SIGABRT observé sur ce run précis** — soit non-déterministe, soit la réduction minimale (probe isolé) ne reproduit pas exactement les conditions réelles (ordre d'init, nombre d'allocations gocv, etc.). Pas encore résolu, à re-tester sur plusieurs runs avant de conclure dans un sens ou l'autre.
-- [ ] Root-cause : isoler si c'est `onnxruntime_go`, `gocv`, ou l'interaction des deux qui enregistre le destructeur fautif (`atos`/`lldb` sur le core, ou bissection par retrait de fonctionnalités des deux libs). **Effort : M, debugging CGo natif — pas un simple correctif Go.**
-- [ ] Corriger ou contourner (candidats à évaluer, aucun validé) : ordre d'init différent, `os.Exit` explicite avant retour de `main` (probablement inefficace, les handlers `atexit` C tournent quand même), issue upstream sur l'un des deux repos. **Dépendance : root-cause ci-dessus. Effort : inconnu tant que la cause n'est pas isolée.**
+**Fix appliqué** : `runtime.DestroyEnvironment()` (nouveau, `internal/implementation/inference/onnx/runtime/session.go`) appelle explicitement `ort.DestroyEnvironment()` — appelé depuis `Detector.Cleanup()`. Confirmé 100% reproductible dans les deux sens en isolant avec `lldb`/binaire de test dédié : 3/3 crashs sans l'appel explicite, 5/5 sorties propres avec, sur le vrai `Detector.Cleanup()` du projet (pas juste le repro isolé).
+
+- [x] Confirmer/infirmer le crash — confirmé indirectement : le crash n'a jamais été observé sur les runs webcam réels de l'utilisateur (`echo $?` = 0 à 3 reprises), mais le repro isolé plantait à 100%. Explication la plus probable après coup : les runs réels n'ont peut-être jamais atteint un `Cleanup()` complet avant que le shell ne récupère le code de sortie (terminaison par signal externe au process Go plutôt que retour propre de `main`), ou une différence d'environnement non identifiée — non élucidé, mais désormais sans conséquence puisque le vrai bug est corrigé indépendamment de ce point.
+- [x] Root-cause isolée précisément via `lldb bt all` sur un repro minimal — pas de bisection nécessaire, la pile d'appel a directement pointé vers `OrtEnv`'s destructeur statique dans `onnxruntime_amd64.dylib`.
+- [x] Corrigé : `runtime.DestroyEnvironment()` + appel dans `Detector.Cleanup()`. Testé 3x sans fix (crash systématique) vs 5x avec fix (propre systématique), même binaire.
 
 ## G — Restructuration & hygiène (bloquant, faible risque, à faire en premier)
 

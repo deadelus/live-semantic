@@ -234,6 +234,12 @@ func decodeDetections(output []float32, originalBounds image.Rectangle) []entiti
 }
 
 // Cleanup implements the ObjectDetector.Cleanup for Detector.
+//
+// Also explicitly releases the process-wide ORT environment (see
+// runtime.DestroyEnvironment's doc comment) — without this, the app
+// crashes with SIGABRT at exit (a documented ONNX Runtime bug on macOS,
+// see TODO.md § bug critique). Safe: this project only ever constructs one
+// Detector for the whole process lifetime (cmd/livesemantic/main.go).
 func (d *Detector) Cleanup() {
 	if d.session != nil {
 		d.session.Destroy()
@@ -243,6 +249,9 @@ func (d *Detector) Cleanup() {
 	}
 	if d.outputTensor != nil {
 		d.outputTensor.Destroy()
+	}
+	if err := runtime.DestroyEnvironment(); err != nil {
+		fmt.Println("Warning: failed to destroy ORT environment:", err)
 	}
 	fmt.Println("Detector resources cleaned up successfully.")
 }
