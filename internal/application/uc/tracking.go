@@ -33,8 +33,16 @@ const (
 
 	// iouAssociationThreshold: minimum IoU for a fresh detection to be
 	// considered the same object as an existing track (TODO.md § B calls
-	// for 0.3-0.5, picked the middle).
-	iouAssociationThreshold = 0.4
+	// for 0.3-0.5). Lowered 0.4 -> 0.3 on 2026-08-09: real-world duplicate
+	// tracks observed (same physical person spawning a 2nd/3rd/4th track
+	// every reanchor cycle instead of re-anchoring the existing one) —
+	// matches cmd/tracking-drift's own measurement of CSRT's min IoU
+	// (0.328) on person.mp4, just under the old 0.4 threshold. A failed
+	// match doesn't just miss a re-anchor, it spawns a visible duplicate
+	// box and the stale track lingers ~5 reanchor cycles before dying
+	// (maxMissesBeforeLost in entities/track.go) — worth staying at the
+	// permissive end of the documented range.
+	iouAssociationThreshold = 0.3
 )
 
 // reanchorInterval reads LIVESEMANTIC_REANCHOR_INTERVAL if set (TEMP, perf
