@@ -6,6 +6,25 @@ Ordre de dépendance global : **G (hygiène) → E (ports) → B (IoU/tracker) �
 
 ---
 
+## 🔴 Bug critique — SIGABRT à la sortie dès que ORT + gocv coexistent dans le process
+
+Découvert le 2026-08-09 en construisant l'outil de test de dérive (`cmd/tracking-drift`), **hors de tout scope prévu** — pas un artefact de cet outil, reproduit à la racine.
+
+**Reproduction minimale** (3 variantes testées, toutes crashent identiquement) :
+```go
+detector, _ := yolo11s.New()
+detector.Cleanup()
+_ = gocv.NewMat() // ou VideoCaptureFile(...), ou même juste `import _ "gocv.io/x/gocv"`
+// → SIGABRT à la sortie du process, systématique
+```
+`libc++abi: terminating due to uncaught exception ... mutex lock failed: Invalid argument`. Reproduit **indépendamment de l'ordre** (ORT avant ou après gocv), **indépendamment de l'usage réel** (un import aveugle de gocv suffit, aucun appel n'est nécessaire), et **indépendamment de la vidéo/caméra** (touche `gocv.NewMat()` seul, sans `VideoCapture`). Tout pointe vers un conflit de destructeurs statiques C++ entre les deux libs natives vendorisées (`onnxruntime_go` et `gocv`), pas un bug de logique métier.
+
+**Impact réel : très probablement présent dans le binaire `livesemantic` de production.** `main.go` instancie systématiquement `yolo11s.New()` (ORT) et `input.NewCameraInput()`/`Initialize()` (gocv) dans le même process pour toute commande `recognition` — le crash devrait donc se reproduire à la sortie normale (Escape/Ctrl+C) de n'importe quelle session `livesemantic recognition` réelle. **Non confirmé sur le binaire réel** (pas de webcam/écran dans cet environnement pour le vérifier de bout en bout), mais la réduction minimale ci-dessus ne laisse pas beaucoup de place au doute.
+
+- [ ] Confirmer sur une machine avec webcam/écran que `livesemantic recognition` crashe bien au `Escape`/Ctrl+C. **Effort : XS.**
+- [ ] Root-cause : isoler si c'est `onnxruntime_go`, `gocv`, ou l'interaction des deux qui enregistre le destructeur fautif (`atos`/`lldb` sur le core, ou bissection par retrait de fonctionnalités des deux libs). **Effort : M, debugging CGo natif — pas un simple correctif Go.**
+- [ ] Corriger ou contourner (candidats à évaluer, aucun validé) : ordre d'init différent, `os.Exit` explicite avant retour de `main` (probablement inefficace, les handlers `atexit` C tournent quand même), issue upstream sur l'un des deux repos. **Dépendance : root-cause ci-dessus. Effort : inconnu tant que la cause n'est pas isolée.**
+
 ## G — Restructuration & hygiène (bloquant, faible risque, à faire en premier)
 
 Référence matrice : G — restructuration absente partout, problèmes d'hygiène confirmés en étape 2. **Phase terminée le 2026-08-05** (voir `MIGRATION.md` § Phase 1 pour le détail de ce qui a réellement été fait, la structure finale diffère légèrement de la proposition initiale — affinée avec l'utilisateur avant exécution).
@@ -37,7 +56,7 @@ Référence matrice : B — **boucle de ré-ancrage vivante depuis le 2026-08-09
 - [x] Réutiliser l'IoU existant plutôt que le réécrire : fait le 2026-08-05, en même temps que la sortie de `go-clean-onnxruntime` (voir `github.com/deadelus/go-clean-onnxruntime` vs `onnxruntime_go`, décision prise en aparté) — `entities.BoundingBox.IoU/Intersection/Union` dans `internal/domain/entities/boundingbox.go`, utilisé pour le NMS de `yolo11s.go`. Publique, testable, plus de dépendance au vendor pour ça.
 - [x] Adapter KCF/CSRT derrière `infrastructure/tracking.ObjectTracker` — `internal/implementation/tracking/gocv-tracker` (`Tracker`, algo sélectionnable via `New(KCF|CSRT)`, un seul adapter pour les deux : le choix reste ouvert tant que le test de dérive n'est pas fait). Vendoring `gocv.io/x/gocv/contrib` ajouté (`go mod vendor`). Tests unitaires (`tracker_test.go`, table-driven) : construction, erreurs, `Cleanup()` idempotent avant `Init`. **MIL non adapté** (réserve si KCF/CSRT déçoivent, cf. `docs/adr/object-tracking.md` § 5) — pas branché dans `main.go`/`UseCase` : rien ne consomme encore `ObjectTracker` dans le pipeline (voir item suivant).
 - [x] Boucle de ré-ancrage périodique + association IoU contre les tracks existantes — `internal/application/uc/tracking.go` (`trackManager`). Re-détection YOLO toutes les `reanchorInterval=45` frames (~1.5s à 30fps, **pas mesuré**, cf. F) plutôt que "sur chute de confiance" (aurait demandé d'exposer la confiance du tracker lui-même, que gocv ne fournit pas — KCF/CSRT ne renvoient qu'un booléen succès/échec, pas de score). Association gloutonne par IoU (seuil `iouAssociationThreshold=0.4`, milieu de la fourchette 0.3-0.5), restreinte à la même classe, pas d'algorithme hongrois (suffisant pour une v1). `RecognitionUseCase` réécrit pour consommer `trackManager` au lieu de redétecter à chaque frame — corrige au passage un bug latent (les events clavier n'étaient jamais lus si `BoundingBoxes` était `nil`, `Escape` pouvait rester sans effet) et réactive le matching de filtre + `notifier.Notify`, qui était mort en commentaire depuis le début.
-- [ ] Test de dérive KCF vs CSRT sur vidéo réelle (occlusion partielle, sortie de cadre, changement d'échelle) pour trancher lequel devient le défaut. **Dépendance : boucle de ré-ancrage ci-dessus (faite, banc d'essai réel disponible). Effort : S, mais nécessite du matériel vidéo réel, pas juste du code.**
+- [x] Test de dérive KCF vs CSRT sur vidéo réelle — `cmd/tracking-drift` (outil headless jetable), résultats et décision dans `docs/adr/object-tracking.md` § 7-8. **KCF confirmé comme défaut** (avg IoU supérieur à CSRT sur les deux vidéos testées, `person.mp4` + `car.mp4`), déjà le choix câblé dans `main.go`. Échantillon petit (2 vidéos) — pas définitif, CSRT reste à un changement d'une ligne si besoin.
 
 ## D — Agrégat `Track`
 

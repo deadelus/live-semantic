@@ -92,11 +92,55 @@ dérive sur occlusion/sortie de cadre/changement d'échelle).
 ## 6. Impact backlog
 
 TODO.md § B mis à jour en conséquence : `MOSSE` remplacé par `MIL` dans
-l'item "Intégrer un tracker mono-objet gocv". Le protocole du test de dérive
-(vidéo réelle, seuils de perte de piste) reste à définir avant l'implémentation
-— pas fait ici, cet ADR ne fait que corriger l'ensemble de candidats.
+l'item "Intégrer un tracker mono-objet gocv".
 
-## 7. Références
+## 7. Résultats du test de dérive (2026-08-09)
+
+Outil : `cmd/tracking-drift` (headless, pas de fenêtre — voir godoc du
+fichier pour la méthodologie complète). Principe : suivre un objet unique
+avec le tracker seul entre deux re-détections YOLO, mesurer l'IoU entre la
+position du tracker et la re-détection fraîche à chaque point de contrôle
+(c'est la dérive), avant de recaler le tracker dessus.
+
+| Vidéo | Classe | Intervalle | Checkpoints | KCF avg IoU | KCF min | KCF échecs `Update()` | CSRT avg IoU | CSRT min | CSRT échecs `Update()` |
+|---|---|---|---|---|---|---|---|---|---|
+| `person.mp4` (32s, 956 frames) | person | 45 (défaut prod) | 21 | **0.723** | 0.325 | 92 | 0.636 | 0.000 | 0 |
+| `person.mp4` | person | 30 | 31 | 0.695 | 0.000 | 122 | 0.680 | 0.000 | 0 |
+| `car.mp4` (8s, 238 frames) | truck | 30 | 6 | **0.240** | 0.060 | 0 | 0.194 | 0.105 | 0 |
+| `car.mp4` | car | 30 | 6 | 0.000 | 0.000 | 57 | 0.140 | 0.140 | 0 |
+
+**Limite de méthodologie découverte en cours de route** : sur `car.mp4`,
+YOLO alterne le label du même véhicule entre `car` et `truck` d'une frame à
+l'autre (ambiguïté COCO classique sur les utilitaires/pickups). L'outil
+associe strictement par classe identique — un flip de label casse
+l'association et fait chuter l'IoU mesuré sans que ce soit une vraie
+dérive du tracker. La ligne `car.mp4`/classe `car` est donc **peu fiable**,
+gardée ici pour transparence plutôt que retirée. La ligne `truck` est plus
+propre (label stable sur la fenêtre observée) et reste le signal le plus
+exploitable pour cette vidéo.
+
+**Lecture** :
+- **KCF devance CSRT sur l'IoU moyen dans tous les cas exploitables**,
+  contrairement à l'intuition "CSRT plus robuste" de la littérature
+  générale (§ 4) — mesuré, pas supposé, sur ce jeu de données précis.
+- **CSRT ne signale (presque) jamais d'échec** (`Update()` ne renvoit
+  quasiment jamais `false`) mais peut dériver silencieusement jusqu'à IoU
+  0.000 (`person.mp4`) — KCF échoue plus souvent en apparence mais l'échec
+  est un signal exploitable (déclenche `Miss()` → re-ancrage plus tôt dans
+  `trackManager`), alors que le silence de CSRT ne l'est pas.
+- Échantillon **petit** (2 vidéos, un seul objet suivi par run, pas de
+  répétition) — suffisant pour trancher un défaut raisonnable, pas pour
+  clore le sujet définitivement.
+
+## 8. Décision finale
+
+**KCF reste le défaut** (déjà câblé dans `main.go` avant ce test) — les
+mesures ci-dessus le confirment plutôt que le contredisent. CSRT reste
+disponible en un changement d'une ligne (`gocvtracker.New(gocvtracker.CSRT)`)
+si un usage futur avec occlusions plus franches montre l'inverse. TODO.md
+§ B, item "test de dérive", coché en conséquence.
+
+## 9. Références
 
 - OpenCV Tracking API (module `tracking`, contrib) : https://docs.opencv.org/4.x/d9/df8/group__tracking.html
 - gocv contrib tracking bindings : `gocv.io/x/gocv/contrib` (`tracking.go`, `tracking.h`, `tracking.cpp`)

@@ -5,3 +5,7 @@
 # Modèles ONNX : trop volumineux pour git, à placer manuellement dans assets/models/
 # (voir readme.md § Project Structure). Le dossier est préservé via .gitkeep.
 *.onnx
+
+# Vidéos de test (cmd/tracking-drift, docs/adr/object-tracking.md § 7) :
+# mêmes raisons, à fournir localement. Dossier préservé via .gitkeep.
+assets/videos/*.mp4
