@@ -8,9 +8,11 @@ import (
 	lognotifier "live-semantic/internal/implementation/notifier/log-notifier"
 	"live-semantic/internal/implementation/streamer/input"
 	"live-semantic/internal/implementation/streamer/output"
+	gocvtracker "live-semantic/internal/implementation/tracking/gocv-tracker"
 	"live-semantic/internal/infrastructure/inference"
 	"live-semantic/internal/infrastructure/notifier"
 	"live-semantic/internal/infrastructure/streamer"
+	"live-semantic/internal/infrastructure/tracking"
 	"live-semantic/internal/transport/adapters/api"
 	"live-semantic/internal/transport/adapters/cli"
 	"live-semantic/internal/transport/adapters/cmd"
@@ -90,7 +92,7 @@ func main() {
 		},
 	)
 
-	streamingInput, windowOutput, notifier, ai, err := initDependencies()
+	streamingInput, windowOutput, notifier, ai, trackerFactory, err := initDependencies()
 	if err != nil {
 		engine.Logger().Error("Failed to initialize dependencies", err)
 		return
@@ -115,7 +117,7 @@ func main() {
 		return nil
 	})
 
-	useCases, err := uc.NewUseCase(engine.Context(), engine.Logger(), streamingInput, windowOutput, notifier, ai)
+	useCases, err := uc.NewUseCase(engine.Context(), engine.Logger(), streamingInput, windowOutput, notifier, ai, trackerFactory)
 	if err != nil {
 		engine.Logger().Error("Failed to create use cases", err)
 		return
@@ -138,16 +140,23 @@ func main() {
 	}
 }
 
-func initDependencies() (streamer.InputStream, streamer.OutputStream, notifier.AlertSender, inference.ObjectDetector, error) {
+func initDependencies() (streamer.InputStream, streamer.OutputStream, notifier.AlertSender, inference.ObjectDetector, tracking.TrackerFactory, error) {
 	cameraInput := input.NewCameraInput()
 	windowOutput := output.NewWindowOutput()
 
 	logNotifier := lognotifier.NewLogNotifier()
 	ai, err := yolo11s.New()
 	if err != nil {
-		return nil, nil, nil, nil, err
+		return nil, nil, nil, nil, nil, err
 	}
-	return cameraInput, windowOutput, logNotifier, ai, nil
+
+	// KCF for now — the drift test to pick a default between KCF/CSRT
+	// hasn't run yet (docs/adr/object-tracking.md § 5, TODO.md § B).
+	trackerFactory := func() (tracking.ObjectTracker, error) {
+		return gocvtracker.New(gocvtracker.KCF)
+	}
+
+	return cameraInput, windowOutput, logNotifier, ai, trackerFactory, nil
 }
 
 func determinePort(flagPort, defaultPort int) int {

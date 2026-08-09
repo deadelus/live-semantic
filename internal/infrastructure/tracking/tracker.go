@@ -23,3 +23,10 @@ type ObjectTracker interface {
 	// Init was never called.
 	Cleanup()
 }
+
+// TrackerFactory creates a new ObjectTracker instance. Needed because
+// trackers are single-object/single-use (see gocv-tracker's Init doc: once
+// a track is lost, the underlying native tracker must be discarded and
+// recreated, not reused) — the re-anchoring loop (TODO.md § B) needs a
+// fresh instance per confirmed track, not a shared singleton.
+type TrackerFactory func() (ObjectTracker, error)

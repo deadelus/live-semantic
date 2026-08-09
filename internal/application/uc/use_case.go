@@ -8,6 +8,7 @@ import (
 	"live-semantic/internal/infrastructure/inference"
 	"live-semantic/internal/infrastructure/notifier"
 	"live-semantic/internal/infrastructure/streamer"
+	"live-semantic/internal/infrastructure/tracking"
 
 	"github.com/deadelus/go-clean-app/v2/logger"
 )
@@ -24,10 +25,11 @@ type UseCase struct {
 	streamingOutput streamer.OutputStream
 	notifier        notifier.AlertSender
 	ai              inference.ObjectDetector
+	trackerFactory  tracking.TrackerFactory
 }
 
 // NewUseCase initializes your use cases with all the necessary dependencies
-func NewUseCase(ctx context.Context, logger logger.Logger, streamingInput streamer.InputStream, streamingOutput streamer.OutputStream, notifier notifier.AlertSender, ai inference.ObjectDetector) (UseCases, error) {
+func NewUseCase(ctx context.Context, logger logger.Logger, streamingInput streamer.InputStream, streamingOutput streamer.OutputStream, notifier notifier.AlertSender, ai inference.ObjectDetector, trackerFactory tracking.TrackerFactory) (UseCases, error) {
 
 	if ctx == nil {
 		return nil, domain.ErrNilContext
@@ -52,11 +54,16 @@ func NewUseCase(ctx context.Context, logger logger.Logger, streamingInput stream
 		return nil, domain.ErrNilAI
 	}
 
+	if trackerFactory == nil {
+		return nil, domain.ErrNilTrackerFactory
+	}
+
 	return &UseCase{
 		logger:          logger,
 		streamingInput:  streamingInput,
 		streamingOutput: streamingOutput,
 		notifier:        notifier,
 		ai:              ai,
+		trackerFactory:  trackerFactory,
 	}, nil
 }

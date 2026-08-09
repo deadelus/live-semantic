@@ -16,6 +16,7 @@ var (
 	ErrNilAI             = errors.New("AI not initialized")
 	ErrNilNotifier       = errors.New("notifier not initialized")
 	ErrNilUtils          = errors.New("utils not initialized")
+	ErrNilTrackerFactory = errors.New("tracker factory not initialized")
 
 	// Error for camera-related issues
 	ErrNoCameraFound        = errors.New("no camera found")
