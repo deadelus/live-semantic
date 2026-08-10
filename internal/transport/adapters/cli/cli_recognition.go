@@ -20,7 +20,7 @@ func (s *SurveyController) createRecognitionFlow() error {
 		},
 		{
 			Name:     "similarity-threshold",
-			Prompt:   &survey.Input{Message: "🔍 Similarity threshold between 0.0 and 1.0 (default: 0.8)", Default: "0.8"},
+			Prompt:   &survey.Input{Message: "🔍 Similarity threshold between 0.0 and 1.0 (default: 0.25 — CLIP cosine similarity, not YOLO confidence: real scores sit around 0.20-0.30, see docs/adr/clip-backend.md § 7)", Default: "0.25"},
 			Validate: survey.Required,
 		},
 	}

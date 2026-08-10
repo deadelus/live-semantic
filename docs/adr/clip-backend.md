@@ -59,7 +59,23 @@ Poids quantized téléchargés (`assets/models/clip/{vision,text}_model.onnx`, 8
 - **Crash SIGABRT à la sortie reproduit** (même bug que celui corrigé pour `yolo11s.Detector`, TODO.md bug critique) — `clip.Encoder.Cleanup()` n'appelait pas `runtime.DestroyEnvironment()`. Corrigé de la même façon. 3/3 sorties propres après fix.
 - Précision réelle de la version quantized vs fp32 : pas comparée, benchmark à faire (TODO.md § F).
 
-## 7. Références
+## 7. Calibration du seuil de similarité (2026-08-10)
+
+Test end-to-end réel (webcam + crop YOLO + `EncodeImage`, TODO.md § A) suivi d'un isolement du problème via un outil jetable (`cmd/clip-debug`, supprimé après usage — les résultats sont consignés ici).
+
+**Constat** : à `similarity-threshold: 0.8` (défaut hérité de l'ancien `box.Confidence` YOLO), le filtre rejette silencieusement 100% des détections — les scores CLIP réels ne dépassent jamais ~0.28 dans ces tests. Défaut changé à `0.25` (`internal/transport/adapters/cli/cli_recognition.go`, `internal/transport/adapters/cmd/cmd_realtime_analysis.go`).
+
+**Mesures** (webcam, crops réels 8 échantillons, filtre "person") :
+- Plage globale des scores : 0.216 à 0.242 (étalement de seulement 0.026) — très resserré.
+- Confondants observés : un crop "couch" (fond de canapé, YOLO mal étiqueté) a obtenu un score plus élevé pour "person" (0.2476) et pour "person" que pour "couch" (0.2393) lui-même. Un crop "person" au cadrage large (fond canapé majoritaire dans la bbox) a scoré plus haut pour "couch" (0.2456-0.2594) que pour "person" (0.2252-0.2290).
+
+**Contre-test avec une image de référence propre** (photo COCO haute résolution, deux chats sur un canapé, aucun flou/compression webcam) : classement correct — "cat" gagne (0.2563) devant "couch" (0.2437), avec une marge réelle mais modeste (~0.012). **Confirme que le pipeline (crop, prétraitement, encodage, normalisation) n'est pas buggé** — le problème est réel mais spécifique aux crops webcam : bbox YOLO peu précises (beaucoup de fond dans la boîte, cf. `crop-2-person.png` dans les logs de session) + frames basse résolution/floues compriment encore plus les marges déjà faibles du zero-shot CLIP.
+
+**Implication architecturale** : un seuil absolu fixe est intrinsèquement fragile pour ce modèle — même sur une image propre, l'écart gagnant/second est de l'ordre de 0.01-0.03, pas une marge confortable. `0.25` est un point de départ défendable (empiriquement, aucun vrai score observé ne dépasse ~0.28, aucun score "bruit" ne descend sous ~0.19), pas une valeur validée rigoureusement pour tous les cas d'usage.
+
+**Piste non explorée, pour plus tard (TODO.md § A/F)** : la pratique standard CLIP zero-shot n'est pas "score ≥ seuil fixe" mais un score **relatif** entre plusieurs prompts candidats (softmax/argmax sur un ensemble de classes). Avec un seul filtre texte libre, il n'y a pas d'ensemble de classes à comparer — mais on pourrait comparer contre un prompt "négatif" générique (ex. "background", "something else") plutôt qu'un seuil absolu, ce qui serait probablement plus robuste que la calibration actuelle. Pas fait dans cette passe.
+
+## 8. Références
 
 - Modèle original : [openai/clip-vit-base-patch32](https://huggingface.co/openai/clip-vit-base-patch32) (licence MIT, [openai/CLIP](https://github.com/openai/CLIP))
 - Export ONNX retenu : [Xenova/clip-vit-base-patch32](https://huggingface.co/Xenova/clip-vit-base-patch32)
