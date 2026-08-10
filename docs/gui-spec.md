@@ -274,6 +274,11 @@ pas seulement un sombre par défaut.
     (framerate normal, boxes, scores, contrôles). La vue onglets devient
     la vue active par défaut après un clic depuis la mosaïque ;
     retour manuel à la mosaïque possible ensuite.
+- **Volet de droite de l'accueil (repliable)** : réglages de la mosaïque
+  elle-même — afficher ou non les boxes sur les tuiles, augmenter leur FPS
+  d'affichage (ex. surveiller 4 caméras à la fois avec plus de détail),
+  avec avertissement de latence selon le matériel côté serveur (charge
+  CPU, § 1.2/1.6) affiché dans l'UI, pas caché.
 - **Implication transport (§ 2), revue le 2026-08-10** : `docs/gui-design-brief.md`
   précise que la qualité de la mosaïque doit être **réglable par
   l'utilisateur** (FPS plus élevé + boxes visibles sur les tuiles, ex.
@@ -292,9 +297,19 @@ pas seulement un sombre par défaut.
   (RTSP, WebRTC, YouTube) — une webcam locale ne devrait normalement pas
   se déconnecter, un flux réseau si.
 
-### 3.2 Vue live (par flux)
+### 3.2 Onglet Vue live (ouvert au clic sur une source depuis § 3.1)
+
+**Pas un écran indépendant** — c'est ce qui s'affiche dans l'onglet ouvert
+au clic sur une tuile/ligne de § 3.1. §§ 3.2-3.4 ci-dessous décrivent tous
+le contenu de ce même onglet (vidéo + volet de droite repliable :
+boxes/filtres/avancés), pas trois écrans séparés — structure clarifiée le
+2026-08-10 suite à `docs/gui-design-brief.md` (qui avait la même ambiguïté
+au départ, corrigée là-bas en premier).
 
 - Flux vidéo avec boxes dessinées dessus, rafraîchi en continu.
+- **Lecture/pause/reprise + retour en arrière (rewind)**, durée de buffer
+  configurable — voir § 1.5bis pour l'implication backend (tampon glissant
+  de frames par flux, coût mémoire non chiffré).
 - **Sélection runtime d'un objet** : clic sur une box existante, ou
   clic-glisser pour dessiner une box à main levée si rien n'est détecté
   dessus → champ de saisie pour le label → ajout à la galerie de
@@ -312,13 +327,12 @@ pas seulement un sombre par défaut.
 - Overlay perf optionnel : FPS, latence YOLO/CLIP, nb de tracks actifs
   (déjà loggé en JSON via `zap`, jamais affiché dans une UI).
 
-### 3.3 Panel de contrôle / filtres
+### 3.3 Volet de droite de l'onglet — filtres
 
-**Point à trancher, pas encore décidé** : les filtres sont-ils **par
-flux** (chaque caméra cherche autre chose — logique pour un usage
-surveillance multi-caméra) ou **globaux** (même filtre partout) ?
-Recommandation : par flux, avec un raccourci "appliquer à toutes les
-sources actives" pour l'usage simple à une seule caméra.
+**Décidé** (suite à `docs/gui-design-brief.md`, plus "à trancher") : les
+filtres sont **par flux**, avec un raccourci "appliquer à toutes les
+sources actives" pour l'usage simple à une seule caméra — pas un choix
+global unique imposé.
 
 - Champ filtre texte libre — multi-filtres simultanés par flux (le
   backend n'accepte qu'une seule string aujourd'hui, `dto.RecognitionRequest.Filter`
@@ -330,12 +344,12 @@ sources actives" pour l'usage simple à une seule caméra.
   mieux qu'une valeur par défaut statique.
 - Toggle par entrée de galerie (activer/désactiver sans supprimer).
 - Sélecteur tracker KCF/CSRT (existe en dur, jamais exposé).
-- Sélecteur de source vidéo par onglet.
 
-### 3.4 Réglages avancés (par flux, avec un défaut global overridable)
+### 3.4 Volet de droite de l'onglet — section "avancés" (repliée par défaut)
 
-Tous ces paramètres existent en dur dans le code aujourd'hui, aucun n'est
-exposé :
+Sous-section dépliable du même volet de droite que § 3.3, pas un écran ni
+un panel séparé. Tous ces paramètres existent en dur dans le code
+aujourd'hui, aucun n'est exposé :
 
 | Paramètre | Valeur actuelle | Fichier |
 |---|---|---|
@@ -354,6 +368,10 @@ exposé :
 - Filtre "quelle caméra" sur l'historique.
 - Export clip vidéo / capture sur match — n'existe pas, zéro ligne de
   code, à concevoir si demandé.
+- **Point ouvert côté design** (`docs/gui-design-brief.md`) : accessible
+  depuis l'accueil (§ 3.1) ou depuis chaque onglet (§ 3.2), pas encore
+  tranché — pas d'implication backend particulière dans un sens ou
+  l'autre (le log est agrégé multi-flux quoi qu'il arrive).
 
 ---
 
@@ -396,7 +414,7 @@ Par ordre d'impact sur le planning :
 3. Device USB configurable + RTSP + fichier vidéo local (extension
    `InputStream`), test avec une vraie caméra IP/flux public.
 4. Multi-flux (plusieurs `RecognitionUseCase` concurrents, adressables par
-   ID) — s'appuie sur le point 2, mesurer la charge CPU réelle (§ 4.2)
+   ID) — s'appuie sur le point 2, mesurer la charge CPU réelle (§ 4, point 2)
    avant d'annoncer un nombre de flux simultanés supporté.
 5. Ingestion WebRTC navigateur.
 6. Fallback JPEG-over-WS (peut être fait en parallèle du point 5, plus
