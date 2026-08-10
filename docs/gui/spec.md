@@ -8,7 +8,7 @@ comme telles).
 
 Pour le brief produit/design à transmettre (écrans, interactions, décisions
 UX — sans les détails techniques backend ci-dessous), voir
-`docs/gui-design-brief.md`.
+`docs/gui/design-brief.md`.
 
 ## 0. Décisions actées (cette passe, 2026-08-10)
 
@@ -201,7 +201,7 @@ galerie. À concevoir comme un nouveau cas d'usage ou une extension de
 
 ### 1.5bis Pause/reprise + buffer de rewind sur la Vue live (ajouté 2026-08-10, feature métier, effort M)
 
-Demandé dans `docs/gui-design-brief.md` : pause/reprise de la lecture côté
+Demandé dans `docs/gui/design-brief.md` : pause/reprise de la lecture côté
 client, et retour en arrière sur les N dernières secondes/minutes (durée
 configurable par l'utilisateur), sans couper le flux réel qui continue
 tourner en arrière-plan (la détection/tracking ne doit pas se mettre en
@@ -279,7 +279,7 @@ pas seulement un sombre par défaut.
   d'affichage (ex. surveiller 4 caméras à la fois avec plus de détail),
   avec avertissement de latence selon le matériel côté serveur (charge
   CPU, § 1.2/1.6) affiché dans l'UI, pas caché.
-- **Implication transport (§ 2), revue le 2026-08-10** : `docs/gui-design-brief.md`
+- **Implication transport (§ 2), revue le 2026-08-10** : `docs/gui/design-brief.md`
   précise que la qualité de la mosaïque doit être **réglable par
   l'utilisateur** (FPS plus élevé + boxes visibles sur les tuiles, ex.
   pour surveiller 4 caméras à la fois), pas juste un mode "preview" fixe à
@@ -303,7 +303,7 @@ pas seulement un sombre par défaut.
 au clic sur une tuile/ligne de § 3.1. §§ 3.2-3.4 ci-dessous décrivent tous
 le contenu de ce même onglet (vidéo + volet de droite repliable :
 boxes/filtres/avancés), pas trois écrans séparés — structure clarifiée le
-2026-08-10 suite à `docs/gui-design-brief.md` (qui avait la même ambiguïté
+2026-08-10 suite à `docs/gui/design-brief.md` (qui avait la même ambiguïté
 au départ, corrigée là-bas en premier).
 
 - Flux vidéo avec boxes dessinées dessus, rafraîchi en continu.
@@ -329,7 +329,7 @@ au départ, corrigée là-bas en premier).
 
 ### 3.3 Volet de droite de l'onglet — filtres
 
-**Décidé** (suite à `docs/gui-design-brief.md`, plus "à trancher") : les
+**Décidé** (suite à `docs/gui/design-brief.md`, plus "à trancher") : les
 filtres sont **par flux**, avec un raccourci "appliquer à toutes les
 sources actives" pour l'usage simple à une seule caméra — pas un choix
 global unique imposé.
@@ -368,7 +368,7 @@ aujourd'hui, aucun n'est exposé :
 - Filtre "quelle caméra" sur l'historique.
 - Export clip vidéo / capture sur match — n'existe pas, zéro ligne de
   code, à concevoir si demandé.
-- **Point ouvert côté design** (`docs/gui-design-brief.md`) : accessible
+- **Point ouvert côté design** (`docs/gui/design-brief.md`) : accessible
   depuis l'accueil (§ 3.1) ou depuis chaque onglet (§ 3.2), pas encore
   tranché — pas d'implication backend particulière dans un sens ou
   l'autre (le log est agrégé multi-flux quoi qu'il arrive).

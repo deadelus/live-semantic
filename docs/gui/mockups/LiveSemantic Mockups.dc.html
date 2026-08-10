@@ -1,0 +1,682 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet data-dc-atomics>
+<meta name="design_doc_mode" content="canvas">
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wght@400;500;600;700&amp;family=Space+Mono:wght@400;700&amp;display=swap">
+<style>
+body{margin:0;background:#0b0d10;font-family:'Archivo',system-ui,sans-serif}
+a{color:#4d9ef8;text-decoration:none}a:hover{color:#7bb8ff}
+@keyframes lsPulse{0%,100%{opacity:1}50%{opacity:.35}}
+</style>
+</helmet>
+<section id="t1" style="padding:40px 44px 48px">
+  <div style="display:flex;align-items:baseline;gap:10px;margin:0 0 14px">
+    <a href="#t1" style="font:700 10px 'Space Mono',monospace;padding:3px 7px;background:#e7eaee;color:#0b0d10;border-radius:4px">1</a>
+    <span style="font:600 14px 'Archivo',sans-serif;color:#e7eaee">LiveSemantic — maquettes GUI (web + desktop)</span>
+  </div>
+  <div style="max-width:860px;background:#14171b;border:1px solid rgba(255,255,255,.08);border-radius:8px;padding:16px 18px;margin:0 0 26px;color:#9aa3ad;font-size:12.5px;line-height:1.55">
+    <div style="color:#e7eaee;font-weight:600;margin-bottom:6px">Hypothèses &amp; parti pris</div>
+    Densité outil pro (type monitoring), Archivo + Space Mono pour les données. Accent bleu = filtres/actions ; la couleur des box vient du filtre, pas de la catégorie. Le panel Sources est le premier onglet permanent ; chaque source ouverte = un onglet. Le Journal est un tiroir accessible depuis la barre du bas, partout. Vidéo = placeholders hachurés (à remplacer par de vraies captures). Formulaires non demandés (ajout de source) esquissés en flous.
+  </div>
+  <div style="display:flex;flex-wrap:wrap;gap:30px;align-items:flex-start">
+
+    <!-- ============ 1a Sources mosaïque (sombre) ============ -->
+    <div id="1a" style="flex:none;display:flex;flex-direction:column;gap:9px;scroll-margin-top:16px">
+      <div style="display:flex;align-items:baseline;gap:8px;font:400 11px 'Archivo',sans-serif;color:rgba(255,255,255,.55)"><a href="#1a" style="font:700 10.5px 'Space Mono',monospace;padding:3px 7px;background:rgba(255,255,255,.12);color:#e7eaee;border-radius:5px">1a</a>Accueil Sources — vue mosaïque, volet réglages ouvert (sombre)</div>
+      <div data-screen-label="1a Sources mosaïque sombre" style="width:1180px;height:740px;background:#14171b;color:#e7eaee;font-size:13px;border:1px solid rgba(255,255,255,.1);border-radius:10px;overflow:hidden;display:flex;flex-direction:column;box-shadow:0 2px 14px rgba(0,0,0,.5)">
+        <!-- barre onglets -->
+        <div style="display:flex;align-items:center;gap:14px;height:46px;padding:0 14px;background:#0e1114;border-bottom:1px solid rgba(255,255,255,.07);flex:none">
+          <div style="display:flex;align-items:center;gap:7px;font-weight:700;font-size:14px"><span style="width:9px;height:9px;border-radius:50%;background:#4d9ef8;display:inline-block"></span>LiveSemantic</div>
+          <div style="display:flex;gap:4px;align-self:flex-end">
+            <div style="padding:8px 16px 9px;background:#14171b;border:1px solid rgba(255,255,255,.09);border-bottom:none;border-radius:7px 7px 0 0;font-weight:600;font-size:12.5px">Sources</div>
+            <div style="padding:8px 16px 9px;color:#9aa3ad;font-size:12.5px;display:flex;align-items:center;gap:7px"><span style="width:6px;height:6px;border-radius:50%;background:#2ec27e;display:inline-block;animation:lsPulse 2s infinite"></span>Entrée principale<span style="color:#5b636d">×</span></div>
+            <div style="padding:8px 16px 9px;color:#9aa3ad;font-size:12.5px;display:flex;align-items:center;gap:7px"><span style="width:6px;height:6px;border-radius:50%;background:#2ec27e;display:inline-block"></span>Webcam locale<span style="color:#5b636d">×</span></div>
+          </div>
+          <div style="flex:1"></div>
+          <div style="display:flex;border:1px solid rgba(255,255,255,.14);border-radius:6px;overflow:hidden;font-size:11.5px">
+            <div style="padding:5px 11px;background:rgba(255,255,255,.12);font-weight:600">Sombre</div>
+            <div style="padding:5px 11px;color:#9aa3ad">Clair</div>
+          </div>
+          <div style="padding:6px 12px;border:1px solid rgba(255,255,255,.14);border-radius:6px;font-size:12px;color:#c8cdd4;display:flex;gap:7px;align-items:center">Journal<span style="font:700 10px 'Space Mono',monospace;background:#e4574f;color:#fff;border-radius:8px;padding:1px 6px">3</span></div>
+          <div style="padding:6px 14px;background:#4d9ef8;color:#0b0d10;border-radius:6px;font-weight:600;font-size:12.5px">+ Ajouter une source</div>
+        </div>
+        <!-- toolbar -->
+        <div style="display:flex;align-items:center;gap:12px;height:44px;padding:0 16px;border-bottom:1px solid rgba(255,255,255,.06);flex:none">
+          <div style="display:flex;border:1px solid rgba(255,255,255,.14);border-radius:6px;overflow:hidden;font-size:11.5px">
+            <div style="padding:5px 12px;color:#9aa3ad">Liste</div>
+            <div style="padding:5px 12px;background:rgba(77,158,248,.18);color:#8fc1fa;font-weight:600">Mosaïque</div>
+          </div>
+          <span style="font:400 11px 'Space Mono',monospace;color:#9aa3ad">6 sources · 4 connectées</span>
+          <div style="flex:1"></div>
+          <div style="width:220px;padding:6px 11px;border:1px solid rgba(255,255,255,.1);border-radius:6px;color:#5b636d;font-size:12px">Rechercher une source…</div>
+          <div style="padding:6px 11px;border:1px solid rgba(255,255,255,.14);border-radius:6px;font-size:12px;color:#c8cdd4">Réglages mosaïque ▸</div>
+        </div>
+        <div style="flex:1;display:flex;min-height:0">
+          <!-- grille -->
+          <div style="flex:1;padding:16px;display:flex;flex-wrap:wrap;gap:14px;align-content:flex-start;overflow:hidden">
+            <sc-for list="{{ tiles }}" as="t" hint-placeholder-count="6">
+              <div style="width:260px;background:#1b1f24;border:1px solid rgba(255,255,255,.08);border-radius:8px;overflow:hidden">
+                <div style="position:relative;height:150px;background:repeating-linear-gradient(135deg,#191d22 0 10px,#15181d 10px 20px);display:flex;align-items:center;justify-content:center">
+                  <span style="font:400 10.5px 'Space Mono',monospace;color:#525b66">[ aperçu — 1 img/s ]</span>
+                  <sc-if value="{{ t.overlay }}" hint-placeholder-val="{{ false }}">
+                    <div style="position:absolute;inset:0;background:rgba(11,13,16,.72);display:flex;align-items:center;justify-content:center"><span style="font:400 11px 'Space Mono',monospace;color:{{ t.dot }}">{{ t.overlay }}</span></div>
+                  </sc-if>
+                  <span style="position:absolute;top:7px;right:8px;font:400 9.5px 'Space Mono',monospace;color:#7d8791;background:rgba(11,13,16,.65);padding:2px 6px;border-radius:4px">{{ t.type }}</span>
+                </div>
+                <div style="display:flex;align-items:center;gap:8px;padding:9px 11px">
+                  <span style="width:7px;height:7px;border-radius:50%;background:{{ t.dot }};flex:none"></span>
+                  <span style="font-weight:600;font-size:12.5px;flex:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{ t.name }}</span>
+                  <span style="font-size:11px;color:{{ t.dot }}">{{ t.status }}</span>
+                </div>
+              </div>
+            </sc-for>
+          </div>
+          <!-- volet réglages mosaïque -->
+          <div style="width:280px;flex:none;border-left:1px solid rgba(255,255,255,.08);background:#161a1f;padding:16px;display:flex;flex-direction:column;gap:16px">
+            <div style="display:flex;align-items:center;justify-content:space-between"><span style="font-weight:600;font-size:12.5px">Réglages mosaïque</span><span style="color:#5b636d;font-size:12px">Replier ▸</span></div>
+            <div style="display:flex;align-items:center;justify-content:space-between;font-size:12.5px"><span>Boxes sur les tuiles</span>
+              <span style="width:30px;height:17px;border-radius:9px;background:rgba(255,255,255,.14);position:relative;display:inline-block"><span style="position:absolute;top:2px;left:2px;width:13px;height:13px;border-radius:50%;background:#9aa3ad"></span></span>
+            </div>
+            <div style="display:flex;flex-direction:column;gap:7px">
+              <div style="display:flex;justify-content:space-between;font-size:12.5px"><span>FPS des tuiles</span><span style="font:700 12px 'Space Mono',monospace;color:#8fc1fa">5</span></div>
+              <div style="position:relative;height:6px;border-radius:3px;background:rgba(255,255,255,.1)">
+                <div style="position:absolute;left:0;top:0;bottom:0;width:38%;border-radius:3px;background:#4d9ef8"></div>
+                <div style="position:absolute;left:38%;top:50%;transform:translate(-50%,-50%);width:15px;height:15px;border-radius:50%;background:#e7eaee;box-shadow:0 1px 4px rgba(0,0,0,.5)"></div>
+              </div>
+              <div style="display:flex;justify-content:space-between;font:400 9.5px 'Space Mono',monospace;color:#5b636d"><span>1 (aperçu)</span><span>15</span><span>30</span></div>
+            </div>
+            <div style="border:1px solid rgba(232,161,60,.35);background:rgba(232,161,60,.08);border-radius:7px;padding:11px 12px;display:flex;flex-direction:column;gap:8px">
+              <div style="display:flex;justify-content:space-between;font-size:11.5px;color:#e8a13c"><span style="font-weight:600">Charge d'affichage</span><span style="font:700 11px 'Space Mono',monospace">élevée</span></div>
+              <div style="height:5px;border-radius:3px;background:rgba(255,255,255,.08)"><div style="height:5px;width:72%;border-radius:3px;background:linear-gradient(90deg,#2ec27e,#e8a13c)"></div></div>
+              <div style="font-size:11px;line-height:1.45;color:#b7935c">Monter le FPS ou activer les boxes sur plusieurs tuiles peut introduire de la latence selon le matériel.</div>
+            </div>
+            <div style="border-top:1px solid rgba(255,255,255,.07);padding-top:12px;font-size:11.5px;color:#5b636d;line-height:1.5">Ces réglages n'affectent que la mosaïque. La Vue live d'un onglet tourne toujours au framerate normal.</div>
+          </div>
+        </div>
+        <!-- barre basse -->
+        <div style="height:30px;flex:none;border-top:1px solid rgba(255,255,255,.07);background:#0e1114;display:flex;align-items:center;gap:16px;padding:0 14px;font:400 10.5px 'Space Mono',monospace;color:#5b636d">
+          <span>backend : connecté</span><span>GPU 41 %</span><span>4 flux actifs</span><div style="flex:1"></div><span style="color:#9aa3ad">Journal des événements ▴</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- ============ 1b Sources liste (sombre) ============ -->
+    <div id="1b" style="flex:none;display:flex;flex-direction:column;gap:9px;scroll-margin-top:16px">
+      <div style="display:flex;align-items:baseline;gap:8px;font:400 11px 'Archivo',sans-serif;color:rgba(255,255,255,.55)"><a href="#1b" style="font:700 10.5px 'Space Mono',monospace;padding:3px 7px;background:rgba(255,255,255,.12);color:#e7eaee;border-radius:5px">1b</a>Accueil Sources — vue liste, tiroir Journal ouvert (sombre)</div>
+      <div data-screen-label="1b Sources liste sombre" style="width:1180px;height:740px;background:#14171b;color:#e7eaee;font-size:13px;border:1px solid rgba(255,255,255,.1);border-radius:10px;overflow:hidden;display:flex;flex-direction:column;box-shadow:0 2px 14px rgba(0,0,0,.5)">
+        <div style="display:flex;align-items:center;gap:14px;height:46px;padding:0 14px;background:#0e1114;border-bottom:1px solid rgba(255,255,255,.07);flex:none">
+          <div style="display:flex;align-items:center;gap:7px;font-weight:700;font-size:14px"><span style="width:9px;height:9px;border-radius:50%;background:#4d9ef8;display:inline-block"></span>LiveSemantic</div>
+          <div style="display:flex;gap:4px;align-self:flex-end">
+            <div style="padding:8px 16px 9px;background:#14171b;border:1px solid rgba(255,255,255,.09);border-bottom:none;border-radius:7px 7px 0 0;font-weight:600;font-size:12.5px">Sources</div>
+          </div>
+          <div style="flex:1"></div>
+          <div style="display:flex;border:1px solid rgba(255,255,255,.14);border-radius:6px;overflow:hidden;font-size:11.5px"><div style="padding:5px 11px;background:rgba(255,255,255,.12);font-weight:600">Sombre</div><div style="padding:5px 11px;color:#9aa3ad">Clair</div></div>
+          <div style="padding:6px 12px;border:1px solid rgba(77,158,248,.5);background:rgba(77,158,248,.12);border-radius:6px;font-size:12px;color:#8fc1fa;display:flex;gap:7px;align-items:center">Journal<span style="font:700 10px 'Space Mono',monospace;background:#e4574f;color:#fff;border-radius:8px;padding:1px 6px">3</span></div>
+          <div style="padding:6px 14px;background:#4d9ef8;color:#0b0d10;border-radius:6px;font-weight:600;font-size:12.5px">+ Ajouter une source</div>
+        </div>
+        <div style="display:flex;align-items:center;gap:12px;height:44px;padding:0 16px;border-bottom:1px solid rgba(255,255,255,.06);flex:none">
+          <div style="display:flex;border:1px solid rgba(255,255,255,.14);border-radius:6px;overflow:hidden;font-size:11.5px"><div style="padding:5px 12px;background:rgba(77,158,248,.18);color:#8fc1fa;font-weight:600">Liste</div><div style="padding:5px 12px;color:#9aa3ad">Mosaïque</div></div>
+          <span style="font:400 11px 'Space Mono',monospace;color:#9aa3ad">6 sources · 4 connectées</span>
+          <div style="flex:1"></div>
+          <div style="width:220px;padding:6px 11px;border:1px solid rgba(255,255,255,.1);border-radius:6px;color:#5b636d;font-size:12px">Rechercher une source…</div>
+        </div>
+        <!-- entêtes -->
+        <div style="display:grid;grid-template-columns:16px 1.6fr .7fr .8fr .9fr 1.1fr 150px;gap:12px;padding:8px 18px;font:400 10px 'Space Mono',monospace;color:#5b636d;border-bottom:1px solid rgba(255,255,255,.06);text-transform:uppercase;flex:none">
+          <span></span><span>Source</span><span>Type</span><span>Définition</span><span>Filtres actifs</span><span>Dernier événement</span><span style="text-align:right">Actions</span>
+        </div>
+        <div style="flex:1;overflow:hidden">
+          <sc-for list="{{ tiles }}" as="t" hint-placeholder-count="6">
+            <div style="display:grid;grid-template-columns:16px 1.6fr .7fr .8fr .9fr 1.1fr 150px;gap:12px;align-items:center;padding:11px 18px;border-bottom:1px solid rgba(255,255,255,.05);font-size:12.5px">
+              <span style="width:8px;height:8px;border-radius:50%;background:{{ t.dot }}"></span>
+              <span style="font-weight:600">{{ t.name }}<span style="font-weight:400;color:{{ t.dot }};font-size:11px;margin-left:9px">{{ t.status }}</span></span>
+              <span style="font:400 10.5px 'Space Mono',monospace;color:#9aa3ad">{{ t.type }}</span>
+              <span style="font:400 10.5px 'Space Mono',monospace;color:#9aa3ad">{{ t.res }}</span>
+              <span style="color:#c8cdd4">{{ t.filters }}</span>
+              <span style="color:#7d8791;font-size:11.5px">{{ t.last }}</span>
+              <span style="display:flex;gap:6px;justify-content:flex-end">
+                <span style="padding:4px 10px;border:1px solid rgba(77,158,248,.5);color:#8fc1fa;border-radius:5px;font-size:11.5px">Ouvrir</span>
+                <span style="padding:4px 8px;border:1px solid rgba(255,255,255,.12);color:#9aa3ad;border-radius:5px;font-size:11.5px">Éditer</span>
+                <span style="padding:4px 8px;border:1px solid rgba(255,255,255,.12);color:#9aa3ad;border-radius:5px;font-size:11.5px">Suppr.</span>
+              </span>
+            </div>
+          </sc-for>
+        </div>
+        <!-- tiroir journal -->
+        <div style="flex:none;border-top:1px solid rgba(255,255,255,.1);background:#10141a">
+          <div style="display:flex;align-items:center;gap:12px;padding:9px 16px;border-bottom:1px solid rgba(255,255,255,.06)">
+            <span style="font-weight:600;font-size:12.5px">Journal des événements</span>
+            <div style="display:flex;gap:5px;font-size:11px">
+              <span style="padding:3px 9px;border-radius:10px;background:rgba(77,158,248,.18);color:#8fc1fa">Toutes les sources</span>
+              <span style="padding:3px 9px;border-radius:10px;border:1px solid rgba(255,255,255,.12);color:#9aa3ad">Entrée principale</span>
+              <span style="padding:3px 9px;border-radius:10px;border:1px solid rgba(255,255,255,.12);color:#9aa3ad">Parking nord</span>
+            </div>
+            <div style="flex:1"></div><span style="color:#5b636d;font-size:12px">Replier ▾</span>
+          </div>
+          <sc-for list="{{ events }}" as="e" hint-placeholder-count="3">
+            <div style="display:grid;grid-template-columns:80px 110px 1.2fr 1fr 70px;gap:12px;padding:7px 16px;font-size:12px;border-bottom:1px solid rgba(255,255,255,.04);align-items:center">
+              <span style="font:400 10.5px 'Space Mono',monospace;color:#7d8791">{{ e.t }}</span>
+              <span style="font-size:11px;font-weight:600;color:{{ e.c }}">{{ e.ev }}</span>
+              <span style="color:#c8cdd4">{{ e.label }}</span>
+              <span style="color:#7d8791">{{ e.src }}</span>
+              <span style="font:400 10.5px 'Space Mono',monospace;color:#9aa3ad;text-align:right">{{ e.score }}</span>
+            </div>
+          </sc-for>
+        </div>
+      </div>
+    </div>
+
+    <!-- ============ 1c Vue live (sombre) ============ -->
+    <div id="1c" style="flex:none;display:flex;flex-direction:column;gap:9px;scroll-margin-top:16px">
+      <div style="display:flex;align-items:baseline;gap:8px;font:400 11px 'Archivo',sans-serif;color:rgba(255,255,255,.55)"><a href="#1c" style="font:700 10.5px 'Space Mono',monospace;padding:3px 7px;background:rgba(255,255,255,.12);color:#e7eaee;border-radius:5px">1c</a>Onglet Vue live — lecture, slider de seuil avec retour direct, avancés repliés (sombre)</div>
+      <div data-screen-label="1c Vue live sombre" style="width:1180px;height:740px;background:#14171b;color:#e7eaee;font-size:13px;border:1px solid rgba(255,255,255,.1);border-radius:10px;overflow:hidden;display:flex;flex-direction:column;box-shadow:0 2px 14px rgba(0,0,0,.5)">
+        <div style="display:flex;align-items:center;gap:14px;height:46px;padding:0 14px;background:#0e1114;border-bottom:1px solid rgba(255,255,255,.07);flex:none">
+          <div style="display:flex;align-items:center;gap:7px;font-weight:700;font-size:14px"><span style="width:9px;height:9px;border-radius:50%;background:#4d9ef8;display:inline-block"></span>LiveSemantic</div>
+          <div style="display:flex;gap:4px;align-self:flex-end">
+            <div style="padding:8px 16px 9px;color:#9aa3ad;font-size:12.5px">Sources</div>
+            <div style="padding:8px 16px 9px;background:#14171b;border:1px solid rgba(255,255,255,.09);border-bottom:none;border-radius:7px 7px 0 0;font-weight:600;font-size:12.5px;display:flex;align-items:center;gap:7px"><span style="width:6px;height:6px;border-radius:50%;background:#2ec27e;display:inline-block;animation:lsPulse 2s infinite"></span>Entrée principale<span style="color:#5b636d">×</span></div>
+            <div style="padding:8px 16px 9px;color:#9aa3ad;font-size:12.5px;display:flex;align-items:center;gap:7px"><span style="width:6px;height:6px;border-radius:50%;background:#e8a13c;display:inline-block"></span>Parking nord<span style="color:#5b636d">×</span></div>
+          </div>
+          <div style="flex:1"></div>
+          <div style="display:flex;border:1px solid rgba(255,255,255,.14);border-radius:6px;overflow:hidden;font-size:11.5px"><div style="padding:5px 11px;background:rgba(255,255,255,.12);font-weight:600">Sombre</div><div style="padding:5px 11px;color:#9aa3ad">Clair</div></div>
+          <div style="padding:6px 12px;border:1px solid rgba(255,255,255,.14);border-radius:6px;font-size:12px;color:#c8cdd4">Journal</div>
+        </div>
+        <div style="flex:1;display:flex;min-height:0">
+          <!-- zone vidéo -->
+          <div style="flex:1;display:flex;flex-direction:column;min-width:0">
+            <div style="flex:1;position:relative;background:repeating-linear-gradient(135deg,#171b20 0 12px,#13161b 12px 24px);margin:12px;border-radius:8px;overflow:hidden">
+              <span style="position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);font:400 11px 'Space Mono',monospace;color:#454e58">[ flux vidéo — Entrée principale · 1920×1080 ]</span>
+              <!-- overlay perf -->
+              <div style="position:absolute;top:10px;right:10px;font:400 10px 'Space Mono',monospace;color:#7d8791;background:rgba(11,13,16,.7);padding:4px 9px;border-radius:5px">24 fps · 96 ms · 3 objets · ×</div>
+              <!-- boxes -->
+              <div style="position:absolute;left:14%;top:24%;width:13%;height:46%;border:2px solid #4d9ef8;border-radius:3px;box-shadow:0 0 0 1px rgba(0,0,0,.4)">
+                <span style="position:absolute;top:-22px;left:-2px;font:700 10.5px 'Space Mono',monospace;background:#4d9ef8;color:#0b0d10;padding:2px 7px;border-radius:4px;white-space:nowrap">personne 0.87</span>
+              </div>
+              <div style="position:absolute;left:44%;top:38%;width:11%;height:38%;border:2px solid #4d9ef8;border-radius:3px;box-shadow:0 0 0 1px rgba(0,0,0,.4)">
+                <span style="position:absolute;top:-22px;left:-2px;font:700 10.5px 'Space Mono',monospace;background:#4d9ef8;color:#0b0d10;padding:2px 7px;border-radius:4px;white-space:nowrap">personne 0.79</span>
+              </div>
+              <div style="position:absolute;left:68%;top:62%;width:12%;height:22%;border:2px solid #e8a13c;border-radius:3px;box-shadow:0 0 0 1px rgba(0,0,0,.4)">
+                <span style="position:absolute;top:-22px;left:-2px;font:700 10.5px 'Space Mono',monospace;background:#e8a13c;color:#0b0d10;padding:2px 7px;border-radius:4px;white-space:nowrap">sac abandonné 0.62</span>
+              </div>
+            </div>
+            <!-- transport -->
+            <div style="flex:none;margin:0 12px 12px;background:#1b1f24;border:1px solid rgba(255,255,255,.08);border-radius:8px;padding:10px 14px;display:flex;flex-direction:column;gap:8px">
+              <div style="position:relative;height:8px;border-radius:4px;background:rgba(255,255,255,.07)">
+                <div style="position:absolute;right:0;top:0;bottom:0;width:82%;border-radius:4px;background:rgba(77,158,248,.25)"></div>
+                <div style="position:absolute;right:0;top:50%;transform:translateY(-50%);width:3px;height:14px;border-radius:2px;background:#4d9ef8"></div>
+                <span style="position:absolute;left:0;top:14px;font:400 9.5px 'Space Mono',monospace;color:#5b636d">−30 s</span>
+                <span style="position:absolute;right:0;top:14px;font:400 9.5px 'Space Mono',monospace;color:#8fc1fa">direct</span>
+              </div>
+              <div style="display:flex;align-items:center;gap:8px;padding-top:8px">
+                <div style="padding:6px 12px;border:1px solid rgba(255,255,255,.14);border-radius:6px;font:400 11.5px 'Space Mono',monospace;color:#c8cdd4">−10 s</div>
+                <div style="padding:6px 16px;background:#e7eaee;color:#0b0d10;border-radius:6px;font-weight:700;font-size:12px">Pause</div>
+                <div style="padding:6px 12px;border:1px solid rgba(255,255,255,.14);border-radius:6px;font:400 11.5px 'Space Mono',monospace;color:#c8cdd4">+10 s</div>
+                <div style="display:flex;align-items:center;gap:6px;padding:6px 12px;border-radius:6px;background:rgba(46,194,126,.14);color:#5fd79f;font-weight:700;font-size:11px"><span style="width:7px;height:7px;border-radius:50%;background:#2ec27e;display:inline-block;animation:lsPulse 1.6s infinite"></span>EN DIRECT</div>
+                <div style="flex:1"></div>
+                <span style="font-size:11.5px;color:#7d8791">Tampon de retour :</span>
+                <div style="padding:5px 10px;border:1px solid rgba(255,255,255,.14);border-radius:6px;font:400 11px 'Space Mono',monospace;color:#c8cdd4">30 s ▾</div>
+              </div>
+            </div>
+          </div>
+          <!-- volet droit -->
+          <div style="width:300px;flex:none;border-left:1px solid rgba(255,255,255,.08);background:#161a1f;display:flex;flex-direction:column;overflow:hidden">
+            <div style="display:flex;align-items:center;justify-content:space-between;padding:13px 16px 9px"><span style="font-weight:600;font-size:12.5px">Filtres sémantiques</span><span style="color:#5b636d;font-size:12px">Replier ▸</span></div>
+            <div style="padding:0 16px;display:flex;flex-direction:column;gap:7px">
+              <sc-for list="{{ filters }}" as="f" hint-placeholder-count="2">
+                <div style="display:flex;align-items:center;gap:9px;padding:8px 10px;background:#1b1f24;border:1px solid rgba(255,255,255,.08);border-radius:7px">
+                  <span style="width:10px;height:10px;border-radius:3px;background:{{ f.color }};flex:none"></span>
+                  <span style="flex:1;font-size:12.5px">{{ f.label }}</span>
+                  <span style="font:400 10.5px 'Space Mono',monospace;color:#9aa3ad">≥ {{ f.thr }}</span>
+                  <span style="width:26px;height:15px;border-radius:8px;background:{{ f.togBg }};position:relative;display:inline-block"><span style="position:absolute;top:2px;left:{{ f.knob }};width:11px;height:11px;border-radius:50%;background:#e7eaee"></span></span>
+                </div>
+              </sc-for>
+              <div style="padding:7px 11px;border:1px dashed rgba(255,255,255,.18);border-radius:7px;color:#5b636d;font-size:12px">+ Filtre texte libre… <span style="font:400 10px 'Space Mono',monospace">(ex. « un sac abandonné »)</span></div>
+            </div>
+            <!-- seuil -->
+            <div style="padding:11px 16px;display:flex;flex-direction:column;gap:7px;border-bottom:1px solid rgba(255,255,255,.07)">
+              <div style="display:flex;justify-content:space-between;align-items:baseline"><span style="font-size:12.5px;color:#c8cdd4">Seuil — <span style="color:#8fc1fa">personne</span></span><span style="font:700 13px 'Space Mono',monospace;color:#8fc1fa">0.58</span></div>
+              <div style="position:relative;height:6px;border-radius:3px;background:linear-gradient(90deg,rgba(255,255,255,.08),rgba(77,158,248,.55))">
+                <div style="position:absolute;left:58%;top:50%;transform:translate(-50%,-50%);width:16px;height:16px;border-radius:50%;background:#e7eaee;box-shadow:0 1px 5px rgba(0,0,0,.6)"></div>
+              </div>
+              <!-- retour direct -->
+              <div style="position:relative;height:44px;background:#12151a;border:1px solid rgba(255,255,255,.06);border-radius:6px;padding:4px 8px;display:flex;align-items:flex-end;gap:2px;overflow:hidden">
+                <sc-for list="{{ spark }}" as="b" hint-placeholder-count="20">
+                  <div style="width:8px;height:{{ b.hs }}px;border-radius:1px;background:{{ b.c }};flex:none"></div>
+                </sc-for>
+                <div style="position:absolute;left:8px;right:8px;bottom:{{ thrLineS }}px;border-top:1px dashed #8fc1fa"></div>
+                <span style="position:absolute;top:4px;right:8px;font:700 10px 'Space Mono',monospace;color:#5fd79f">score en direct : 0.74</span>
+              </div>
+              <div style="font-size:10.5px;color:#5b636d;line-height:1.4">Le score mesuré bouge pendant le déplacement du curseur, avant validation.</div>
+              <div style="align-self:flex-start;padding:5px 11px;border:1px solid rgba(77,158,248,.5);border-radius:6px;color:#8fc1fa;font-size:11.5px">Appliquer à toutes les sources actives</div>
+            </div>
+            <!-- galerie -->
+            <div style="padding:10px 16px;display:flex;flex-direction:column;gap:6px;border-bottom:1px solid rgba(255,255,255,.07)">
+              <div style="display:flex;justify-content:space-between;align-items:baseline"><span style="font-weight:600;font-size:12.5px">Galerie de références</span><span style="font:400 10px 'Space Mono',monospace;color:#5b636d">3</span></div>
+              <sc-for list="{{ gallery }}" as="g" hint-placeholder-count="3">
+                <div style="display:flex;align-items:center;gap:9px;padding:4px 8px;background:#1b1f24;border:1px solid rgba(255,255,255,.07);border-radius:7px">
+                  <span style="width:26px;height:26px;border-radius:5px;background:repeating-linear-gradient(135deg,#22272d 0 6px,#1c2127 6px 12px);border:2px solid {{ g.color }};flex:none"></span>
+                  <span style="flex:1;min-width:0"><span style="display:block;font-size:12px;font-weight:600">{{ g.label }}</span><span style="display:block;font:400 9.5px 'Space Mono',monospace;color:#5b636d">{{ g.meta }}</span></span>
+                  <span style="font-size:10.5px;color:#5b636d">Renommer</span>
+                  <span style="width:26px;height:15px;border-radius:8px;background:{{ g.togBg }};position:relative;display:inline-block;flex:none"><span style="position:absolute;top:2px;left:{{ g.knob }};width:11px;height:11px;border-radius:50%;background:#e7eaee"></span></span>
+                </div>
+              </sc-for>
+            </div>
+            <!-- objets détectés -->
+            <div style="padding:12px 16px;display:flex;flex-direction:column;gap:6px;flex:1;min-height:0;overflow:hidden">
+              <span style="font-weight:600;font-size:12.5px">Objets détectés — 3</span>
+              <sc-for list="{{ detections }}" as="d" hint-placeholder-count="3">
+                <div style="display:flex;align-items:center;gap:8px;font-size:12px">
+                  <span style="width:8px;height:8px;border-radius:2px;background:{{ d.color }}"></span>
+                  <span style="flex:1;color:#c8cdd4">{{ d.label }} <span style="color:#5b636d;font-size:10.5px">#{{ d.id }}</span></span>
+                  <span style="font:400 11px 'Space Mono',monospace;color:{{ d.color }}">{{ d.score }}</span>
+                </div>
+              </sc-for>
+            </div>
+            <div style="padding:11px 16px;border-top:1px solid rgba(255,255,255,.07);color:#9aa3ad;font-size:12.5px;display:flex;justify-content:space-between"><span>Avancés</span><span>▸</span></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ============ 1d Vue live — labellisation (sombre) ============ -->
+    <div id="1d" style="flex:none;display:flex;flex-direction:column;gap:9px;scroll-margin-top:16px">
+      <div style="display:flex;align-items:baseline;gap:8px;font:400 11px 'Archivo',sans-serif;color:rgba(255,255,255,.55)"><a href="#1d" style="font:700 10.5px 'Space Mono',monospace;padding:3px 7px;background:rgba(255,255,255,.12);color:#e7eaee;border-radius:5px">1d</a>Vue live — box dessinée à main levée + formulaire de label, pause, avancés dépliés</div>
+      <div data-screen-label="1d Vue live labellisation" style="width:1180px;height:740px;background:#14171b;color:#e7eaee;font-size:13px;border:1px solid rgba(255,255,255,.1);border-radius:10px;overflow:hidden;display:flex;flex-direction:column;box-shadow:0 2px 14px rgba(0,0,0,.5)">
+        <div style="display:flex;align-items:center;gap:14px;height:46px;padding:0 14px;background:#0e1114;border-bottom:1px solid rgba(255,255,255,.07);flex:none">
+          <div style="display:flex;align-items:center;gap:7px;font-weight:700;font-size:14px"><span style="width:9px;height:9px;border-radius:50%;background:#4d9ef8;display:inline-block"></span>LiveSemantic</div>
+          <div style="display:flex;gap:4px;align-self:flex-end">
+            <div style="padding:8px 16px 9px;color:#9aa3ad;font-size:12.5px">Sources</div>
+            <div style="padding:8px 16px 9px;background:#14171b;border:1px solid rgba(255,255,255,.09);border-bottom:none;border-radius:7px 7px 0 0;font-weight:600;font-size:12.5px;display:flex;align-items:center;gap:7px"><span style="width:6px;height:6px;border-radius:50%;background:#e8a13c;display:inline-block"></span>Entrée principale<span style="color:#5b636d">×</span></div>
+          </div>
+          <div style="flex:1"></div>
+          <div style="display:flex;border:1px solid rgba(255,255,255,.14);border-radius:6px;overflow:hidden;font-size:11.5px"><div style="padding:5px 11px;background:rgba(255,255,255,.12);font-weight:600">Sombre</div><div style="padding:5px 11px;color:#9aa3ad">Clair</div></div>
+          <div style="padding:6px 12px;border:1px solid rgba(255,255,255,.14);border-radius:6px;font-size:12px;color:#c8cdd4">Journal</div>
+        </div>
+        <div style="flex:1;display:flex;min-height:0">
+          <div style="flex:1;display:flex;flex-direction:column;min-width:0">
+            <div style="flex:1;position:relative;background:repeating-linear-gradient(135deg,#171b20 0 12px,#13161b 12px 24px);margin:12px;border-radius:8px;overflow:hidden">
+              <span style="position:absolute;left:50%;top:74%;transform:translate(-50%,-50%);font:400 11px 'Space Mono',monospace;color:#454e58">[ image en pause — la lecture reprend sans perte ]</span>
+              <div style="position:absolute;top:10px;left:10px;display:flex;align-items:center;gap:6px;font:700 10px 'Space Mono',monospace;background:rgba(232,161,60,.16);color:#e8a13c;padding:4px 10px;border-radius:5px">EN PAUSE · direct conservé en arrière-plan</div>
+              <div style="position:absolute;left:12%;top:20%;width:14%;height:44%;border:2px solid #4d9ef8;border-radius:3px;opacity:.55">
+                <span style="position:absolute;top:-22px;left:-2px;font:700 10.5px 'Space Mono',monospace;background:#4d9ef8;color:#0b0d10;padding:2px 7px;border-radius:4px;white-space:nowrap">personne 0.83</span>
+              </div>
+              <!-- box dessinée -->
+              <div style="position:absolute;left:47%;top:34%;width:17%;height:34%;border:2px dashed #2ec27e;border-radius:3px;background:rgba(46,194,126,.07)">
+                <span style="position:absolute;right:-7px;bottom:-7px;width:13px;height:13px;border-radius:50%;background:#2ec27e;border:2px solid #0b0d10"></span>
+              </div>
+              <!-- formulaire -->
+              <div style="position:absolute;left:65.5%;top:36%;width:230px;background:#1b1f24;border:1px solid rgba(255,255,255,.14);border-radius:9px;padding:13px 14px;display:flex;flex-direction:column;gap:9px;box-shadow:0 8px 28px rgba(0,0,0,.6)">
+                <span style="font-weight:600;font-size:12.5px">Nouvelle référence</span>
+                <div style="padding:7px 10px;border:1px solid rgba(77,158,248,.6);border-radius:6px;font-size:12.5px;background:#12151a">chariot élévateur<span style="display:inline-block;width:1px;height:13px;background:#4d9ef8;margin-left:2px;vertical-align:-2px;animation:lsPulse 1s infinite"></span></div>
+                <div style="display:flex;align-items:center;gap:7px"><span style="font-size:11px;color:#7d8791">Couleur des box</span>
+                  <span style="width:16px;height:16px;border-radius:4px;background:#2ec27e;outline:2px solid #e7eaee;outline-offset:1px"></span>
+                  <span style="width:16px;height:16px;border-radius:4px;background:#4d9ef8"></span>
+                  <span style="width:16px;height:16px;border-radius:4px;background:#e8a13c"></span>
+                  <span style="width:16px;height:16px;border-radius:4px;background:#c77dff"></span>
+                </div>
+                <div style="display:flex;gap:7px">
+                  <span style="flex:1;text-align:center;padding:6px 0;background:#4d9ef8;color:#0b0d10;border-radius:6px;font-weight:700;font-size:12px">Ajouter à la galerie</span>
+                  <span style="padding:6px 11px;border:1px solid rgba(255,255,255,.14);border-radius:6px;color:#9aa3ad;font-size:12px">Annuler</span>
+                </div>
+                <span style="font-size:10px;color:#5b636d;line-height:1.4">Le tracking démarre dès l'ajout, sans interrompre le flux.</span>
+              </div>
+            </div>
+            <div style="flex:none;margin:0 12px 12px;background:#1b1f24;border:1px solid rgba(255,255,255,.08);border-radius:8px;padding:10px 14px;display:flex;flex-direction:column;gap:8px">
+              <div style="position:relative;height:8px;border-radius:4px;background:rgba(255,255,255,.07)">
+                <div style="position:absolute;right:0;top:0;bottom:0;width:82%;border-radius:4px;background:rgba(77,158,248,.25)"></div>
+                <div style="position:absolute;right:24%;top:50%;transform:translateY(-50%);width:3px;height:14px;border-radius:2px;background:#e8a13c"></div>
+                <span style="position:absolute;left:0;top:14px;font:400 9.5px 'Space Mono',monospace;color:#5b636d">−30 s</span>
+                <span style="position:absolute;right:24%;top:14px;font:400 9.5px 'Space Mono',monospace;color:#e8a13c;transform:translateX(50%)">−7,2 s</span>
+                <span style="position:absolute;right:0;top:14px;font:400 9.5px 'Space Mono',monospace;color:#5b636d">direct</span>
+              </div>
+              <div style="display:flex;align-items:center;gap:8px;padding-top:8px">
+                <div style="padding:6px 12px;border:1px solid rgba(255,255,255,.14);border-radius:6px;font:400 11.5px 'Space Mono',monospace;color:#c8cdd4">−10 s</div>
+                <div style="padding:6px 16px;background:#4d9ef8;color:#0b0d10;border-radius:6px;font-weight:700;font-size:12px">Reprendre</div>
+                <div style="padding:6px 12px;border:1px solid rgba(255,255,255,.14);border-radius:6px;font:400 11.5px 'Space Mono',monospace;color:#c8cdd4">+10 s</div>
+                <div style="display:flex;align-items:center;gap:6px;padding:6px 12px;border-radius:6px;border:1px solid rgba(46,194,126,.4);color:#5fd79f;font-weight:700;font-size:11px">Revenir au direct</div>
+                <div style="flex:1"></div>
+                <span style="font-size:11.5px;color:#7d8791">Tampon de retour :</span>
+                <div style="padding:5px 10px;border:1px solid rgba(255,255,255,.14);border-radius:6px;font:400 11px 'Space Mono',monospace;color:#c8cdd4">30 s ▾</div>
+              </div>
+            </div>
+          </div>
+          <!-- volet droit, avancés dépliés -->
+          <div style="width:300px;flex:none;border-left:1px solid rgba(255,255,255,.08);background:#161a1f;display:flex;flex-direction:column;overflow:hidden">
+            <div style="display:flex;align-items:center;justify-content:space-between;padding:13px 16px 9px"><span style="font-weight:600;font-size:12.5px">Filtres sémantiques</span><span style="color:#5b636d;font-size:12px">Replier ▸</span></div>
+            <div style="padding:0 16px 12px;border-bottom:1px solid rgba(255,255,255,.07)">
+              <div style="display:flex;align-items:center;gap:9px;padding:8px 10px;background:#1b1f24;border:1px solid rgba(255,255,255,.08);border-radius:7px">
+                <span style="width:10px;height:10px;border-radius:3px;background:#4d9ef8;flex:none"></span>
+                <span style="flex:1;font-size:12.5px">personne</span>
+                <span style="font:400 10.5px 'Space Mono',monospace;color:#9aa3ad">≥ 0.58</span>
+                <span style="width:26px;height:15px;border-radius:8px;background:#4d9ef8;position:relative;display:inline-block"><span style="position:absolute;top:2px;left:13px;width:11px;height:11px;border-radius:50%;background:#e7eaee"></span></span>
+              </div>
+            </div>
+            <div style="padding:12px 16px;display:flex;flex-direction:column;gap:7px;border-bottom:1px solid rgba(255,255,255,.07)">
+              <span style="font-weight:600;font-size:12.5px">Galerie de références</span>
+              <div style="display:flex;align-items:center;gap:9px;padding:6px 8px;background:rgba(46,194,126,.1);border:1px solid rgba(46,194,126,.45);border-radius:7px">
+                <span style="width:30px;height:30px;border-radius:5px;background:repeating-linear-gradient(135deg,#22272d 0 6px,#1c2127 6px 12px);border:2px solid #2ec27e;flex:none"></span>
+                <span style="flex:1"><span style="display:block;font-size:12px;font-weight:600">chariot élévateur</span><span style="display:block;font:400 9.5px 'Space Mono',monospace;color:#5fd79f">en cours d'ajout…</span></span>
+              </div>
+            </div>
+            <!-- avancés -->
+            <div style="padding:12px 16px;display:flex;flex-direction:column;gap:10px;flex:1">
+              <div style="display:flex;justify-content:space-between;color:#e7eaee;font-weight:600;font-size:12.5px"><span>Avancés</span><span style="color:#9aa3ad">▾</span></div>
+              <div style="font:400 9.5px 'Space Mono',monospace;color:#5b636d;text-transform:uppercase">Tracking</div>
+              <div style="display:flex;justify-content:space-between;font-size:12px;align-items:center"><span style="color:#c8cdd4">Algorithme</span><span style="padding:4px 10px;border:1px solid rgba(255,255,255,.12);border-radius:5px;font:400 10.5px 'Space Mono',monospace;color:#9aa3ad">ByteTrack ▾</span></div>
+              <div style="display:flex;justify-content:space-between;font-size:12px;align-items:center"><span style="color:#c8cdd4">IoU d'association</span><span style="font:400 11px 'Space Mono',monospace;color:#9aa3ad">0.45</span></div>
+              <div style="display:flex;justify-content:space-between;font-size:12px;align-items:center"><span style="color:#c8cdd4">Frames avant perte</span><span style="font:400 11px 'Space Mono',monospace;color:#9aa3ad">30</span></div>
+              <div style="font:400 9.5px 'Space Mono',monospace;color:#5b636d;text-transform:uppercase;margin-top:4px">Inférence</div>
+              <div style="display:flex;justify-content:space-between;font-size:12px;align-items:center"><span style="color:#c8cdd4">Matériel</span><span style="padding:4px 10px;border:1px solid rgba(255,255,255,.12);border-radius:5px;font:400 10.5px 'Space Mono',monospace;color:#9aa3ad">GPU (CUDA) ▾</span></div>
+              <div style="display:flex;justify-content:space-between;font-size:12px;align-items:center"><span style="color:#c8cdd4">Variante de modèle</span><span style="padding:4px 10px;border:1px solid rgba(255,255,255,.12);border-radius:5px;font:400 10.5px 'Space Mono',monospace;color:#9aa3ad">base ▾</span></div>
+              <div style="font-size:10.5px;color:#5b636d;line-height:1.45;margin-top:2px">Réservé aux profils techniques. Les valeurs par défaut conviennent à la plupart des usages.</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ============ 1e Sources mosaïque (clair) ============ -->
+    <div id="1e" style="flex:none;display:flex;flex-direction:column;gap:9px;scroll-margin-top:16px">
+      <div style="display:flex;align-items:baseline;gap:8px;font:400 11px 'Archivo',sans-serif;color:rgba(255,255,255,.55)"><a href="#1e" style="font:700 10.5px 'Space Mono',monospace;padding:3px 7px;background:rgba(255,255,255,.12);color:#e7eaee;border-radius:5px">1e</a>Accueil Sources — variante claire (boxes activées sur les tuiles)</div>
+      <div data-screen-label="1e Sources mosaïque claire" style="width:1180px;height:740px;background:#eef0f2;color:#1c2126;font-size:13px;border:1px solid rgba(0,0,0,.12);border-radius:10px;overflow:hidden;display:flex;flex-direction:column;box-shadow:0 2px 14px rgba(0,0,0,.35)">
+        <div style="display:flex;align-items:center;gap:14px;height:46px;padding:0 14px;background:#ffffff;border-bottom:1px solid rgba(0,0,0,.1);flex:none">
+          <div style="display:flex;align-items:center;gap:7px;font-weight:700;font-size:14px"><span style="width:9px;height:9px;border-radius:50%;background:#2b7de0;display:inline-block"></span>LiveSemantic</div>
+          <div style="display:flex;gap:4px;align-self:flex-end">
+            <div style="padding:8px 16px 9px;background:#eef0f2;border:1px solid rgba(0,0,0,.1);border-bottom:none;border-radius:7px 7px 0 0;font-weight:600;font-size:12.5px">Sources</div>
+            <div style="padding:8px 16px 9px;color:#5f6a75;font-size:12.5px;display:flex;align-items:center;gap:7px"><span style="width:6px;height:6px;border-radius:50%;background:#1fa568;display:inline-block"></span>Entrée principale<span style="color:#98a1ab">×</span></div>
+          </div>
+          <div style="flex:1"></div>
+          <div style="display:flex;border:1px solid rgba(0,0,0,.16);border-radius:6px;overflow:hidden;font-size:11.5px"><div style="padding:5px 11px;color:#5f6a75">Sombre</div><div style="padding:5px 11px;background:rgba(0,0,0,.08);font-weight:600">Clair</div></div>
+          <div style="padding:6px 12px;border:1px solid rgba(0,0,0,.16);border-radius:6px;font-size:12px;color:#3c454f">Journal</div>
+          <div style="padding:6px 14px;background:#2b7de0;color:#fff;border-radius:6px;font-weight:600;font-size:12.5px">+ Ajouter une source</div>
+        </div>
+        <div style="display:flex;align-items:center;gap:12px;height:44px;padding:0 16px;border-bottom:1px solid rgba(0,0,0,.07);flex:none">
+          <div style="display:flex;border:1px solid rgba(0,0,0,.16);border-radius:6px;overflow:hidden;font-size:11.5px"><div style="padding:5px 12px;color:#5f6a75">Liste</div><div style="padding:5px 12px;background:rgba(43,125,224,.14);color:#2b6cc0;font-weight:600">Mosaïque</div></div>
+          <span style="font:400 11px 'Space Mono',monospace;color:#5f6a75">6 sources · 4 connectées</span>
+          <div style="flex:1"></div>
+          <div style="padding:6px 11px;border:1px solid rgba(0,0,0,.16);border-radius:6px;font-size:12px;color:#3c454f">Réglages mosaïque ▸</div>
+        </div>
+        <div style="flex:1;padding:16px;display:flex;flex-wrap:wrap;gap:14px;align-content:flex-start;overflow:hidden">
+          <sc-for list="{{ tiles }}" as="t" hint-placeholder-count="6">
+            <div style="width:272px;background:#ffffff;border:1px solid rgba(0,0,0,.1);border-radius:8px;overflow:hidden;box-shadow:0 1px 3px rgba(0,0,0,.05)">
+              <div style="position:relative;height:150px;background:repeating-linear-gradient(135deg,#20242a 0 10px,#1b1f25 10px 20px);display:flex;align-items:center;justify-content:center">
+                <span style="font:400 10.5px 'Space Mono',monospace;color:#5a636e">[ aperçu — 5 img/s ]</span>
+                <sc-if value="{{ t.overlay }}" hint-placeholder-val="{{ false }}">
+                  <div style="position:absolute;inset:0;background:rgba(15,18,22,.75);display:flex;align-items:center;justify-content:center"><span style="font:400 11px 'Space Mono',monospace;color:{{ t.dotL }}">{{ t.overlay }}</span></div>
+                </sc-if>
+                <sc-if value="{{ t.box }}" hint-placeholder-val="{{ false }}">
+                  <div style="position:absolute;left:22%;top:26%;width:26%;height:48%;border:1.5px solid #4d9ef8;border-radius:2px"><span style="position:absolute;top:-16px;left:-1px;font:700 8.5px 'Space Mono',monospace;background:#4d9ef8;color:#0b0d10;padding:1px 5px;border-radius:3px;white-space:nowrap">personne 0.81</span></div>
+                </sc-if>
+                <span style="position:absolute;top:7px;right:8px;font:400 9.5px 'Space Mono',monospace;color:#9aa3ad;background:rgba(15,18,22,.7);padding:2px 6px;border-radius:4px">{{ t.type }}</span>
+              </div>
+              <div style="display:flex;align-items:center;gap:8px;padding:9px 11px">
+                <span style="width:7px;height:7px;border-radius:50%;background:{{ t.dotL }};flex:none"></span>
+                <span style="font-weight:600;font-size:12.5px;flex:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{ t.name }}</span>
+                <span style="font-size:11px;color:{{ t.dotL }}">{{ t.status }}</span>
+              </div>
+            </div>
+          </sc-for>
+        </div>
+        <div style="height:30px;flex:none;border-top:1px solid rgba(0,0,0,.09);background:#ffffff;display:flex;align-items:center;gap:16px;padding:0 14px;font:400 10.5px 'Space Mono',monospace;color:#98a1ab">
+          <span>backend : connecté</span><span>GPU 41 %</span><span>4 flux actifs</span><div style="flex:1"></div><span style="color:#5f6a75">Journal des événements ▴</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- ============ 1f Vue live (clair) ============ -->
+    <div id="1f" style="flex:none;display:flex;flex-direction:column;gap:9px;scroll-margin-top:16px">
+      <div style="display:flex;align-items:baseline;gap:8px;font:400 11px 'Archivo',sans-serif;color:rgba(255,255,255,.55)"><a href="#1f" style="font:700 10.5px 'Space Mono',monospace;padding:3px 7px;background:rgba(255,255,255,.12);color:#e7eaee;border-radius:5px">1f</a>Onglet Vue live — variante claire</div>
+      <div data-screen-label="1f Vue live claire" style="width:1180px;height:740px;background:#eef0f2;color:#1c2126;font-size:13px;border:1px solid rgba(0,0,0,.12);border-radius:10px;overflow:hidden;display:flex;flex-direction:column;box-shadow:0 2px 14px rgba(0,0,0,.35)">
+        <div style="display:flex;align-items:center;gap:14px;height:46px;padding:0 14px;background:#ffffff;border-bottom:1px solid rgba(0,0,0,.1);flex:none">
+          <div style="display:flex;align-items:center;gap:7px;font-weight:700;font-size:14px"><span style="width:9px;height:9px;border-radius:50%;background:#2b7de0;display:inline-block"></span>LiveSemantic</div>
+          <div style="display:flex;gap:4px;align-self:flex-end">
+            <div style="padding:8px 16px 9px;color:#5f6a75;font-size:12.5px">Sources</div>
+            <div style="padding:8px 16px 9px;background:#eef0f2;border:1px solid rgba(0,0,0,.1);border-bottom:none;border-radius:7px 7px 0 0;font-weight:600;font-size:12.5px;display:flex;align-items:center;gap:7px"><span style="width:6px;height:6px;border-radius:50%;background:#1fa568;display:inline-block;animation:lsPulse 2s infinite"></span>Entrée principale<span style="color:#98a1ab">×</span></div>
+          </div>
+          <div style="flex:1"></div>
+          <div style="display:flex;border:1px solid rgba(0,0,0,.16);border-radius:6px;overflow:hidden;font-size:11.5px"><div style="padding:5px 11px;color:#5f6a75">Sombre</div><div style="padding:5px 11px;background:rgba(0,0,0,.08);font-weight:600">Clair</div></div>
+          <div style="padding:6px 12px;border:1px solid rgba(0,0,0,.16);border-radius:6px;font-size:12px;color:#3c454f">Journal</div>
+        </div>
+        <div style="flex:1;display:flex;min-height:0">
+          <div style="flex:1;display:flex;flex-direction:column;min-width:0">
+            <div style="flex:1;position:relative;background:repeating-linear-gradient(135deg,#20242a 0 12px,#1b1f25 12px 24px);margin:12px;border-radius:8px;overflow:hidden">
+              <span style="position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);font:400 11px 'Space Mono',monospace;color:#5a636e">[ flux vidéo — Entrée principale · 1920×1080 ]</span>
+              <div style="position:absolute;top:10px;right:10px;font:400 10px 'Space Mono',monospace;color:#9aa3ad;background:rgba(15,18,22,.7);padding:4px 9px;border-radius:5px">24 fps · 96 ms · 2 objets · ×</div>
+              <div style="position:absolute;left:18%;top:26%;width:13%;height:44%;border:2px solid #4d9ef8;border-radius:3px">
+                <span style="position:absolute;top:-22px;left:-2px;font:700 10.5px 'Space Mono',monospace;background:#4d9ef8;color:#0b0d10;padding:2px 7px;border-radius:4px;white-space:nowrap">personne 0.91</span>
+              </div>
+              <div style="position:absolute;left:60%;top:56%;width:13%;height:26%;border:2px solid #e8a13c;border-radius:3px">
+                <span style="position:absolute;top:-22px;left:-2px;font:700 10.5px 'Space Mono',monospace;background:#e8a13c;color:#0b0d10;padding:2px 7px;border-radius:4px;white-space:nowrap">sac abandonné 0.64</span>
+              </div>
+            </div>
+            <div style="flex:none;margin:0 12px 12px;background:#ffffff;border:1px solid rgba(0,0,0,.1);border-radius:8px;padding:10px 14px;display:flex;flex-direction:column;gap:8px">
+              <div style="position:relative;height:8px;border-radius:4px;background:rgba(0,0,0,.08)">
+                <div style="position:absolute;right:0;top:0;bottom:0;width:82%;border-radius:4px;background:rgba(43,125,224,.22)"></div>
+                <div style="position:absolute;right:0;top:50%;transform:translateY(-50%);width:3px;height:14px;border-radius:2px;background:#2b7de0"></div>
+                <span style="position:absolute;left:0;top:14px;font:400 9.5px 'Space Mono',monospace;color:#98a1ab">−30 s</span>
+                <span style="position:absolute;right:0;top:14px;font:400 9.5px 'Space Mono',monospace;color:#2b6cc0">direct</span>
+              </div>
+              <div style="display:flex;align-items:center;gap:8px;padding-top:8px">
+                <div style="padding:6px 12px;border:1px solid rgba(0,0,0,.16);border-radius:6px;font:400 11.5px 'Space Mono',monospace;color:#3c454f">−10 s</div>
+                <div style="padding:6px 16px;background:#1c2126;color:#fff;border-radius:6px;font-weight:700;font-size:12px">Pause</div>
+                <div style="padding:6px 12px;border:1px solid rgba(0,0,0,.16);border-radius:6px;font:400 11.5px 'Space Mono',monospace;color:#3c454f">+10 s</div>
+                <div style="display:flex;align-items:center;gap:6px;padding:6px 12px;border-radius:6px;background:rgba(31,165,104,.12);color:#177a4e;font-weight:700;font-size:11px"><span style="width:7px;height:7px;border-radius:50%;background:#1fa568;display:inline-block;animation:lsPulse 1.6s infinite"></span>EN DIRECT</div>
+                <div style="flex:1"></div>
+                <span style="font-size:11.5px;color:#5f6a75">Tampon de retour :</span>
+                <div style="padding:5px 10px;border:1px solid rgba(0,0,0,.16);border-radius:6px;font:400 11px 'Space Mono',monospace;color:#3c454f">30 s ▾</div>
+              </div>
+            </div>
+          </div>
+          <div style="width:300px;flex:none;border-left:1px solid rgba(0,0,0,.1);background:#ffffff;display:flex;flex-direction:column;overflow:hidden">
+            <div style="display:flex;align-items:center;justify-content:space-between;padding:13px 16px 9px"><span style="font-weight:600;font-size:12.5px">Filtres sémantiques</span><span style="color:#98a1ab;font-size:12px">Replier ▸</span></div>
+            <div style="padding:0 16px;display:flex;flex-direction:column;gap:7px">
+              <sc-for list="{{ filters }}" as="f" hint-placeholder-count="2">
+                <div style="display:flex;align-items:center;gap:9px;padding:8px 10px;background:#f5f6f8;border:1px solid rgba(0,0,0,.09);border-radius:7px">
+                  <span style="width:10px;height:10px;border-radius:3px;background:{{ f.color }};flex:none"></span>
+                  <span style="flex:1;font-size:12.5px">{{ f.label }}</span>
+                  <span style="font:400 10.5px 'Space Mono',monospace;color:#5f6a75">≥ {{ f.thr }}</span>
+                  <span style="width:26px;height:15px;border-radius:8px;background:{{ f.togBgL }};position:relative;display:inline-block"><span style="position:absolute;top:2px;left:{{ f.knob }};width:11px;height:11px;border-radius:50%;background:#fff;box-shadow:0 1px 2px rgba(0,0,0,.3)"></span></span>
+                </div>
+              </sc-for>
+              <div style="padding:7px 11px;border:1px dashed rgba(0,0,0,.22);border-radius:7px;color:#98a1ab;font-size:12px">+ Filtre texte libre…</div>
+            </div>
+            <div style="padding:14px 16px;display:flex;flex-direction:column;gap:8px;border-bottom:1px solid rgba(0,0,0,.08)">
+              <div style="display:flex;justify-content:space-between;align-items:baseline"><span style="font-size:12.5px;color:#3c454f">Seuil — <span style="color:#2b6cc0">personne</span></span><span style="font:700 13px 'Space Mono',monospace;color:#2b6cc0">0.58</span></div>
+              <div style="position:relative;height:6px;border-radius:3px;background:linear-gradient(90deg,rgba(0,0,0,.1),rgba(43,125,224,.6))">
+                <div style="position:absolute;left:58%;top:50%;transform:translate(-50%,-50%);width:16px;height:16px;border-radius:50%;background:#fff;box-shadow:0 1px 5px rgba(0,0,0,.35)"></div>
+              </div>
+              <div style="position:relative;height:52px;background:#f5f6f8;border:1px solid rgba(0,0,0,.08);border-radius:6px;padding:5px 8px;display:flex;align-items:flex-end;gap:2px;overflow:hidden">
+                <sc-for list="{{ spark }}" as="b" hint-placeholder-count="20">
+                  <div style="width:8px;height:{{ b.h }}px;border-radius:1px;background:{{ b.cL }};flex:none"></div>
+                </sc-for>
+                <div style="position:absolute;left:8px;right:8px;bottom:{{ thrLine }}px;border-top:1px dashed #2b7de0"></div>
+                <span style="position:absolute;top:5px;right:8px;font:700 10px 'Space Mono',monospace;color:#177a4e">score en direct : 0.74</span>
+              </div>
+              <div style="align-self:flex-start;padding:5px 11px;border:1px solid rgba(43,125,224,.5);border-radius:6px;color:#2b6cc0;font-size:11.5px">Appliquer à toutes les sources actives</div>
+            </div>
+            <div style="padding:12px 16px;display:flex;flex-direction:column;gap:7px;border-bottom:1px solid rgba(0,0,0,.08)">
+              <span style="font-weight:600;font-size:12.5px">Galerie de références</span>
+              <sc-for list="{{ gallery }}" as="g" hint-placeholder-count="3">
+                <div style="display:flex;align-items:center;gap:9px;padding:6px 8px;background:#f5f6f8;border:1px solid rgba(0,0,0,.08);border-radius:7px">
+                  <span style="width:30px;height:30px;border-radius:5px;background:repeating-linear-gradient(135deg,#242930 0 6px,#1e232a 6px 12px);border:2px solid {{ g.color }};flex:none"></span>
+                  <span style="flex:1;min-width:0"><span style="display:block;font-size:12px;font-weight:600">{{ g.label }}</span><span style="display:block;font:400 9.5px 'Space Mono',monospace;color:#98a1ab">{{ g.meta }}</span></span>
+                  <span style="width:26px;height:15px;border-radius:8px;background:{{ g.togBgL }};position:relative;display:inline-block;flex:none"><span style="position:absolute;top:2px;left:{{ g.knob }};width:11px;height:11px;border-radius:50%;background:#fff;box-shadow:0 1px 2px rgba(0,0,0,.3)"></span></span>
+                </div>
+              </sc-for>
+            </div>
+            <div style="padding:11px 16px;color:#5f6a75;font-size:12.5px;display:flex;justify-content:space-between"><span>Avancés</span><span>▸</span></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ============ 1g Flux d'interaction ============ -->
+    <div id="1g" style="flex:none;display:flex;flex-direction:column;gap:9px;scroll-margin-top:16px">
+      <div style="display:flex;align-items:baseline;gap:8px;font:400 11px 'Archivo',sans-serif;color:rgba(255,255,255,.55)"><a href="#1g" style="font:700 10.5px 'Space Mono',monospace;padding:3px 7px;background:rgba(255,255,255,.12);color:#e7eaee;border-radius:5px">1g</a>Flux d'interaction — étape par étape</div>
+      <div data-screen-label="1g Flux d'interaction" style="width:1180px;background:#14171b;color:#e7eaee;border:1px solid rgba(255,255,255,.1);border-radius:10px;padding:22px 24px;display:flex;flex-direction:column;gap:24px">
+        <sc-for list="{{ flows }}" as="fl" hint-placeholder-count="3">
+          <div style="display:flex;flex-direction:column;gap:12px">
+            <span style="font-weight:600;font-size:13px;color:#e7eaee">{{ fl.title }}</span>
+            <div style="display:flex;gap:0;align-items:flex-start">
+              <sc-for list="{{ fl.steps }}" as="s" hint-placeholder-count="4">
+                <div style="display:flex;align-items:flex-start">
+                  <div style="width:236px;display:flex;flex-direction:column;gap:7px">
+                    <div style="position:relative;height:132px;background:#0f1216;border:1px solid rgba(255,255,255,.09);border-radius:7px;overflow:hidden">
+                      <div style="position:absolute;top:0;left:0;right:0;height:16px;background:#181c21;border-bottom:1px solid rgba(255,255,255,.06)"></div>
+                      <div style="position:absolute;left:8px;right:{{ s.rgt }};top:22px;bottom:8px;background:repeating-linear-gradient(135deg,#171b20 0 8px,#13161b 8px 16px);border-radius:4px">
+                        <sc-if value="{{ s.solid }}" hint-placeholder-val="{{ false }}"><span style="position:absolute;left:30%;top:26%;width:32%;height:46%;border:1.5px solid {{ s.boxC }};border-radius:2px"></span></sc-if>
+                        <sc-if value="{{ s.dashed }}" hint-placeholder-val="{{ false }}"><span style="position:absolute;left:30%;top:26%;width:32%;height:46%;border:1.5px dashed {{ s.boxC }};border-radius:2px"></span></sc-if>
+                        <sc-if value="{{ s.form }}" hint-placeholder-val="{{ false }}"><span style="position:absolute;left:52%;top:30%;width:36%;height:44%;background:#1b1f24;border:1px solid rgba(255,255,255,.2);border-radius:4px;box-shadow:0 4px 10px rgba(0,0,0,.5)"></span></sc-if>
+                        <sc-if value="{{ s.cursor }}" hint-placeholder-val="{{ false }}"><span style="position:absolute;left:45%;top:47%;width:9px;height:9px;border-radius:50%;background:#e7eaee;box-shadow:0 0 0 4px rgba(231,234,238,.25)"></span></sc-if>
+                      </div>
+                      <sc-if value="{{ s.panel }}" hint-placeholder-val="{{ false }}"><div style="position:absolute;right:8px;top:22px;bottom:8px;width:22%;background:#161a1f;border:1px solid rgba(255,255,255,.08);border-radius:4px"></div></sc-if>
+                      <sc-if value="{{ s.chip }}" hint-placeholder-val="{{ false }}"><span style="position:absolute;left:12px;top:26px;font:700 8.5px 'Space Mono',monospace;background:rgba(232,161,60,.2);color:#e8a13c;padding:2px 6px;border-radius:3px">{{ s.chip }}</span></sc-if>
+                    </div>
+                    <span style="font-size:11px;line-height:1.45;color:#9aa3ad"><span style="font:700 10px 'Space Mono',monospace;color:#8fc1fa">{{ s.n }}</span>  {{ s.cap }}</span>
+                  </div>
+                  <sc-if value="{{ s.arrow }}" hint-placeholder-val="{{ true }}"><span style="width:44px;text-align:center;color:#5b636d;font-size:16px;padding-top:56px">→</span></sc-if>
+                </div>
+              </sc-for>
+            </div>
+          </div>
+        </sc-for>
+      </div>
+    </div>
+
+    <!-- ============ 1h Composants ============ -->
+    <div id="1h" style="flex:none;display:flex;flex-direction:column;gap:9px;scroll-margin-top:16px">
+      <div style="display:flex;align-items:baseline;gap:8px;font:400 11px 'Archivo',sans-serif;color:rgba(255,255,255,.55)"><a href="#1h" style="font:700 10.5px 'Space Mono',monospace;padding:3px 7px;background:rgba(255,255,255,.12);color:#e7eaee;border-radius:5px">1h</a>Composants réutilisables (web + desktop)</div>
+      <div data-screen-label="1h Composants" style="width:760px;background:#14171b;color:#e7eaee;border:1px solid rgba(255,255,255,.1);border-radius:10px;padding:22px 24px;display:flex;flex-direction:column;gap:20px;font-size:13px">
+        <div style="display:flex;flex-direction:column;gap:9px">
+          <span style="font:400 9.5px 'Space Mono',monospace;color:#5b636d;text-transform:uppercase">Boutons</span>
+          <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">
+            <span style="padding:6px 14px;background:#4d9ef8;color:#0b0d10;border-radius:6px;font-weight:600;font-size:12.5px">Primaire</span>
+            <span style="padding:6px 14px;border:1px solid rgba(77,158,248,.5);color:#8fc1fa;border-radius:6px;font-size:12.5px">Secondaire</span>
+            <span style="padding:6px 14px;border:1px solid rgba(255,255,255,.14);color:#c8cdd4;border-radius:6px;font-size:12.5px">Neutre</span>
+            <span style="padding:6px 14px;color:#9aa3ad;font-size:12.5px">Discret</span>
+            <span style="padding:6px 14px;border:1px solid rgba(228,87,79,.5);color:#f08a84;border-radius:6px;font-size:12.5px">Danger</span>
+          </div>
+        </div>
+        <div style="display:flex;flex-direction:column;gap:9px">
+          <span style="font:400 9.5px 'Space Mono',monospace;color:#5b636d;text-transform:uppercase">Badges de statut</span>
+          <div style="display:flex;gap:10px;flex-wrap:wrap">
+            <span style="display:flex;align-items:center;gap:6px;padding:4px 11px;border-radius:11px;background:rgba(46,194,126,.13);color:#5fd79f;font-size:11.5px"><span style="width:6px;height:6px;border-radius:50%;background:#2ec27e"></span>Connecté</span>
+            <span style="display:flex;align-items:center;gap:6px;padding:4px 11px;border-radius:11px;background:rgba(232,161,60,.13);color:#eab566;font-size:11.5px"><span style="width:6px;height:6px;border-radius:50%;background:#e8a13c;animation:lsPulse 1.4s infinite"></span>Reconnexion…</span>
+            <span style="display:flex;align-items:center;gap:6px;padding:4px 11px;border-radius:11px;background:rgba(228,87,79,.13);color:#f08a84;font-size:11.5px"><span style="width:6px;height:6px;border-radius:50%;background:#e4574f"></span>Erreur</span>
+            <span style="display:flex;align-items:center;gap:6px;padding:4px 11px;border-radius:11px;background:rgba(255,255,255,.07);color:#9aa3ad;font-size:11.5px"><span style="width:6px;height:6px;border-radius:50%;background:#5b636d"></span>Déconnecté</span>
+          </div>
+        </div>
+        <div style="display:flex;flex-direction:column;gap:9px">
+          <span style="font:400 9.5px 'Space Mono',monospace;color:#5b636d;text-transform:uppercase">Box vidéo overlay — couleur portée par le filtre</span>
+          <div style="position:relative;height:96px;background:repeating-linear-gradient(135deg,#171b20 0 10px,#13161b 10px 20px);border-radius:7px">
+            <span style="position:absolute;left:6%;top:24%;width:16%;height:52%;border:2px solid #4d9ef8;border-radius:3px"><span style="position:absolute;top:-20px;left:-2px;font:700 9.5px 'Space Mono',monospace;background:#4d9ef8;color:#0b0d10;padding:1px 6px;border-radius:3px;white-space:nowrap">détecté 0.87</span></span>
+            <span style="position:absolute;left:32%;top:24%;width:16%;height:52%;border:2px dashed #2ec27e;border-radius:3px;background:rgba(46,194,126,.07)"><span style="position:absolute;top:-20px;left:-2px;font:700 9.5px 'Space Mono',monospace;background:#2ec27e;color:#0b0d10;padding:1px 6px;border-radius:3px;white-space:nowrap">sélection</span></span>
+            <span style="position:absolute;left:58%;top:24%;width:16%;height:52%;border:2px solid #7d8791;opacity:.55;border-radius:3px"><span style="position:absolute;top:-20px;left:-2px;font:700 9.5px 'Space Mono',monospace;background:#7d8791;color:#0b0d10;padding:1px 6px;border-radius:3px;white-space:nowrap">perdu · 1,2 s</span></span>
+          </div>
+        </div>
+        <div style="display:flex;gap:26px">
+          <div style="flex:1;display:flex;flex-direction:column;gap:9px">
+            <span style="font:400 9.5px 'Space Mono',monospace;color:#5b636d;text-transform:uppercase">Slider de seuil + retour direct</span>
+            <div style="display:flex;flex-direction:column;gap:7px;background:#1b1f24;border:1px solid rgba(255,255,255,.08);border-radius:8px;padding:12px">
+              <div style="display:flex;justify-content:space-between"><span style="font-size:12px;color:#c8cdd4">Seuil</span><span style="font:700 12px 'Space Mono',monospace;color:#8fc1fa">0.58</span></div>
+              <div style="position:relative;height:6px;border-radius:3px;background:linear-gradient(90deg,rgba(255,255,255,.08),rgba(77,158,248,.55))"><div style="position:absolute;left:58%;top:50%;transform:translate(-50%,-50%);width:15px;height:15px;border-radius:50%;background:#e7eaee"></div></div>
+              <div style="position:relative;height:40px;background:#12151a;border-radius:5px;padding:4px 7px;display:flex;align-items:flex-end;gap:2px;overflow:hidden">
+                <sc-for list="{{ sparkSm }}" as="b" hint-placeholder-count="14">
+                  <div style="width:7px;height:{{ b.h }}px;border-radius:1px;background:{{ b.c }};flex:none"></div>
+                </sc-for>
+                <div style="position:absolute;left:7px;right:7px;bottom:19px;border-top:1px dashed #8fc1fa"></div>
+              </div>
+            </div>
+          </div>
+          <div style="flex:1;display:flex;flex-direction:column;gap:9px">
+            <span style="font:400 9.5px 'Space Mono',monospace;color:#5b636d;text-transform:uppercase">Carte source</span>
+            <div style="width:100%;background:#1b1f24;border:1px solid rgba(255,255,255,.08);border-radius:8px;overflow:hidden">
+              <div style="position:relative;height:96px;background:repeating-linear-gradient(135deg,#191d22 0 10px,#15181d 10px 20px);display:flex;align-items:center;justify-content:center">
+                <span style="font:400 10px 'Space Mono',monospace;color:#525b66">[ aperçu ]</span>
+                <span style="position:absolute;top:6px;right:7px;font:400 9px 'Space Mono',monospace;color:#7d8791;background:rgba(11,13,16,.65);padding:2px 5px;border-radius:4px">RTSP</span>
+              </div>
+              <div style="display:flex;align-items:center;gap:8px;padding:8px 11px">
+                <span style="width:7px;height:7px;border-radius:50%;background:#2ec27e"></span>
+                <span style="font-weight:600;font-size:12px;flex:1">Entrée principale</span>
+                <span style="font-size:10.5px;color:#5fd79f">Connecté</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+  </div>
+  <p style="margin:26px 0 0;font-size:12px;line-height:1.5;color:rgba(255,255,255,.45);font-family:'Archivo',sans-serif">À essayer ensuite : « rends <a href="#1c" style="font:700 10.5px 'Space Mono',monospace;padding:2px 6px;background:rgba(255,255,255,.12);color:#e7eaee;border-radius:5px">1c</a> interactif (slider + pause réels) » · « une variante avec le volet à gauche » · « l'écran vide "aucun flux configuré" »</p>
+</section>
+</x-dc>
+<script type="text/x-dc" data-dc-script>
+class Component extends DCLogic {
+  renderVals() {
+    const thr = 0.58, boxH = 42;
+    const vals = [0.31,0.44,0.62,0.71,0.55,0.38,0.66,0.74,0.81,0.69,0.52,0.47,0.63,0.77,0.84,0.72,0.6,0.49,0.68,0.79,0.74,0.7];
+    const spark = vals.map(v => ({
+      h: Math.round(v * boxH) + 4,
+      hs: Math.round(v * 34) + 3,
+      c: v >= thr ? '#4d9ef8' : '#39414a',
+      cL: v >= thr ? '#2b7de0' : '#c3c9d0'
+    }));
+    const sparkSm = spark.slice(4, 18).map(b => ({h: Math.round(b.h * .7), c: b.c}));
+    const tiles = [
+      {name:'Entrée principale', type:'RTSP', status:'Connecté', dot:'#2ec27e', dotL:'#1fa568', overlay:'', box:true, res:'1920×1080', filters:'2 filtres · 1 réf.', last:'Objet confirmé · il y a 12 s'},
+      {name:'Quai de chargement', type:'RTSP', status:'Connecté', dot:'#2ec27e', dotL:'#1fa568', overlay:'', box:true, res:'1280×720', filters:'1 filtre', last:'Objet détecté · il y a 3 min'},
+      {name:'Webcam locale', type:'WEBCAM', status:'Connecté', dot:'#2ec27e', dotL:'#1fa568', overlay:'', box:false, res:'1280×720', filters:'—', last:'—'},
+      {name:'Parking nord', type:'RTSP', status:'Reconnexion…', dot:'#e8a13c', dotL:'#c07f1f', overlay:'[ reconnexion en cours… ]', box:false, res:'1920×1080', filters:'1 filtre', last:'Objet perdu · il y a 41 s'},
+      {name:'Hall — archive.mp4', type:'FICHIER', status:'Connecté', dot:'#2ec27e', dotL:'#1fa568', overlay:'', box:false, res:'1920×1080', filters:'1 réf.', last:'—'},
+      {name:'Flux YouTube live', type:'YOUTUBE', status:'Erreur', dot:'#e4574f', dotL:'#cc4038', overlay:'[ flux indisponible — réessayer ]', box:false, res:'—', filters:'—', last:'Connexion échouée · il y a 2 min'}
+    ];
+    const filters = [
+      {label:'personne', color:'#4d9ef8', thr:'0.58', togBg:'#4d9ef8', togBgL:'#2b7de0', knob:'13px'},
+      {label:'sac abandonné', color:'#e8a13c', thr:'0.55', togBg:'#e8a13c', togBgL:'#c07f1f', knob:'13px'}
+    ];
+    const gallery = [
+      {label:'personne', color:'#4d9ef8', meta:'texte libre · 2 objets suivis', togBg:'#4d9ef8', togBgL:'#2b7de0', knob:'13px'},
+      {label:'sac abandonné', color:'#e8a13c', meta:'texte libre · 1 objet suivi', togBg:'#e8a13c', togBgL:'#c07f1f', knob:'13px'},
+      {label:'chariot élévateur', color:'#2ec27e', meta:'sélection à l\u2019écran · inactif', togBg:'rgba(255,255,255,.14)', togBgL:'rgba(0,0,0,.18)', knob:'2px'}
+    ];
+    const detections = [
+      {label:'personne', id:'128', score:'0.87', color:'#4d9ef8'},
+      {label:'personne', id:'131', score:'0.79', color:'#4d9ef8'},
+      {label:'sac abandonné', id:'097', score:'0.62', color:'#e8a13c'}
+    ];
+    const events = [
+      {t:'14:32:08', ev:'Objet confirmé', label:'personne', src:'Entrée principale', score:'0.87', c:'#2ec27e'},
+      {t:'14:31:52', ev:'Objet détecté', label:'sac abandonné', src:'Quai de chargement', score:'0.62', c:'#4d9ef8'},
+      {t:'14:29:11', ev:'Objet perdu', label:'personne', src:'Parking nord', score:'—', c:'#e4574f'}
+    ];
+    const flows = [
+      {title:'A — Sélection + labellisation d\u2019un objet en direct', steps:[
+        {n:'01', cap:'Le flux tourne. Un objet intéressant n\u2019est couvert par aucun filtre.', rgt:'8px', cursor:true, arrow:true},
+        {n:'02', cap:'L\u2019utilisateur dessine une box à main levée (ou clique une box existante). La lecture continue.', rgt:'8px', dashed:true, boxC:'#2ec27e', arrow:true},
+        {n:'03', cap:'Un mini-formulaire demande un label et une couleur, sans bloquer le flux.', rgt:'8px', dashed:true, boxC:'#2ec27e', form:true, arrow:true},
+        {n:'04', cap:'L\u2019entrée rejoint la galerie du volet droit ; le tracking démarre immédiatement.', rgt:'8px', solid:true, boxC:'#2ec27e', panel:true, arrow:false}
+      ]},
+      {title:'B — Accueil → onglet Vue live', steps:[
+        {n:'01', cap:'Accueil Sources (liste ou mosaïque). Clic sur une tuile ou une ligne.', rgt:'8px', cursor:true, arrow:true},
+        {n:'02', cap:'Un onglet s\u2019ouvre avec la Vue live : framerate normal, boxes, scores, volet droit.', rgt:'30%', solid:true, boxC:'#4d9ef8', panel:true, arrow:true},
+        {n:'03', cap:'Le panel Sources reste le premier onglet permanent ; plusieurs vues live peuvent coexister.', rgt:'30%', solid:true, boxC:'#4d9ef8', panel:true, arrow:false}
+      ]},
+      {title:'C — Pause / reprise / retour en arrière', steps:[
+        {n:'01', cap:'Pause : l\u2019image se fige, le flux réel et l\u2019analyse continuent en arrière-plan.', rgt:'8px', chip:'EN PAUSE', arrow:true},
+        {n:'02', cap:'Retour dans le tampon glissant (durée configurable, ex. 30 s) via la timeline.', rgt:'8px', chip:'−7,2 s', arrow:true},
+        {n:'03', cap:'Reprise à l\u2019endroit choisi, ou « Revenir au direct » en un clic.', rgt:'8px', chip:'EN DIRECT', arrow:false}
+      ]}
+    ];
+    return {tiles, filters, gallery, detections, events, spark, sparkSm, thrLine: Math.round(thr * boxH) + 5, thrLineS: Math.round(thr * 34) + 4, flows};
+  }
+}
+</script>
+</body>
+</html>

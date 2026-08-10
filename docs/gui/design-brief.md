@@ -2,7 +2,7 @@
 
 Document à transmettre pour la conception des maquettes. Se concentre sur le
 produit, les écrans et les interactions — pas sur l'architecture technique
-(voir `docs/gui-spec.md` pour les prérequis backend, si besoin de contexte
+(voir `docs/gui/spec.md` pour les prérequis backend, si besoin de contexte
 technique).
 
 ## Contexte produit
