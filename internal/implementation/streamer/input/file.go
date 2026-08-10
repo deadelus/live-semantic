@@ -19,11 +19,28 @@ var _ streamer.InputStream = (*FileInput)(nil)
 //
 // Local files were already proven working in this project (cmd/tracking-
 // drift, unrelated to this adapter but the same gocv.VideoCaptureFile
-// call). RTSP/HTTP are NOT tested end-to-end against a real network
-// stream as of this writing (no camera/stream available in this
-// environment) — FFmpeg is confirmed present in the local OpenCV build
-// (docs/gui/spec.md § 1.3), but that's not the same as a working RTSP
-// session over a real network.
+// call).
+//
+// RTSP verified end-to-end 2026-08-11 against a real (self-hosted, not
+// public) RTSP session: no public demo RTSP stream is reliable enough to
+// depend on (they rotate/go offline — confirmed by search, e.g. Wowza's
+// demo URL changes over time), so the repeatable way to test this is
+// self-hosting one locally — `brew install mediamtx`, run it, then loop
+// an existing repo asset into it over RTSP:
+//
+//	mediamtx &
+//	ffmpeg -re -stream_loop -1 -i assets/videos/car.mp4 -c copy -f rtsp rtsp://127.0.0.1:8554/car &
+//	# then point FileInput at rtsp://127.0.0.1:8554/car
+//
+// Confirmed working this way: 96 frames read over a 5s window, correct
+// 1280x720 dimensions, clean Cleanup(). FFmpeg logs a few "Missing
+// reference picture"/"mmco: unref short failure" warnings on connect —
+// expected (the client attaches mid-GOP on a live/looping H.264 stream,
+// not specific to this adapter), decoding recovers within the first few
+// frames. Not committed as an automated test: would need either a
+// vendored RTSP server binary or a live network dependency, neither
+// fits this project's existing test conventions — this doc comment is
+// the reproduction recipe instead.
 //
 // Known gap (docs/gui/spec.md § 1.3, § 4): no reconnection handling. A
 // local file simply ends (Read returns false, Start returns cleanly) —

@@ -387,8 +387,12 @@ Par ordre d'impact sur le planning :
 2. **Charge CPU réelle en multi-flux** — aucun EP GPU câblé, tout CPU.
    Latence par flux mesurée en solo (~180-320ms/cycle reanchor) à
    multiplier par le facteur de contention choisi en § 1.2.
-3. **RTSP réel non testé** — FFmpeg confirmé présent dans le build, mais
-   aucun flux RTSP testé bout-en-bout à ce jour.
+3. ~~RTSP réel non testé~~ — **résolu le 2026-08-11** (TODO.md § H1) :
+   `implementation/streamer/input.FileInput` testé bout-en-bout contre un
+   flux RTSP auto-hébergé (`mediamtx` + `ffmpeg` en boucle sur un asset du
+   repo, aucun flux public fiable disponible) — 96 frames lues, dimensions
+   correctes, cleanup propre. La reconnexion automatique sur coupure
+   réseau reste non implémentée (lacune documentée, pas testée).
 4. **WebRTC + NAT traversal** pour des sources non locales (caméras
    publiques) — STUN/TURN à prévoir, pas juste "WebRTC marche tout seul".
 5. **Dépendance externe `yt-dlp`** pour les flux YouTube — binaire non-Go
