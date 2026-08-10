@@ -75,7 +75,20 @@ Test end-to-end réel (webcam + crop YOLO + `EncodeImage`, TODO.md § A) suivi d
 
 **Piste non explorée, pour plus tard (TODO.md § A/F)** : la pratique standard CLIP zero-shot n'est pas "score ≥ seuil fixe" mais un score **relatif** entre plusieurs prompts candidats (softmax/argmax sur un ensemble de classes). Avec un seul filtre texte libre, il n'y a pas d'ensemble de classes à comparer — mais on pourrait comparer contre un prompt "négatif" générique (ex. "background", "something else") plutôt qu'un seuil absolu, ce qui serait probablement plus robuste que la calibration actuelle. Pas fait dans cette passe.
 
-## 8. Références
+## 8. Benchmark de latence (2026-08-10, TODO.md § F)
+
+CPU ARM (Apple Silicon, seul matériel disponible dans cette session — x86 non testé, à refaire si besoin). Outil jetable `cmd/perf-bench` (supprimé après usage), image fixe hors webcam (COCO, 640x480, 3 boîtes détectées : 2 "cat" + 1 "remote"), poids quantized, n=30 par mesure, après un appel de warm-up (coûts d'init paresseuse d'ORT/session écartés) :
+
+| Étape | Moyenne | Min-Max |
+|---|---|---|
+| `yolo11s.Detector.AnalyzeFrame` | ~182ms | 154-260ms |
+| `entities.Frame.Crop` | ~9µs | 1-48µs (zero-copy confirmé, négligeable) |
+| `clip.Encoder.EncodeImage` (par boîte) | ~46ms | 36-68ms |
+| `clip.Encoder.EncodeText` (1× par filtre, pas sur le chemin chaud) | ~23ms | 19-28ms |
+
+**YOLO reste le poste dominant, pas CLIP** — contrairement à une hypothèse non vérifiée avancée plus tôt dans cette session (TODO.md § A, item "piste écartée YOLO plus léger", corrigé). Le coût CLIP cumulé (N × ~46ms) ne dépasse celui de YOLO qu'à partir de ~4 boîtes candidates détectées sur une même frame. Estimation `reanchor()` à 3 boîtes : 182 + 3×46 ≈ 320ms, cohérent avec les 230-390ms mesurés en webcam réelle (§ 7).
+
+## 9. Références
 
 - Modèle original : [openai/clip-vit-base-patch32](https://huggingface.co/openai/clip-vit-base-patch32) (licence MIT, [openai/CLIP](https://github.com/openai/CLIP))
 - Export ONNX retenu : [Xenova/clip-vit-base-patch32](https://huggingface.co/Xenova/clip-vit-base-patch32)
