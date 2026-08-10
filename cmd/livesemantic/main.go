@@ -173,7 +173,10 @@ func main() {
 // implementation/streamer/output/websocket_output.go). Everything else is
 // shared regardless of mode.
 func initDependencies(webMode bool) (streamer.InputStream, streamer.OutputStream, notifier.AlertSender, inference.ObjectDetector, inference.SemanticEncoder, tracking.TrackerFactory, error) {
-	cameraInput := input.NewCameraInput()
+	// Device 0 hardcoded for now — configurable at the adapter level
+	// (TODO.md § H1), not yet exposed via CLI/REST (source selection is
+	// part of the GUI "Ajouter une source" flow, § H1 Multi-flux/H2).
+	cameraInput := input.NewCameraInput(0)
 
 	var streamingOutput streamer.OutputStream
 	if webMode {

@@ -1,37 +1,44 @@
-// Package input provides the implementation of the camera input stream.
+// Package input provides concrete streamer.InputStream adapters.
 package input
 
 import (
 	"fmt"
 	"live-semantic/internal/domain/entities"
-	"time"
+	"live-semantic/internal/infrastructure/streamer"
 
 	"gocv.io/x/gocv"
 )
 
+var _ streamer.InputStream = (*CameraInput)(nil)
+
+// CameraInput reads frames from a local USB/built-in webcam via OpenCV.
 type CameraInput struct {
+	device  int
 	camera  *gocv.VideoCapture
 	running bool
 }
 
-func NewCameraInput() *CameraInput {
-	return &CameraInput{
-		camera:  nil,
-		running: false,
-	}
+// NewCameraInput creates a CameraInput bound to the given device index
+// (0 is usually the default/built-in camera on most systems). Configurable
+// per TODO.md § H1 — previously hardcoded to 0 in this constructor itself.
+func NewCameraInput(device int) *CameraInput {
+	return &CameraInput{device: device}
 }
 
 // Initialize implements the Input.Initialize for CameraInput.
 func (ci *CameraInput) Initialize() error {
 	var err error
-	ci.camera, err = gocv.OpenVideoCapture(0)
+	ci.camera, err = gocv.OpenVideoCapture(ci.device)
 	if err != nil {
 		return err
 	}
 	return nil
 }
 
-// Start implements the Input.Start for CameraInput.
+// Start implements the Input.Start for CameraInput. Frames are mirrored
+// horizontally (raw webcam feed reads as "backwards" to the person facing
+// the camera) — see captureLoop's doc comment for why FileInput doesn't do
+// this.
 func (ci *CameraInput) Start(frameActionCallback func(*entities.Frame) (*entities.Frame, error)) error {
 	defer ci.Cleanup()
 
@@ -39,32 +46,7 @@ func (ci *CameraInput) Start(frameActionCallback func(*entities.Frame) (*entitie
 		return fmt.Errorf("camera not initialized")
 	}
 	ci.running = true
-	imgMat := gocv.NewMat()
-	defer imgMat.Close()
-	for ci.running {
-		ok := ci.camera.Read(&imgMat)
-		if !ok || imgMat.Empty() {
-			break
-		}
-		// Mirror horizontally: raw webcam feed isn't mirrored, which reads
-		// as "backwards" to the person facing the camera (TODO.md bug UX).
-		if err := gocv.Flip(imgMat, &imgMat, 1); err != nil {
-			fmt.Println("Warning: could not mirror frame:", err)
-		}
-		image, err := imgMat.ToImage()
-		if err != nil {
-			continue
-		}
-		frame := &entities.Frame{
-			Image:       image,
-			Timestamp:   time.Now(),
-			FrameNumber: 0, // Should increment if needed
-		}
-		outFrame, err := frameActionCallback(frame)
-		if err != nil || outFrame == nil {
-			ci.running = false
-		}
-	}
+	captureLoop(ci.camera, true, func() bool { return ci.running }, frameActionCallback)
 	return nil
 }
 
