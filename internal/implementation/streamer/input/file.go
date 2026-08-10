@@ -22,25 +22,25 @@ var _ streamer.InputStream = (*FileInput)(nil)
 // call).
 //
 // RTSP verified end-to-end 2026-08-11 against a real (self-hosted, not
-// public) RTSP session: no public demo RTSP stream is reliable enough to
-// depend on (they rotate/go offline — confirmed by search, e.g. Wowza's
-// demo URL changes over time), so the repeatable way to test this is
-// self-hosting one locally — `brew install mediamtx`, run it, then loop
-// an existing repo asset into it over RTSP:
+// public) RTSP session — see cmd/rtsp-smoke-test, a small kept-around dev
+// tool (not deleted after use, unlike most throwaway tools in this repo:
+// there's no automated test for RTSP, so rerunning this one is how a
+// future regression gets noticed). No public demo RTSP stream is reliable
+// enough to depend on (they rotate/go offline), hence self-hosting one —
+// full recipe in that tool's doc comment.
 //
-//	mediamtx &
-//	ffmpeg -re -stream_loop -1 -i assets/videos/car.mp4 -c copy -f rtsp rtsp://127.0.0.1:8554/car &
-//	# then point FileInput at rtsp://127.0.0.1:8554/car
-//
-// Confirmed working this way: 96 frames read over a 5s window, correct
-// 1280x720 dimensions, clean Cleanup(). FFmpeg logs a few "Missing
-// reference picture"/"mmco: unref short failure" warnings on connect —
-// expected (the client attaches mid-GOP on a live/looping H.264 stream,
-// not specific to this adapter), decoding recovers within the first few
-// frames. Not committed as an automated test: would need either a
-// vendored RTSP server binary or a live network dependency, neither
-// fits this project's existing test conventions — this doc comment is
-// the reproduction recipe instead.
+// Confirmed working across several runs: correct 1280x720 dimensions,
+// clean Cleanup(), zero errors. Frame *throughput* varies noticeably run
+// to run against a fresh `-re` (real-time paced) publisher — as low as a
+// handful of frames in the first 5s right after the publisher/server
+// (re)starts, closer to the source's real ~30fps (18-32fps measured) once
+// the RTSP session has stabilized a couple seconds in. FFmpeg logs a few
+// "Missing reference picture"/"mmco: unref short failure"/"co located
+// POCs unavailable" warnings on connect — expected (the client attaches
+// mid-GOP on a live/looping H.264 stream, not specific to this adapter).
+// Not committed as an automated test: would need either a vendored RTSP
+// server binary or a live network dependency, neither fits this
+// project's existing test conventions.
 //
 // Known gap (docs/gui/spec.md § 1.3, § 4): no reconnection handling. A
 // local file simply ends (Read returns false, Start returns cleanly) —

@@ -388,11 +388,15 @@ Par ordre d'impact sur le planning :
    Latence par flux mesurée en solo (~180-320ms/cycle reanchor) à
    multiplier par le facteur de contention choisi en § 1.2.
 3. ~~RTSP réel non testé~~ — **résolu le 2026-08-11** (TODO.md § H1) :
-   `implementation/streamer/input.FileInput` testé bout-en-bout contre un
-   flux RTSP auto-hébergé (`mediamtx` + `ffmpeg` en boucle sur un asset du
-   repo, aucun flux public fiable disponible) — 96 frames lues, dimensions
-   correctes, cleanup propre. La reconnexion automatique sur coupure
-   réseau reste non implémentée (lacune documentée, pas testée).
+   `implementation/streamer/input.FileInput` testé bout-en-bout via
+   `cmd/rtsp-smoke-test` (outil dev conservé, pas jetable — pas de test
+   automatisé possible pour RTSP) contre un flux auto-hébergé (`mediamtx` +
+   `ffmpeg` en boucle sur un asset du repo, aucun flux public fiable
+   disponible) — dimensions correctes, cleanup propre, zéro erreur sur
+   plusieurs runs ; débit variable d'un run à l'autre contre un publisher
+   fraîchement démarré (quelques frames à ~18-32 fps une fois la session
+   stabilisée). La reconnexion automatique sur coupure réseau reste non
+   implémentée (lacune documentée, pas testée).
 4. **WebRTC + NAT traversal** pour des sources non locales (caméras
    publiques) — STUN/TURN à prévoir, pas juste "WebRTC marche tout seul".
 5. **Dépendance externe `yt-dlp`** pour les flux YouTube — binaire non-Go
