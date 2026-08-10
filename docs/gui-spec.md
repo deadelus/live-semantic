@@ -6,6 +6,10 @@ implémenté** — à valider avant de coder quoi que ce soit. Écrit après
 vérification directe du code existant (pas de suppositions non marquées
 comme telles).
 
+Pour le brief produit/design à transmettre (écrans, interactions, décisions
+UX — sans les détails techniques backend ci-dessous), voir
+`docs/gui-design-brief.md`.
+
 ## 0. Décisions actées (cette passe, 2026-08-10)
 
 - Un seul backend Go, deux façades UI : web (React/Vue/etc., au choix du
