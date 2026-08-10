@@ -55,10 +55,24 @@ var (
 var yoloClasses = entities.Yolo11sClasses()
 
 // Detector represents the YOLOv11s neural implementation.
+//
+// session is a DynamicAdvancedSession (TODO.md § H1, docs/gui/spec.md §
+// 1.2) rather than an AdvancedSession with tensors fixed at construction:
+// AnalyzeFrame allocates fresh input/output tensors per call instead of
+// reusing struct-held ones. That fixed-tensor pattern was confirmed unsafe
+// under concurrent calls on a shared Detector (3/3 data races reproduced
+// with `go build -race`, docs/gui/spec.md § 1.2) — AnalyzeFrame writes
+// directly into the tensor's backing buffer (writeInput), so two
+// goroutines calling it on the same *Detector at once would corrupt each
+// other's input. DynamicAdvancedSession.Run(inputs, outputs []Value)
+// takes tensors per call instead, which is the thread-safety contract ORT
+// itself documents (microsoft/onnxruntime#114): Run() is safe on a shared
+// session as long as each call uses its own buffers. The session/model
+// weights are still loaded once and shared; only the small per-call
+// tensors (~7.5 Mo combined for YOLO at 640x640) are now allocated fresh.
+// Allocation cost per call not benchmarked yet (TODO.md § H1 follow-up).
 type Detector struct {
-	session      *ort.AdvancedSession
-	inputTensor  *ort.Tensor[float32]
-	outputTensor *ort.Tensor[float32]
+	session *ort.DynamicAdvancedSession
 }
 
 // New initializes the ONNX runtime for the YOLOv11s detector. By default it
@@ -85,53 +99,52 @@ func New(opts ...runtime.Option) (*Detector, error) {
 	}
 	defer sessionOptions.Destroy()
 
+	session, err := ort.NewDynamicAdvancedSession(
+		yolo11sModelPath,
+		[]string{"images"}, []string{"output0"},
+		sessionOptions,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("%w: %s: %v", domain.ErrModelInitialization, yolo11sModelPath, err)
+	}
+
+	return &Detector{
+		session: session,
+	}, nil
+}
+
+// AnalyzeFrame implements the ObjectDetector.AnalyzeFrame for Detector.
+// Allocates fresh input/output tensors for this call and destroys them
+// before returning — see Detector's doc comment for why (thread-safety
+// under concurrent calls, TODO.md § H1).
+func (d *Detector) AnalyzeFrame(frame *entities.Frame) (*inference.DetectionResult, error) {
+	originalBounds := frame.Image.Bounds()
+
 	inputTensor, err := ort.NewEmptyTensor[float32](ort.NewShape(
 		int64(batchSize), int64(modelInputChannels), int64(modelHeight), int64(modelWidth),
 	))
 	if err != nil {
 		return nil, fmt.Errorf("%w: %s: %v", domain.ErrModelInitialization, yolo11sModelPath, err)
 	}
+	defer inputTensor.Destroy()
 
 	outputTensor, err := ort.NewEmptyTensor[float32](ort.NewShape(
 		int64(batchSize), int64(modelClasses+4), int64(modelDetections), // 4 for bounding box coordinates
 	))
 	if err != nil {
-		inputTensor.Destroy()
 		return nil, fmt.Errorf("%w: %s: %v", domain.ErrModelInitialization, yolo11sModelPath, err)
 	}
+	defer outputTensor.Destroy()
 
-	session, err := ort.NewAdvancedSession(
-		yolo11sModelPath,
-		[]string{"images"}, []string{"output0"},
-		[]ort.Value{inputTensor}, []ort.Value{outputTensor},
-		sessionOptions,
-	)
-	if err != nil {
-		inputTensor.Destroy()
-		outputTensor.Destroy()
-		return nil, fmt.Errorf("%w: %s: %v", domain.ErrModelInitialization, yolo11sModelPath, err)
-	}
-
-	return &Detector{
-		session:      session,
-		inputTensor:  inputTensor,
-		outputTensor: outputTensor,
-	}, nil
-}
-
-// AnalyzeFrame implements the ObjectDetector.AnalyzeFrame for Detector.
-func (d *Detector) AnalyzeFrame(frame *entities.Frame) (*inference.DetectionResult, error) {
-	originalBounds := frame.Image.Bounds()
-
-	if err := d.writeInput(frame.Image); err != nil {
+	if err := writeInput(inputTensor.GetData(), frame.Image); err != nil {
 		return nil, err
 	}
 
-	if err := d.session.Run(); err != nil {
+	if err := d.session.Run([]ort.Value{inputTensor}, []ort.Value{outputTensor}); err != nil {
 		return nil, err
 	}
 
-	boxes := decodeDetections(d.outputTensor.GetData(), originalBounds)
+	boxes := decodeDetections(outputTensor.GetData(), originalBounds)
 
 	return &inference.DetectionResult{
 		Frame:         frame,
@@ -139,11 +152,12 @@ func (d *Detector) AnalyzeFrame(frame *entities.Frame) (*inference.DetectionResu
 	}, nil
 }
 
-// writeInput resizes img to the model's input dimensions and fills the input
-// tensor with normalized, channel-split (NCHW) RGB data.
-func (d *Detector) writeInput(img image.Image) error {
-	data := d.inputTensor.GetData()
-
+// writeInput resizes img to the model's input dimensions and fills data
+// (an input tensor's backing buffer) with normalized, channel-split
+// (NCHW) RGB data. Free function (not a *Detector method) since it no
+// longer touches any struct-held tensor — the caller owns the tensor's
+// lifetime now (TODO.md § H1).
+func writeInput(data []float32, img image.Image) error {
 	channelSize := modelHeight * modelWidth
 	if len(data) < channelSize*modelInputChannels {
 		return fmt.Errorf("input tensor only holds %d floats, needs %d (make sure it's the right shape!)", len(data), channelSize*modelInputChannels)
@@ -244,12 +258,8 @@ func (d *Detector) Cleanup() {
 	if d.session != nil {
 		d.session.Destroy()
 	}
-	if d.inputTensor != nil {
-		d.inputTensor.Destroy()
-	}
-	if d.outputTensor != nil {
-		d.outputTensor.Destroy()
-	}
+	// No struct-held input/output tensors to destroy anymore — AnalyzeFrame
+	// allocates and destroys its own per call (see Detector's doc comment).
 	if err := runtime.DestroyEnvironment(); err != nil {
 		fmt.Println("Warning: failed to destroy ORT environment:", err)
 	}

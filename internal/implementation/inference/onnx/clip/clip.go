@@ -61,16 +61,17 @@ var (
 // graph genuinely doesn't have one, confirming CLIP's original
 // eot-position pooling design doesn't need one here) -> text_embeds on the
 // text side. See docs/adr/clip-backend.md.
+// Encoder's two sessions are DynamicAdvancedSession (TODO.md § H1,
+// docs/gui/spec.md § 1.2), same rationale as yolo11s.Detector's doc
+// comment: EncodeImage/EncodeText allocate fresh tensors per call instead
+// of reusing struct-held ones, which were confirmed unsafe under
+// concurrent calls on a shared Encoder. Model weights still load once and
+// stay shared; only the small per-call tensors are allocated fresh.
 type Encoder struct {
 	tokenizer *tokenizer
 
-	visionSession *ort.AdvancedSession
-	visionInput   *ort.Tensor[float32]
-	visionOutput  *ort.Tensor[float32]
-
-	textSession  *ort.AdvancedSession
-	textInputIDs *ort.Tensor[int64]
-	textOutput   *ort.Tensor[float32]
+	visionSession *ort.DynamicAdvancedSession
+	textSession   *ort.DynamicAdvancedSession
 }
 
 // New initializes both CLIP ONNX sessions and the tokenizer.
@@ -93,82 +94,30 @@ func New(opts ...runtime.Option) (*Encoder, error) {
 	}
 	defer sessionOptions.Destroy()
 
-	visionSession, visionInput, visionOutput, err := newVisionSession(sessionOptions)
+	visionSession, err := ort.NewDynamicAdvancedSession(
+		visionModelPath,
+		[]string{"pixel_values"}, []string{"image_embeds"},
+		sessionOptions,
+	)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("%w: %s: %v", domain.ErrModelInitialization, visionModelPath, err)
 	}
 
-	textSession, textInputIDs, textOutput, err := newTextSession(sessionOptions)
+	textSession, err := ort.NewDynamicAdvancedSession(
+		textModelPath,
+		[]string{"input_ids"}, []string{"text_embeds"},
+		sessionOptions,
+	)
 	if err != nil {
 		visionSession.Destroy()
-		visionInput.Destroy()
-		visionOutput.Destroy()
-		return nil, err
+		return nil, fmt.Errorf("%w: %s: %v", domain.ErrModelInitialization, textModelPath, err)
 	}
 
 	return &Encoder{
 		tokenizer:     tok,
 		visionSession: visionSession,
-		visionInput:   visionInput,
-		visionOutput:  visionOutput,
 		textSession:   textSession,
-		textInputIDs:  textInputIDs,
-		textOutput:    textOutput,
 	}, nil
-}
-
-func newVisionSession(sessionOptions *ort.SessionOptions) (*ort.AdvancedSession, *ort.Tensor[float32], *ort.Tensor[float32], error) {
-	input, err := ort.NewEmptyTensor[float32](ort.NewShape(1, 3, imageSize, imageSize))
-	if err != nil {
-		return nil, nil, nil, fmt.Errorf("%w: %s: %v", domain.ErrModelInitialization, visionModelPath, err)
-	}
-
-	output, err := ort.NewEmptyTensor[float32](ort.NewShape(1, embeddingDim))
-	if err != nil {
-		input.Destroy()
-		return nil, nil, nil, fmt.Errorf("%w: %s: %v", domain.ErrModelInitialization, visionModelPath, err)
-	}
-
-	session, err := ort.NewAdvancedSession(
-		visionModelPath,
-		[]string{"pixel_values"}, []string{"image_embeds"},
-		[]ort.Value{input}, []ort.Value{output},
-		sessionOptions,
-	)
-	if err != nil {
-		input.Destroy()
-		output.Destroy()
-		return nil, nil, nil, fmt.Errorf("%w: %s: %v", domain.ErrModelInitialization, visionModelPath, err)
-	}
-
-	return session, input, output, nil
-}
-
-func newTextSession(sessionOptions *ort.SessionOptions) (*ort.AdvancedSession, *ort.Tensor[int64], *ort.Tensor[float32], error) {
-	inputIDs, err := ort.NewEmptyTensor[int64](ort.NewShape(1, contextLength))
-	if err != nil {
-		return nil, nil, nil, fmt.Errorf("%w: %s: %v", domain.ErrModelInitialization, textModelPath, err)
-	}
-
-	output, err := ort.NewEmptyTensor[float32](ort.NewShape(1, embeddingDim))
-	if err != nil {
-		inputIDs.Destroy()
-		return nil, nil, nil, fmt.Errorf("%w: %s: %v", domain.ErrModelInitialization, textModelPath, err)
-	}
-
-	session, err := ort.NewAdvancedSession(
-		textModelPath,
-		[]string{"input_ids"}, []string{"text_embeds"},
-		[]ort.Value{inputIDs}, []ort.Value{output},
-		sessionOptions,
-	)
-	if err != nil {
-		inputIDs.Destroy()
-		output.Destroy()
-		return nil, nil, nil, fmt.Errorf("%w: %s: %v", domain.ErrModelInitialization, textModelPath, err)
-	}
-
-	return session, inputIDs, output, nil
 }
 
 // EncodeImage implements SemanticEncoder.EncodeImage for Encoder. frame is
@@ -179,44 +128,66 @@ func (e *Encoder) EncodeImage(frame *entities.Frame) (entities.Embedding, error)
 		return nil, fmt.Errorf("clip: nil frame")
 	}
 
-	if err := e.writeImage(frame.Image); err != nil {
+	input, err := ort.NewEmptyTensor[float32](ort.NewShape(1, 3, imageSize, imageSize))
+	if err != nil {
+		return nil, fmt.Errorf("%w: %s: %v", domain.ErrModelInitialization, visionModelPath, err)
+	}
+	defer input.Destroy()
+
+	output, err := ort.NewEmptyTensor[float32](ort.NewShape(1, embeddingDim))
+	if err != nil {
+		return nil, fmt.Errorf("%w: %s: %v", domain.ErrModelInitialization, visionModelPath, err)
+	}
+	defer output.Destroy()
+
+	if err := writeImage(input.GetData(), frame.Image); err != nil {
 		return nil, err
 	}
 
-	if err := e.visionSession.Run(); err != nil {
+	if err := e.visionSession.Run([]ort.Value{input}, []ort.Value{output}); err != nil {
 		return nil, fmt.Errorf("clip: vision session run: %w", err)
 	}
 
-	return normalize(e.visionOutput.GetData()), nil
+	return normalize(output.GetData()), nil
 }
 
 // EncodeText implements SemanticEncoder.EncodeText for Encoder. Callers
 // should call this once per filter at startup, not per frame (TODO.md § A).
 func (e *Encoder) EncodeText(text string) (entities.Embedding, error) {
-	ids := e.tokenizer.Encode(text)
+	inputIDs, err := ort.NewEmptyTensor[int64](ort.NewShape(1, contextLength))
+	if err != nil {
+		return nil, fmt.Errorf("%w: %s: %v", domain.ErrModelInitialization, textModelPath, err)
+	}
+	defer inputIDs.Destroy()
 
-	inputData := e.textInputIDs.GetData()
+	output, err := ort.NewEmptyTensor[float32](ort.NewShape(1, embeddingDim))
+	if err != nil {
+		return nil, fmt.Errorf("%w: %s: %v", domain.ErrModelInitialization, textModelPath, err)
+	}
+	defer output.Destroy()
+
+	ids := e.tokenizer.Encode(text)
+	inputData := inputIDs.GetData()
 	for i, id := range ids {
 		inputData[i] = int64(id)
 	}
 
-	if err := e.textSession.Run(); err != nil {
+	if err := e.textSession.Run([]ort.Value{inputIDs}, []ort.Value{output}); err != nil {
 		return nil, fmt.Errorf("clip: text session run: %w", err)
 	}
 
-	return normalize(e.textOutput.GetData()), nil
+	return normalize(output.GetData()), nil
 }
 
 // writeImage resizes img the way CLIP's reference preprocessing does:
 // shortest side to imageSize, then center-crop to imageSize x imageSize
 // (preprocessor_config.json: do_resize + do_center_crop, both at 224) —
 // deliberately NOT a plain squash-resize to 224x224 (yolo11s.go's simpler
-// approach), which would distort aspect ratio. Fills the vision input
-// tensor with normalized (CLIP's own mean/std, not plain /255),
-// channel-split (NCHW) RGB data.
-func (e *Encoder) writeImage(img image.Image) error {
-	data := e.visionInput.GetData()
-
+// approach), which would distort aspect ratio. Fills data (a vision input
+// tensor's backing buffer) with normalized (CLIP's own mean/std, not plain
+// /255), channel-split (NCHW) RGB data. Free function (TODO.md § H1 — see
+// yolo11s.writeInput's doc comment for why).
+func writeImage(data []float32, img image.Image) error {
 	channelSize := imageSize * imageSize
 	if len(data) < channelSize*3 {
 		return fmt.Errorf("clip: input tensor only holds %d floats, needs %d", len(data), channelSize*3)
@@ -291,21 +262,12 @@ func (e *Encoder) Cleanup() {
 	if e.visionSession != nil {
 		e.visionSession.Destroy()
 	}
-	if e.visionInput != nil {
-		e.visionInput.Destroy()
-	}
-	if e.visionOutput != nil {
-		e.visionOutput.Destroy()
-	}
 	if e.textSession != nil {
 		e.textSession.Destroy()
 	}
-	if e.textInputIDs != nil {
-		e.textInputIDs.Destroy()
-	}
-	if e.textOutput != nil {
-		e.textOutput.Destroy()
-	}
+	// No struct-held input/output tensors to destroy anymore — EncodeImage/
+	// EncodeText allocate and destroy their own per call (see Encoder's doc
+	// comment).
 	// Same fix as yolo11s.Detector.Cleanup (see its doc comment / TODO.md
 	// bug critique SIGABRT) — required here too, independently: whichever
 	// of the two Cleanup()s runs first actually destroys the shared ORT
