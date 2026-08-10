@@ -22,14 +22,14 @@ LiveSemantic vise à analyser des flux vidéo en langage naturel ("person walkin
 | Détection | Cascade YOLO → crop → CLIP | YOLO11s seul, ONNX natif Go ✅ |
 | Tracking | Tracker visuel (KCF/CSRT/MOSSE) + agrégat `Track` | Absent |
 | Modes | Realtime + Batch fichiers | Realtime webcam ✅ — Batch absent |
-| Transport | CLI + Web API + WebSocket, même logique métier partout | CLI ✅ branchée sur le use case — Web API et WebSocket : squelettes non branchés |
+| Transport | CLI + Web API + WebSocket, même logique métier partout | CLI ✅ branchée sur le use case — Web API + WebSocket ✅ câblées (`-s`, un seul serveur gin, TODO.md § H1) mais **une seule session à la fois** (pas de multi-flux, pas d'auth) |
 | Observabilité | Métriques (latence, throughput, taux de match) | Logs structurés zap uniquement, pas de métriques |
 
 ### Architecture réelle
 
 ```
 ┌─────────────────────┐
-│     TRANSPORT       │  CLI (cobra) ✅, mode interactif ✅ — Web API (gin) et WebSocket : squelettes non branchés
+│     TRANSPORT       │  CLI (cobra) ✅, mode interactif ✅, Web API + WebSocket (gin, un seul serveur) ✅ — session unique, pas de multi-flux
 ├─────────────────────┤
 │  APPLICATION (uc)   │  UseCases.RecognitionUseCase ✅ — un seul use case, orchestre les ports
 ├─────────────────────┤
@@ -54,7 +54,7 @@ L'inversion de dépendance est réelle : `application/uc` ne dépend que d'inter
 - [ ] Mode batch fichiers vidéo
 - [ ] Tracking + agrégat `Track`
 - [ ] Cascade YOLO → crop → CLIP (matching sémantique en langage naturel)
-- [ ] API REST + WebSocket branchées sur la logique métier
+- [x] API REST + WebSocket branchées sur la logique métier (session unique, voir TODO.md § H1 — multi-flux pas encore fait)
 - [ ] Persistance, monitoring, conteneurisation
 
 ~2000 lignes de Go (hors vendor), couverture de tests quasi nulle (2 fichiers de test, dont 1 sans test réel exécuté).
@@ -152,19 +152,26 @@ go build -o livesemantic ./cmd/livesemantic
   --export-clips
 ```
 
-#### Web API / WebSocket Mode ⚠️ squelettes non fonctionnels
+#### Web API / WebSocket Mode ✅ câblées (session unique, TODO.md § H1)
 ```bash
-# Ces serveurs démarrent (-s / -w) mais ne routent vers AUCUN use case métier.
-# Les exemples curl/wscat ci-dessous ne fonctionneront pas tant que TODO.md
-# (branchement transport/adapters/api et transport/adapters/websocket sur RecognitionUseCase)
-# n'est pas fait.
-./livesemantic -s -p 8080   # web
-./livesemantic -w -p 8081   # websocket
+# Un seul serveur gin (-s) expose REST + WebSocket sur le même port — la
+# webcam locale unique, pas de multi-flux (TODO.md § H1 "Multi-flux").
+./livesemantic -s -p 8080
+
+curl -X POST http://localhost:8080/api/v1/recognition/start \
+  -H "Content-Type: application/json" \
+  -d '{"filter":"person","similarity_threshold":0.25}'
+
+curl http://localhost:8080/api/v1/recognition/status
+curl -X POST http://localhost:8080/api/v1/recognition/stop
+
+# Flux vidéo (frames JPEG annotées, boxes déjà dessinées) :
+# ws://localhost:8080/ws
 ```
 
 ## 🏗️ **Architecture (vision cible)**
 
-> ⚠️ Ceci décrit l'architecture visée pour l'ensemble des transports. L'architecture *réellement en place aujourd'hui* est décrite plus haut dans [État d'avancement](#-état-davancement-du-projet) — seule la CLI est branchée sur la logique métier, Web API et WebSocket sont des squelettes.
+> ⚠️ Ceci décrit l'architecture visée pour l'ensemble des transports. L'architecture *réellement en place aujourd'hui* est décrite plus haut dans [État d'avancement](#-état-davancement-du-projet) — CLI, Web API et WebSocket sont câblées sur la logique métier, mais Web/WebSocket ne supportent qu'une session à la fois (pas de multi-flux, TODO.md § H1).
 
 LiveSemantic follows Clean Architecture principles with transport-agnostic design:
 
@@ -228,14 +235,13 @@ live-semantic/
     │   ├── streamer/                 # camera (gocv) + window (gocv)
     │   ├── notifier/                 # log-notifier
     │   └── drawer/                   # dessin des bounding boxes
-    └── transport/                  # CLI (cobra + interactif) ✅, API (gin) et WebSocket ❌ squelettes
+    └── transport/                  # CLI (cobra + interactif) ✅, API+WebSocket (gin, un seul serveur) ✅
         ├── handlers/                # BaseHandler partagé par les transports
         ├── envelopes/               # TransportRequest/Response — enveloppe agnostique (Source, Context)
         └── adapters/                # Implémentations par canal
-            ├── api/
+            ├── api/                   # REST (recognition start/stop/status) + /ws (frames JPEG), un seul serveur
             ├── cli/
-            ├── cmd/
-            └── websocket/
+            └── cmd/
 ```
 
 ## 🔧 **Development**

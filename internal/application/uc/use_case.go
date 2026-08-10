@@ -16,6 +16,14 @@ import (
 // UseCases defines the interface for the use cases in the application.
 type UseCases interface {
 	RecognitionUseCase(ctx context.Context, req dto.RecognitionRequest) (dto.Result[dto.RecognitionResponse], error)
+	// Stop halts the currently running RecognitionUseCase call, if any —
+	// see uc_control.go. H1 minimal scope (TODO.md § H1): a single shared
+	// UseCase serves one recognition session at a time (streamingInput/
+	// streamingOutput are fields set once at construction, not per-call);
+	// the caller (transport/adapters/api) is responsible for not starting
+	// a second session concurrently. Revisit once multi-flux gives each
+	// session its own UseCase/InputStream.
+	Stop()
 }
 
 // useCase implements the UseCases interface.

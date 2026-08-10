@@ -7,20 +7,19 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
-// setupRoutes configure les routes
+// setupRoutes configure les routes REST et WebSocket.
 func (s *Server) setupRoutes() {
-	// Health check
 	s.router.GET("/health", s.healthCheck)
 
-	// API routes
-	api := s.router.Group("/api/v1")
+	// Video stream: annotated JPEG frames, one binary WS message per
+	// rendered frame (H1 minimal scope — see websocket.go/websocket_output.go).
+	s.router.GET("/ws", s.handleWebSocket)
+
+	v1 := s.router.Group("/api/v1")
 	{
-		api.GET("/realtime-analysis", func(c *gin.Context) {
-			// Handle realtime analysis request
-			// This should call the RealtimeAnalysisUseCase method from the useCases
-			c.JSON(http.StatusOK, gin.H{"message": "Realtime analysis endpoint"})
-		})
-		// Add more routes as needed
+		v1.POST("/recognition/start", s.recognition.start)
+		v1.POST("/recognition/stop", s.recognition.stop)
+		v1.GET("/recognition/status", s.recognition.status)
 	}
 }
 

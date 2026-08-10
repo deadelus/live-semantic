@@ -17,7 +17,6 @@ import (
 	"live-semantic/internal/transport/adapters/api"
 	"live-semantic/internal/transport/adapters/cli"
 	"live-semantic/internal/transport/adapters/cmd"
-	"live-semantic/internal/transport/adapters/websocket"
 	"os"
 	"runtime"
 	"syscall"
@@ -29,8 +28,7 @@ import (
 )
 
 const (
-	defaultWebPort       = 8080
-	defaultWebsocketPort = 8081
+	defaultWebPort = 8080
 )
 
 func main() {
@@ -54,8 +52,12 @@ func main() {
 	// 2026-08-10 while testing the CLIP semantic gate end-to-end: `recognition
 	// --filter person` never even reached RecognitionUseCase).
 	pflag.CommandLine.ParseErrorsWhitelist.UnknownFlags = true
-	web := pflag.BoolP("web", "s", false, "Start the web server (API mode)")
-	ws := pflag.BoolP("websocket", "w", false, "Start the WebSocket server")
+	// -s/--web starts the unified backend (H1, TODO.md § H1): REST control
+	// + WebSocket video on one server/one port — see
+	// internal/transport/adapters/api. The previous standalone
+	// -w/--websocket flag/mode is gone: it ran on a separate port with no
+	// way to share a session with the REST side, which the GUI needs.
+	web := pflag.BoolP("web", "s", false, "Start the unified web backend (REST control + WebSocket video)")
 	interactive := pflag.BoolP("interactive", "i", false, "Start in interactive mode")
 	port := pflag.IntP("port", "p", 0, "Port to use for the server")
 	pflag.Parse()
@@ -74,7 +76,7 @@ func main() {
 		options = append(options, application.AppName(appName))
 	}
 
-	isCliMode := !*web && !*ws && !*interactive
+	isCliMode := !*web && !*interactive
 	if isCliMode {
 		// Console-friendly logger for CLI mode, also teed to logs/livesemantic.log
 		// (withFileLogging, cmd/livesemantic/logging.go — not the vendored
@@ -101,7 +103,10 @@ func main() {
 		},
 	)
 
-	streamingInput, windowOutput, notifier, objectDetector, semanticEncoder, trackerFactory, err := initDependencies()
+	// Output adapter is mode-dependent: a GoCV window makes no sense
+	// headless (web mode), and a WebSocket broadcaster has no window to
+	// draw for CLI/interactive mode. See initDependencies's doc comment.
+	streamingInput, streamingOutput, notifier, objectDetector, semanticEncoder, trackerFactory, err := initDependencies(*web)
 	if err != nil {
 		engine.Logger().Error("Failed to initialize dependencies", err)
 		return
@@ -132,7 +137,7 @@ func main() {
 		return nil
 	})
 
-	useCases, err := uc.NewUseCase(engine.Context(), engine.Logger(), streamingInput, windowOutput, notifier, objectDetector, semanticEncoder, trackerFactory)
+	useCases, err := uc.NewUseCase(engine.Context(), engine.Logger(), streamingInput, streamingOutput, notifier, objectDetector, semanticEncoder, trackerFactory)
 	if err != nil {
 		engine.Logger().Error("Failed to create use cases", err)
 		return
@@ -143,11 +148,18 @@ func main() {
 	// Decide which mode to start based on flags
 	switch {
 	case *web:
+		// initDependencies(true) always returns a *output.WebSocketOutput
+		// in this branch — asserted here (rather than threading the
+		// concrete type through NewUseCase's interface-typed parameter)
+		// so the api.Server can register WebSocket clients against the
+		// exact instance RecognitionUseCase renders to.
+		wsOutput, ok := streamingOutput.(*output.WebSocketOutput)
+		if !ok {
+			engine.Logger().Error("Web mode requires a WebSocketOutput, got something else", nil)
+			return
+		}
 		serverPort := determinePort(*port, defaultWebPort)
-		startWebServer(engine, useCases, serverPort)
-	case *ws:
-		serverPort := determinePort(*port, defaultWebsocketPort)
-		startWebsocketServer(engine, useCases, serverPort)
+		startWebServer(engine, useCases, wsOutput, serverPort)
 	case *interactive:
 		startInteractiveMode(engine, useCases)
 	default:
@@ -155,9 +167,20 @@ func main() {
 	}
 }
 
-func initDependencies() (streamer.InputStream, streamer.OutputStream, notifier.AlertSender, inference.ObjectDetector, inference.SemanticEncoder, tracking.TrackerFactory, error) {
+// initDependencies wires the concrete adapters. webMode picks the output
+// adapter: a GoCV window (CLI/interactive, a local process with a display)
+// or a WebSocketOutput broadcaster (web, headless server — see
+// implementation/streamer/output/websocket_output.go). Everything else is
+// shared regardless of mode.
+func initDependencies(webMode bool) (streamer.InputStream, streamer.OutputStream, notifier.AlertSender, inference.ObjectDetector, inference.SemanticEncoder, tracking.TrackerFactory, error) {
 	cameraInput := input.NewCameraInput()
-	windowOutput := output.NewWindowOutput()
+
+	var streamingOutput streamer.OutputStream
+	if webMode {
+		streamingOutput = output.NewWebSocketOutput()
+	} else {
+		streamingOutput = output.NewWindowOutput()
+	}
 
 	logNotifier := lognotifier.NewLogNotifier()
 	objectDetector, err := yolo11s.New()
@@ -184,7 +207,7 @@ func initDependencies() (streamer.InputStream, streamer.OutputStream, notifier.A
 		return gocvtracker.New(gocvtracker.KCF)
 	}
 
-	return cameraInput, windowOutput, logNotifier, objectDetector, semanticEncoder, trackerFactory, nil
+	return cameraInput, streamingOutput, logNotifier, objectDetector, semanticEncoder, trackerFactory, nil
 }
 
 func determinePort(flagPort, defaultPort int) int {
@@ -218,30 +241,17 @@ func startCLIMode(engine *application.Engine, useCases uc.UseCases) {
 	cmd.Execute(useCases, engine.Logger())
 }
 
-// startWebServer starts the web server in API mode
-func startWebServer(engine *application.Engine, useCases uc.UseCases, port int) {
-	engine.Logger().Info("🌐 Starting in Web API mode", map[string]interface{}{
+// startWebServer starts the unified REST + WebSocket backend (H1,
+// TODO.md § H1). wsOutput is registered as the server's FrameBroadcaster
+// so /ws clients receive the frames RecognitionUseCase renders to it.
+func startWebServer(engine *application.Engine, useCases uc.UseCases, wsOutput *output.WebSocketOutput, port int) {
+	engine.Logger().Info("🌐 Starting in Web mode (REST + WebSocket)", map[string]interface{}{
 		"port": port,
 	})
 
-	server := api.NewServer(useCases, engine.Logger(), port)
+	server := api.NewServer(useCases, wsOutput, engine.Logger(), port)
 	if err := server.Start(); err != nil {
 		engine.Logger().Error("Web server failed", map[string]interface{}{
-			"error": err.Error(),
-		})
-		os.Exit(1)
-	}
-}
-
-// startWebsocketServer starts the WebSocket server
-func startWebsocketServer(engine *application.Engine, useCases uc.UseCases, port int) {
-	engine.Logger().Info("🔗 Starting in WebSocket mode", map[string]interface{}{
-		"port": port,
-	})
-
-	server := websocket.NewServer(useCases, engine.Logger(), port)
-	if err := server.Start(); err != nil {
-		engine.Logger().Error("WebSocket server failed", map[string]interface{}{
 			"error": err.Error(),
 		})
 		os.Exit(1)
