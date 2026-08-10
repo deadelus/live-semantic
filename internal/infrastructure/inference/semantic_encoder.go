@@ -2,9 +2,11 @@ package inference
 
 import "live-semantic/internal/domain/entities"
 
-// SemanticEncoder is the port for semantic feature extraction (e.g. CLIP),
-// the cascade step run after ObjectDetector crops a bounding box (TODO.md
-// § A: YOLO → crop → CLIP). No implementation exists yet.
+// SemanticEncoder is the port for semantic feature extraction (CLIP), the
+// cascade step run after ObjectDetector crops a bounding box (TODO.md § A:
+// YOLO → crop → CLIP). Implemented by implementation/inference/onnx/clip
+// (same fallback-order intent as ObjectDetector, see detector.go's package
+// doc — only the native ONNX Go binding tier exists today).
 type SemanticEncoder interface {
 	// EncodeImage returns the embedding for a frame region (typically a
 	// crop of a detected bounding box, not the full frame).
