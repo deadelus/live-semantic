@@ -245,7 +245,12 @@ func (m *trackManager) reanchor(frame *entities.Frame, req dto.RecognitionReques
 		//
 		// This is real per-detection cost (crop + one CLIP image encode)
 		// at reanchor cadence — not per video frame, but not free either.
-		// Not benchmarked yet (TODO.md § F).
+		// Measured 2026-08-10: ~46ms/box, see docs/adr/clip-backend.md § 8.
+		//
+		// score is kept (not discarded after the threshold check) to thread
+		// onto the TrackEvent below — emit() needs the actual CLIP score
+		// that decided this match, not YOLO's box.Confidence (TODO.md § A).
+		var score float32
 		if m.filterEmbedding != nil {
 			crop, ok := frame.Crop(box)
 			if !ok {
@@ -256,14 +261,15 @@ func (m *trackManager) reanchor(frame *entities.Frame, req dto.RecognitionReques
 				m.uc.logger.Info("Semantic encode failed", map[string]interface{}{"error": err.Error()})
 				continue
 			}
-			if cosineSimilarity(embedding, m.filterEmbedding) < req.SimilarityThreshold {
+			score = cosineSimilarity(embedding, m.filterEmbedding)
+			if score < req.SimilarityThreshold {
 				continue
 			}
 		}
 
 		if id, ok := m.bestMatch(box, matchedTrackIDs); ok {
 			obj := m.active[id]
-			evt := obj.track.MatchDetection(box, now)
+			evt := obj.track.MatchDetection(box, now, score)
 			// Re-anchor the tracker itself on the fresh detection to wipe
 			// out any drift accumulated since the last re-detection.
 			if err := obj.tracker.Init(frame, box); err != nil {
@@ -385,14 +391,16 @@ func (m *trackManager) emit(obj *trackedObject, evt *entities.TrackEvent, req dt
 	}
 	obj.lastNotifiedAt = now
 
-	// Confidence here is YOLO's own detection confidence, not the CLIP
-	// similarity score that actually decided this track passed the
-	// semantic gate — the score isn't threaded through TrackEvent/Track
-	// today. Known simplification, not fixed in this pass (TODO.md § A).
-	box := evt.Track.LastBox()
+	// evt.Score is the CLIP similarity that actually decided this match
+	// (TODO.md § A, fixed 2026-08-10 — this used to report YOLO's own
+	// box.Confidence, which isn't what decided whether this event
+	// happened at all once the semantic gate replaced label matching).
+	// Guaranteed meaningful here: reaching this point already required
+	// filter != "" above, so m.filterEmbedding was non-nil when this
+	// event's underlying MatchDetection call computed the score.
 	if err := m.uc.notifier.Notify(entities.Message{
 		MatchedFilter: filter,
-		Confidence:    box.Confidence,
+		Confidence:    evt.Score,
 	}); err != nil {
 		m.uc.logger.Info("Notify failed", map[string]interface{}{"error": err.Error()})
 	}

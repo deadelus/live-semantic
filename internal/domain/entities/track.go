@@ -75,6 +75,15 @@ func (e TrackEventType) String() string {
 type TrackEvent struct {
 	Type  TrackEventType
 	Track *Track
+
+	// Score is the semantic match score (CLIP cosine similarity, TODO.md
+	// § A) that led to this event, when applicable — set by MatchDetection,
+	// 0 for events that don't stem from a semantic match (EventTrackLost,
+	// or a match made with no filter active, i.e. no CLIP score was ever
+	// computed for it). Added 2026-08-10: alerts (application/uc.emit)
+	// used to report the detector's own box.Confidence here instead, which
+	// isn't the score that actually decided whether this event happened.
+	Score float32
 }
 
 // Tuning constants for the state machine.
@@ -132,10 +141,14 @@ func NewTrack(id string, box BoundingBox, at time.Time) *Track {
 
 // MatchDetection records a fresh detection that was IoU-associated to this
 // track (§ B re-anchoring). Resets the miss streak; once enough consecutive
-// hits accumulate, promotes StateTentative → StateConfirmed. Returns the
-// TrackEvent to alert on, or nil if the match didn't change anything worth
-// alerting on (e.g. still Tentative, not enough hits yet).
-func (t *Track) MatchDetection(box BoundingBox, at time.Time) *TrackEvent {
+// hits accumulate, promotes StateTentative → StateConfirmed. score is the
+// semantic match score (CLIP cosine similarity) that led to this
+// association, if any (0 when no filter was active) — threaded onto the
+// returned TrackEvent, not stored on the box itself (BoundingBox stays a
+// generic domain type, not CLIP-specific). Returns the TrackEvent to alert
+// on, or nil if the match didn't change anything worth alerting on (e.g.
+// still Tentative, not enough hits yet).
+func (t *Track) MatchDetection(box BoundingBox, at time.Time, score float32) *TrackEvent {
 	wasTentative := t.State == StateTentative
 	wasCoasting := t.State == StateCoasting
 
@@ -147,14 +160,14 @@ func (t *Track) MatchDetection(box BoundingBox, at time.Time) *TrackEvent {
 	switch {
 	case wasTentative && t.hits >= minHitsToConfirm:
 		t.State = StateConfirmed
-		return &TrackEvent{Type: EventTrackEntered, Track: t}
+		return &TrackEvent{Type: EventTrackEntered, Track: t, Score: score}
 	case wasTentative:
 		return nil
 	case wasCoasting:
 		t.State = StateConfirmed
-		return &TrackEvent{Type: EventTrackMatched, Track: t}
+		return &TrackEvent{Type: EventTrackMatched, Track: t, Score: score}
 	default:
-		return &TrackEvent{Type: EventTrackMatched, Track: t}
+		return &TrackEvent{Type: EventTrackMatched, Track: t, Score: score}
 	}
 }
 

@@ -31,7 +31,7 @@ func TestNewTrackStartsTentative(t *testing.T) {
 // MatchDetection calls (NewTrack already counts as hit #1).
 func confirm(tr *Track, now time.Time) {
 	for i := 0; i < minHitsToConfirm-1; i++ {
-		tr.MatchDetection(newTestBox(tr.Class), now)
+		tr.MatchDetection(newTestBox(tr.Class), now, 0)
 	}
 }
 
@@ -41,7 +41,7 @@ func TestMatchDetectionPromotesToConfirmedAfterMinHits(t *testing.T) {
 
 	var lastEvent *TrackEvent
 	for i := 0; i < minHitsToConfirm-2; i++ {
-		lastEvent = tr.MatchDetection(newTestBox("person"), now)
+		lastEvent = tr.MatchDetection(newTestBox("person"), now, 0)
 		if lastEvent != nil {
 			t.Fatalf("hit %d: unexpected event %v, want nil (still below minHitsToConfirm)", i+1, lastEvent.Type)
 		}
@@ -50,7 +50,7 @@ func TestMatchDetectionPromotesToConfirmedAfterMinHits(t *testing.T) {
 		}
 	}
 
-	lastEvent = tr.MatchDetection(newTestBox("person"), now)
+	lastEvent = tr.MatchDetection(newTestBox("person"), now, 0)
 	if lastEvent == nil || lastEvent.Type != EventTrackEntered {
 		t.Fatalf("final hit: event = %v, want EventTrackEntered", lastEvent)
 	}
@@ -67,7 +67,7 @@ func TestConfirmedTrackMatchEmitsTrackMatched(t *testing.T) {
 		t.Fatalf("precondition failed: State = %v, want StateConfirmed", tr.State)
 	}
 
-	evt := tr.MatchDetection(newTestBox("person"), now)
+	evt := tr.MatchDetection(newTestBox("person"), now, 0)
 	if evt == nil || evt.Type != EventTrackMatched {
 		t.Fatalf("event = %v, want EventTrackMatched", evt)
 	}
@@ -93,7 +93,7 @@ func TestMatchDetectionRecoversFromCoasting(t *testing.T) {
 	confirm(tr, now)
 	tr.Coast(newTestBox("person"), now)
 
-	evt := tr.MatchDetection(newTestBox("person"), now)
+	evt := tr.MatchDetection(newTestBox("person"), now, 0)
 	if evt == nil || evt.Type != EventTrackMatched {
 		t.Fatalf("event = %v, want EventTrackMatched", evt)
 	}
@@ -154,9 +154,26 @@ func TestMatchDetectionResetsMissStreak(t *testing.T) {
 		t.Fatalf("precondition failed: misses = %d, want 2", tr.misses)
 	}
 
-	tr.MatchDetection(newTestBox("person"), now)
+	tr.MatchDetection(newTestBox("person"), now, 0)
 	if tr.misses != 0 {
 		t.Errorf("misses = %d, want 0 after MatchDetection", tr.misses)
+	}
+}
+
+func TestMatchDetectionThreadsScoreOntoEvent(t *testing.T) {
+	now := time.Now()
+	tr := NewTrack("t1", newTestBox("person"), now)
+	confirm(tr, now)
+	if tr.State != StateConfirmed {
+		t.Fatalf("precondition failed: State = %v, want StateConfirmed", tr.State)
+	}
+
+	evt := tr.MatchDetection(newTestBox("person"), now, 0.31)
+	if evt == nil {
+		t.Fatal("event = nil, want EventTrackMatched")
+	}
+	if evt.Score != 0.31 {
+		t.Errorf("Score = %v, want 0.31", evt.Score)
 	}
 }
 
@@ -164,7 +181,7 @@ func TestLastBox(t *testing.T) {
 	now := time.Now()
 	tr := NewTrack("t1", newTestBox("person"), now)
 	second := BoundingBox{Label: "person", X1: 5, Y1: 5, X2: 15, Y2: 15}
-	tr.MatchDetection(second, now)
+	tr.MatchDetection(second, now, 0)
 
 	got := tr.LastBox()
 	if got != second {
