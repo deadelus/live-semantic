@@ -199,6 +199,29 @@ en extraire un crop de la frame courante, l'encoder, l'ajouter à la
 galerie. À concevoir comme un nouveau cas d'usage ou une extension de
 `RecognitionUseCase`, pas bricolé dans le transport.
 
+### 1.5bis Pause/reprise + buffer de rewind sur la Vue live (ajouté 2026-08-10, feature métier, effort M)
+
+Demandé dans `docs/gui-design-brief.md` : pause/reprise de la lecture côté
+client, et retour en arrière sur les N dernières secondes/minutes (durée
+configurable par l'utilisateur), sans couper le flux réel qui continue
+tourner en arrière-plan (la détection/tracking ne doit pas se mettre en
+pause juste parce que l'utilisateur regarde en arrière).
+
+C'est le même besoin technique que le "V2 ring buffer des ~15 dernières
+frames" déjà noté dans `TODO.md` § C (à l'origine pensé pour laisser le
+tracker rattraper un décalage, pas pour un usage utilisateur) — même
+mécanisme, deux usages différents, à concevoir ensemble plutôt que deux
+fois séparément.
+
+Coût réel à chiffrer avant de promettre une durée par défaut : un tampon
+glissant de N secondes × FPS × taille de frame, par flux actif. Pour une
+frame JPEG compressée (raisonnable pour du replay, pas besoin du flux brut
+non compressé) à 640×480 environ ~30-80 Ko/frame selon la compression ; à
+15 fps sur 30 secondes ça fait déjà ~15-35 Mo par flux, multiplié par le
+nombre de flux actifs en multi-caméra (§ 1.2) — pas négligeable si
+plusieurs flux gardent chacun un long historique. Non mesuré, à valider
+avant de fixer une durée par défaut dans l'UI.
+
 ### 1.6 Execution Provider GPU (optionnel, mais pertinent si charge multi-flux élevée)
 
 `runtime.WithCUDA()`/`WithTensorRT()`/`WithOpenVINO()` existent déjà côté
@@ -251,12 +274,18 @@ pas seulement un sombre par défaut.
     (framerate normal, boxes, scores, contrôles). La vue onglets devient
     la vue active par défaut après un clic depuis la mosaïque ;
     retour manuel à la mosaïque possible ensuite.
-- **Implication transport (§ 2)** : ça veut dire deux qualités de flux
-  distinctes à servir depuis le backend, pas une seule — un flux "preview"
-  léger (1 fps, pas de boxes, pour toutes les tuiles de la mosaïque en
-  simultané) et un flux "complet" (framerate normal, boxes+score, pour
-  l'onglet actif uniquement). Pas encore reflété dans la table § 2 —
-  à faire quand le protocole WS sera conçu en détail (§ 1.1).
+- **Implication transport (§ 2), revue le 2026-08-10** : `docs/gui-design-brief.md`
+  précise que la qualité de la mosaïque doit être **réglable par
+  l'utilisateur** (FPS plus élevé + boxes visibles sur les tuiles, ex.
+  pour surveiller 4 caméras à la fois), pas juste un mode "preview" fixe à
+  1 fps. Ça veut dire que le protocole WS ne peut pas être conçu comme
+  deux tiers figés (preview vs complet) — il faut un abonnement par flux
+  avec des paramètres ajustables (fps cible, inclure ou non les boxes),
+  la vue onglet n'étant qu'un cas particulier avec les paramètres au
+  maximum. Revoir la table § 2 dans ce sens avant implémentation. Latence
+  attendue et dépendante du matériel côté serveur (charge CPU, § 1.2/1.6)
+  si plusieurs tuiles montent leur FPS en simultané — l'UI doit exposer
+  ce compromis à l'utilisateur, pas le cacher.
 - Statut par source : connecté / déconnecté / erreur / reconnexion en
   cours — visible aussi bien en vue liste qu'en vue mosaïque (badge sur la
   tuile / sur la ligne). Reconnexion automatique pour les sources réseau
