@@ -164,7 +164,7 @@ adaptateurs dans `internal/implementation/streamer/`.
   tout seul" en pair-à-pair direct. À prévoir dans l'estimation d'effort.
 - **Fichier vidéo local** (effort XS, **déjà prouvé dans ce projet**) :
   `gocv.VideoCaptureFile(path)` sur un fichier local est déjà utilisé et
-  fonctionnel — `cmd/tracking-drift/main.go:96`, le test de dérive
+  fonctionnel — `cmd/tracking-drift-bench/main.go:96`, le test de dérive
   KCF/CSRT tourne dessus depuis `TODO.md` § B. Il manque juste un
   adaptateur `InputStream` propre (aujourd'hui c'est un outil jetable
   headless, pas un port), pas de risque technique résiduel.

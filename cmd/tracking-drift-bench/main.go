@@ -1,7 +1,15 @@
-// Command tracking-drift is a throwaway dev tool (not part of the shipped
+// Command tracking-drift-bench is a dev tool (not part of the shipped
 // application) to run the drift test called for in TODO.md § B: compare
 // KCF vs CSRT (docs/adr/object-tracking.md) on real footage, headless (no
 // window — this environment has no display).
+//
+// Named -bench, not -smoke-test (cf. cmd/rtsp-smoke-test): this one
+// produces a quality metric (IoU drift) to compare two algorithms and
+// inform a decision, not a pass/fail connectivity check. Kept in the repo
+// after that decision was made (KCF, docs/adr/object-tracking.md § 7-8) in
+// case it's ever revisited with new footage or a third algorithm — most
+// other one-off dev tools in this project's history were deleted once
+// their result was written down (see TODO.md for several).
 //
 // Methodology: track a single object across the video using the tracker
 // alone, re-anchoring against a fresh YOLO detection every -interval
@@ -13,8 +21,8 @@
 //
 // Usage:
 //
-//	go run ./cmd/tracking-drift -video assets/videos/car.mp4 -class car
-//	go run ./cmd/tracking-drift -video assets/videos/person.mp4 -class person
+//	go run ./cmd/tracking-drift-bench -video assets/videos/car.mp4 -class car
+//	go run ./cmd/tracking-drift-bench -video assets/videos/person.mp4 -class person
 package main
 
 import (
@@ -227,7 +235,7 @@ func main() {
 	flag.Parse()
 
 	if *videoPath == "" {
-		fmt.Fprintln(os.Stderr, "usage: tracking-drift -video <path> [-class <label>] [-interval <n>]")
+		fmt.Fprintln(os.Stderr, "usage: tracking-drift-bench -video <path> [-class <label>] [-interval <n>]")
 		os.Exit(2)
 	}
 

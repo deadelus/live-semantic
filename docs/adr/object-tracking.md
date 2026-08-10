@@ -96,7 +96,7 @@ l'item "Intégrer un tracker mono-objet gocv".
 
 ## 7. Résultats du test de dérive (2026-08-09)
 
-Outil : `cmd/tracking-drift` (headless, pas de fenêtre — voir godoc du
+Outil : `cmd/tracking-drift-bench` (headless, pas de fenêtre — voir godoc du
 fichier pour la méthodologie complète). Principe : suivre un objet unique
 avec le tracker seul entre deux re-détections YOLO, mesurer l'IoU entre la
 position du tracker et la re-détection fraîche à chaque point de contrôle

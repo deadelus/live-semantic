@@ -46,7 +46,7 @@ func init() {
 // confirmed via `sample`: on a real webcam frame with someone standing
 // close to the camera (large bounding box), denseGaussKernel/getSubWindow
 // alone cost 150-200ms/frame even with OpenCL disabled — 20-40x the 2-9ms
-// seen on cmd/tracking-drift's test footage (smaller, farther subjects).
+// seen on cmd/tracking-drift-bench's test footage (smaller, farther subjects).
 // Downscaling before tracking (standard practice in real-time CV — track
 // on a cheap proxy, scale the result back up) trades a little geometric
 // precision for a roughly quadratic reduction in FFT cost.

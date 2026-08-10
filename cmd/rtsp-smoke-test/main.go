@@ -4,7 +4,7 @@
 // for this to be verified end-to-end, not just assumed to work because
 // FFmpeg is present in the OpenCV build.
 //
-// Unlike cmd/tracking-drift, this one is kept in the repo rather than
+// Unlike cmd/tracking-drift-bench, this one is kept in the repo rather than
 // deleted after a single use: RTSP is the kind of thing that's cheap to
 // regress silently (a gocv/FFmpeg upgrade, a URI-handling refactor in
 // FileInput) and there's no automated test for it — see FileInput's doc

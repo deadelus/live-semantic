@@ -6,7 +6,7 @@ import (
 )
 
 // sampleVideo is a small real asset already shipped in the repo
-// (originally added for cmd/tracking-drift, TODO.md § B) — reused here
+// (originally added for cmd/tracking-drift-bench, TODO.md § B) — reused here
 // rather than requiring a network stream or hardware camera, neither of
 // which are available in a test environment. Path is relative to this
 // package's directory, which is `go test`'s working directory.
