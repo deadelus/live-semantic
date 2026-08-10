@@ -52,33 +52,64 @@ aujourd'hui. Seul le CLI (`internal/transport/adapters/cli` /
   plusieurs instances concurrentes adressables par ID (une par onglet/flux,
   § 1.2).
 
-### 1.2 Concurrence multi-flux (bloquant pour le multiplex demandé, effort L — le plus gros morceau)
+### 1.2 Concurrence multi-flux (bloquant pour le multiplex demandé) — **investigué et résolu le 2026-08-10**
 
-**Risque confirmé, pas hypothétique** (vérifié dans le code le
-2026-08-10) : `yolo11s.Detector` et `clip.Encoder` réutilisent chacun un
-tenseur d'entrée et de sortie **fixes** par instance
-(`internal/implementation/inference/onnx/yolo11s/yolo11s.go:59-61`,
-`internal/implementation/inference/onnx/clip/clip.go:67-73`). Deux appels
-concurrents à `AnalyzeFrame`/`EncodeImage` sur la **même instance** depuis
-deux flux différents écriraient/liraient le même buffer en même temps —
-corruption de données garantie, pas juste un risque théorique.
+**Risque confirmé par un test réel** (outil jetable
+`cmd/onnx-concurrency-test`, supprimé après usage, compilé avec `-race`,
+2 runs) : `yolo11s.Detector` (et par le même motif `clip.Encoder`)
+réutilisent chacun un tenseur d'entrée/sortie **fixes** par instance
+(`yolo11s.go:59-61`, `clip.go:67-73`). Appeler `AnalyzeFrame` concurremment
+sur la **même instance** depuis 8 goroutines a produit **3 data races
+confirmées par le détecteur Go** (écritures concurrentes dans
+`writeInput()` sur le buffer du tenseur d'entrée partagé) — pas une
+supposition, un résultat de `go build -race` reproduit 2/2.
 
-Le binding `onnxruntime_go` lui-même ne documente aucune garantie de
-thread-safety sur `Run()` (vérifié : aucune mention concurrence/thread
-dans le code source du module). **Non vérifié empiriquement** — à tester
-avec `-race` et un vrai harness multi-goroutines avant de trancher.
+**Solution trouvée, testée, et confirmée correcte** : le binding
+`onnxruntime_go` expose aussi `ort.DynamicAdvancedSession`
+(`onnxruntime_go.go:2197`, disponible dans la v1.21.0 utilisée par ce
+projet), dont `Run(inputs, outputs []Value)` prend les tenseurs **en
+paramètre à chaque appel** au lieu de les figer à la création — exactement
+le contrat de thread-safety documenté par l'API C d'ONNX Runtime
+([microsoft/onnxruntime#114](https://github.com/microsoft/onnxruntime/issues/114) :
+`Run()` est thread-safe sur une session partagée tant que chaque appel
+utilise ses propres buffers `OrtValue`, pas les mêmes). Testé : **8
+goroutines × 5 appels concurrents sur une session `DynamicAdvancedSession`
+partagée**, tenseurs d'entrée frais par goroutine/appel, entrée identique
+partout → **0 divergence de sortie** entre goroutines (2/2 runs sans
+`-race`, cohérent avec `-race` qui ne signale aucune race sur cette partie
+du test). Contrairement à ce qui était supposé plus tôt (§ options ci-avant,
+maintenant obsolètes), **pas besoin d'une instance/session par flux** — le
+modèle (poids ONNX) reste chargé une seule fois et partagé, seuls les
+tenseurs (petits pour CLIP texte/image, ~7.5 Mo cumulés input+output pour
+YOLO à 640×640) sont alloués par appel.
 
-Options à évaluer (pas tranché) :
-- **Une instance `Detector`/`Encoder` par flux actif** — le plus simple à
-  raisonner, coûte de la mémoire (chaque session ONNX charge son propre
-  modèle en RAM) et du temps de démarrage par flux. À chiffrer (poids
-  mémoire de yolo11s.onnx + les deux CLIP .onnx, multiplié par N flux).
-- **Pool de sessions partagées avec file d'attente** — moins de mémoire,
-  introduit une latence de contention entre flux (un flux attend qu'une
-  session se libère), complexifie le code.
-- **Sérialisation totale** (un seul verrou global autour de toute
-  inférence) — le plus simple à coder, mais annule le bénéfice du
-  multi-flux en cas de charge (un flux lent bloque tous les autres).
+**Décision retenue : migrer `yolo11s.Detector` et `clip.Encoder` de
+`AdvancedSession` vers `DynamicAdvancedSession`**, avec allocation de
+tenseurs frais par appel plutôt que des tenseurs figés en champs de
+struct. Reste à faire (pas fait dans cette investigation, qui visait à
+trancher l'approche, pas à livrer le code) :
+- Réécrire `yolo11s.go`/`clip.go` sur ce nouveau pattern.
+- Mesurer le coût réel de l'allocation par appel (non benchmarké) — non
+  bloquant pour trancher l'architecture, mais à surveiller : si le coût
+  GC devient significatif sous charge multi-flux, un pool de tenseurs
+  (`sync.Pool` par goroutine/flux) resterait possible sans revenir aux
+  tenseurs figés par session.
+- Revalider `gocv-tracker` séparément (§ ci-dessous, pas concerné par
+  cette investigation — c'est un risque distinct, pas résolu ici).
+
+**Point annexe trouvé pendant le test, à documenter pour la suite** : le
+binaire compilé avec `-race` **plante systématiquement à la sortie**
+(`libc++abi: ... mutex lock failed: Invalid argument`, SIGABRT — 2/2
+runs), alors que le même code **sans** `-race` sort proprement (2/2 runs).
+Ressemble à une interaction connue entre l'instrumentation du race
+detector Go et le nettoyage natif (CGo) d'ONNX Runtime — distinct du bug
+SIGABRT déjà corrigé (`runtime.DestroyEnvironment()`, celui-là avait un
+message d'erreur différent). **Pas un bug de production** (les binaires
+livrés ne sont jamais compilés avec `-race`), mais un piège pour de
+futurs tests de concurrence sur ce projet : valider la détection de races
+avec `-race`, puis valider la propreté de sortie **sans** `-race`
+séparément — ne pas s'étonner d'un crash-à-la-sortie sous `-race` et le
+prendre pour un vrai bug.
 
 Impact CPU à mesurer avant de promettre du "temps réel" multi-caméra :
 aucun Execution Provider GPU n'est câblé aujourd'hui (§ 1.6), tout tourne
@@ -276,9 +307,11 @@ exposé :
 
 Par ordre d'impact sur le planning :
 
-1. **Thread-safety des sessions ONNX en concurrence** (§ 1.2) — bloquant
-   pour tout multi-flux réel, pas testé, risque confirmé par lecture de
-   code (tenseurs fixes réutilisés).
+1. ~~Thread-safety des sessions ONNX en concurrence~~ — **résolu le
+   2026-08-10** (§ 1.2) : testé avec `-race`, confirmé unsafe dans le
+   pattern actuel, fix identifié et validé (`DynamicAdvancedSession`).
+   Reste à *implémenter* le fix dans `yolo11s.go`/`clip.go` (pas fait,
+   l'investigation visait à trancher l'architecture).
 2. **Charge CPU réelle en multi-flux** — aucun EP GPU câblé, tout CPU.
    Latence par flux mesurée en solo (~180-320ms/cycle reanchor) à
    multiplier par le facteur de contention choisi en § 1.2.
@@ -293,7 +326,8 @@ Par ordre d'impact sur le planning :
 6. **`gocv` en concurrence réelle** — `OPENCV_OPENCL_DEVICE=disabled`,
    `SetNumThreads(1)`, `sharedFrameMat` validés pour un flux unique
    uniquement (`docs/adr/object-tracking.md`), jamais en charge
-   multi-flux réelle.
+   multi-flux réelle. Distinct de § 1.2 (ONNX) — pas couvert par cette
+   investigation, toujours ouvert.
 
 ---
 
@@ -301,13 +335,18 @@ Par ordre d'impact sur le planning :
 
 1. Câblage API minimal (gin + WS) sur le flux existant (webcam locale
    unique) — valide le bout-en-bout sans la complexité multi-flux.
-2. Device USB configurable + RTSP (extension `InputStream`), test avec
-   une vraie caméra IP/flux public.
-3. Concurrence multi-flux (§ 1.2) — le plus gros morceau technique,
-   décision pool/instance-par-flux/sérialisation après mesure, pas avant.
-4. Ingestion WebRTC navigateur.
-5. Fallback JPEG-over-WS (peut être fait en parallèle du point 4, plus
-   simple).
-6. Wrapper desktop Wails.
-7. Galerie de références + sélection runtime (§ 1.4/1.5).
-8. UI complète (couleurs configurables, historique, réglages avancés).
+2. Migration `yolo11s.Detector`/`clip.Encoder` vers `DynamicAdvancedSession`
+   (§ 1.2, architecture tranchée, reste à coder) — prérequis réel du
+   multi-flux, plus petit qu'estimé initialement (pas de pool/sérialisation
+   à construire, juste changer le pattern d'allocation des tenseurs).
+3. Device USB configurable + RTSP + fichier vidéo local (extension
+   `InputStream`), test avec une vraie caméra IP/flux public.
+4. Multi-flux (plusieurs `RecognitionUseCase` concurrents, adressables par
+   ID) — s'appuie sur le point 2, mesurer la charge CPU réelle (§ 4.2)
+   avant d'annoncer un nombre de flux simultanés supporté.
+5. Ingestion WebRTC navigateur.
+6. Fallback JPEG-over-WS (peut être fait en parallèle du point 5, plus
+   simple) + flux YouTube (`yt-dlp`, indépendant du reste).
+7. Wrapper desktop Wails.
+8. Galerie de références + sélection runtime (§ 1.4/1.5).
+9. UI complète (couleurs configurables, historique, réglages avancés).
