@@ -46,7 +46,14 @@ func main() {
 		fmt.Println("Error loading .env file:", err)
 	}
 
-	// Define and parse flags first to determine the mode
+	// Define and parse flags first to determine the mode. Subcommand-owned
+	// flags (e.g. `recognition --filter`) aren't known here — cobra parses
+	// those itself later from the raw os.Args, in startCLIMode. Without
+	// UnknownFlags, this top-level Parse() would hard-exit(2) on any flag
+	// it doesn't recognize, before cobra ever gets a chance to run (found
+	// 2026-08-10 while testing the CLIP semantic gate end-to-end: `recognition
+	// --filter person` never even reached RecognitionUseCase).
+	pflag.CommandLine.ParseErrorsWhitelist.UnknownFlags = true
 	web := pflag.BoolP("web", "s", false, "Start the web server (API mode)")
 	ws := pflag.BoolP("websocket", "w", false, "Start the WebSocket server")
 	interactive := pflag.BoolP("interactive", "i", false, "Start in interactive mode")
