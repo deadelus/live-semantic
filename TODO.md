@@ -115,5 +115,5 @@ Référence matrice : F — PARTIEL, l'ordre de préférence ONNX-first est triv
 
 ## Hors-scope de ce backlog
 
-- **Décision H (topologie de déploiement)** : question ouverte, non transformée en tâche. Voir `AUDIT.md` § Décision H et `MIGRATION.md` § Risques.
+- **Décision H (topologie de déploiement)** : **tranchée le 2026-08-10** (GUI web + desktop via un seul backend/API, sources vidéo USB+RTSP+WebRTC, multi-flux) — voir `docs/gui-spec.md` pour la spec complète et les prérequis backend. Reste "hors-scope" ici volontairement : c'est un chantier à part entière (nouvelle section à créer dans cette TODO une fois le travail commencé), pas encore une tâche à dépiler — rien de `docs/gui-spec.md` n'est implémenté à ce jour. Voir aussi `AUDIT.md` § Décision H et `MIGRATION.md` § Risques pour l'historique de la question.
 - **Branches à trancher** (`realtime-uc`, fast-forward `main`) : décisions utilisateur, voir `AUDIT.md` § Questions. `feat/ochestrator` est tranchée : non récupérée (le commit dangling `4c482dc` a été supprimé volontairement, pas de branche de secours).
