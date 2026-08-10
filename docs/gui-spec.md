@@ -214,7 +214,8 @@ serveur backend en local au démarrage. Pas de travail UI dupliqué.
 
 | Flux | Sens | Transport | Format | Priorité | Effort |
 |---|---|---|---|---|---|
-| Vidéo + boxes + scores → GUI (affichage live) | backend → client | WebSocket | Frames JPEG (ou MJPEG-like) + JSON (boxes, label, score CLIP, track ID) par message | P0 | S |
+| Vidéo + boxes + scores → GUI, onglet actif (vue complète) | backend → client | WebSocket | Frames JPEG (ou MJPEG-like) + JSON (boxes, label, score CLIP, track ID) par message, framerate normal | P0 | S |
+| Vidéo → GUI, tuiles mosaïque (aperçu léger, § 3.1) | backend → client | WebSocket | Frames JPEG seules, ~1 fps, **sans** boxes/JSON — un flux distinct/dégradé du précédent, pas le même abonnement | P1 (dépend du choix mosaïque, § 3.1) | S, mais protocole à concevoir en même temps que la ligne au-dessus (pas après) |
 | Webcam navigateur → backend (pipeline YOLO/CLIP) | client → backend | **WebRTC** (prioritaire) | Flux vidéo décodé côté Go via `pion/webrtc` | P0 | L |
 | Webcam navigateur → backend (fallback) | client → backend | WebSocket (JPEG-over-WS) | Frame JPEG poussée à N fps | P1 (fallback si WebRTC bloque) | S |
 | Caméra USB/RTSP/fichier local → backend | — (local au backend) | `gocv`/FFmpeg direct | — (ne repasse jamais par le navigateur) | P0 (USB, fichier local) / P1 (RTSP, non testé) | XS (USB, fichier local — déjà prouvé) / S (RTSP) |
@@ -226,17 +227,37 @@ serveur backend en local au démarrage. Pas de travail UI dupliqué.
 
 ## 3. Spec fonctionnelle GUI
 
+**Décidé le 2026-08-10** : thème clair/sombre au choix de l'utilisateur
+(toggle accessible, pas enfoui) — les deux variantes doivent être conçues,
+pas seulement un sombre par défaut.
+
 ### 3.1 Gestion des sources (nouveau — conséquence directe du multi-flux demandé)
 
 - Panel "Sources" : liste des flux configurés (webcam locale, URL RTSP,
-  webcam navigateur), ajout/suppression/édition.
-- Chaque source = un onglet **ou** une tuile dans une vue grille/mosaïque
-  (à trancher avec le design — les deux sont raisonnables, l'onglet est
-  plus simple à câbler côté état applicatif, la mosaïque est plus utile
-  pour de la surveillance multi-caméra réelle).
-- Statut par source : connecté / déconnecté / erreur. Reconnexion
-  automatique pour les sources réseau (RTSP, WebRTC) — une webcam locale
-  ne devrait normalement pas se déconnecter, un flux réseau si.
+  webcam navigateur, fichier vidéo, flux YouTube/live), ajout/suppression/
+  édition.
+- **Décidé le 2026-08-10** : deux modes d'affichage au choix de
+  l'utilisateur (toggle), pas un seul mode imposé :
+  - **Vue liste** : compacte, textuelle.
+  - **Vue mosaïque** : grille de tuiles vidéo, chacune affichant un
+    **aperçu léger** (~1 fps, **sans boxes ni overlay** — juste l'image
+    brute) pour rester fluide même avec beaucoup de flux actifs. Cliquer
+    sur une tuile bascule automatiquement vers la **vue onglets** et
+    active l'onglet de ce flux, qui affiche lui la vidéo complète
+    (framerate normal, boxes, scores, contrôles). La vue onglets devient
+    la vue active par défaut après un clic depuis la mosaïque ;
+    retour manuel à la mosaïque possible ensuite.
+- **Implication transport (§ 2)** : ça veut dire deux qualités de flux
+  distinctes à servir depuis le backend, pas une seule — un flux "preview"
+  léger (1 fps, pas de boxes, pour toutes les tuiles de la mosaïque en
+  simultané) et un flux "complet" (framerate normal, boxes+score, pour
+  l'onglet actif uniquement). Pas encore reflété dans la table § 2 —
+  à faire quand le protocole WS sera conçu en détail (§ 1.1).
+- Statut par source : connecté / déconnecté / erreur / reconnexion en
+  cours — visible aussi bien en vue liste qu'en vue mosaïque (badge sur la
+  tuile / sur la ligne). Reconnexion automatique pour les sources réseau
+  (RTSP, WebRTC, YouTube) — une webcam locale ne devrait normalement pas
+  se déconnecter, un flux réseau si.
 
 ### 3.2 Vue live (par flux)
 
