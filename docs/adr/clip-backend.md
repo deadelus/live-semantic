@@ -88,7 +88,26 @@ CPU ARM (Apple Silicon, seul matériel disponible dans cette session — x86 non
 
 **YOLO reste le poste dominant, pas CLIP** — contrairement à une hypothèse non vérifiée avancée plus tôt dans cette session (TODO.md § A, item "piste écartée YOLO plus léger", corrigé). Le coût CLIP cumulé (N × ~46ms) ne dépasse celui de YOLO qu'à partir de ~4 boîtes candidates détectées sur une même frame. Estimation `reanchor()` à 3 boîtes : 182 + 3×46 ≈ 320ms, cohérent avec les 230-390ms mesurés en webcam réelle (§ 7).
 
-## 9. Références
+## 9. Bbox trop larges — piste "inset" testée et écartée (2026-08-10)
+
+Suite à § 7 (confondants "couch"/"person" attribués en partie à des bbox incluant trop de fond), hypothèse testée directement plutôt que supposée : rétrécir systématiquement chaque bbox YOLO d'une marge fixe avant crop devrait réduire la dilution du signal CLIP par le fond.
+
+Outil jetable `cmd/crop-inset-test` (supprimé après usage) : une frame webcam réelle par run, YOLO détecte, pour chaque boîte on compare CLIP(crop brut) vs CLIP(crop rétréci de 10/20/30% par côté) contre le texte de son propre label COCO. 8 runs, 9 échantillons "person", 5 "couch" (le contenu réel de la frame variait d'un run à l'autre, pas contrôlé).
+
+**Résultat, cohérent mais pas généralisable** :
+
+| Classe | Marge | Delta moyen | Cohérence |
+|---|---|---|---|
+| person | 20% | +0.010 | 8/9 positifs |
+| person | 30% | +0.014 | 9/9 positifs |
+| couch | 20% | -0.015 | 5/5 négatifs |
+| couch | 30% | -0.029 | 5/5 négatifs, empire avec la marge |
+
+Rétrécir aide un objet compact/premier-plan (moins de fond dans la boîte = signal plus pur) mais dégrade un objet large/plat dont l'identité visuelle dépend de sa silhouette entière (rogner un canapé sur les bords retire l'info qui le distingue d'un simple gros plan de tissu).
+
+**Décision : pas de fix implémenté.** Un inset universel améliorerait certains filtres et en dégraderait d'autres silencieusement — pire qu'un statu quo documenté. Conditionner la marge sur le label COCO réintroduirait une dépendance à la classification fermée que la décision (a) (CLIP décide seul, TODO.md § A) visait explicitement à éliminer. Piste restant ouverte pour plus tard : une mesure indépendante de la classe (ex. variance de couleur/texture dans la boîte, ou un score de "confiance de bord" si le detector l'exposait) plutôt qu'un pourcentage fixe — pas creusé.
+
+## 10. Références
 
 - Modèle original : [openai/clip-vit-base-patch32](https://huggingface.co/openai/clip-vit-base-patch32) (licence MIT, [openai/CLIP](https://github.com/openai/CLIP))
 - Export ONNX retenu : [Xenova/clip-vit-base-patch32](https://huggingface.co/Xenova/clip-vit-base-patch32)
