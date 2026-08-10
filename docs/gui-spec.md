@@ -127,6 +127,26 @@ adaptateurs dans `internal/implementation/streamer/`.
   réseau local, la traversée NAT nécessite un serveur STUN (souvent
   suffisant) voire TURN (si NAT symétrique) — pas juste "WebRTC marche
   tout seul" en pair-à-pair direct. À prévoir dans l'estimation d'effort.
+- **Fichier vidéo local** (effort XS, **déjà prouvé dans ce projet**) :
+  `gocv.VideoCaptureFile(path)` sur un fichier local est déjà utilisé et
+  fonctionnel — `cmd/tracking-drift/main.go:96`, le test de dérive
+  KCF/CSRT tourne dessus depuis `TODO.md` § B. Il manque juste un
+  adaptateur `InputStream` propre (aujourd'hui c'est un outil jetable
+  headless, pas un port), pas de risque technique résiduel.
+- **Flux live YouTube (ou similaire)** (effort S, nouvelle dépendance
+  externe) : une URL YouTube n'est pas directement lisible par
+  FFmpeg/OpenCV — il faut d'abord résoudre l'URL réelle du flux média
+  (HLS/DASH) via un outil comme [yt-dlp](https://github.com/yt-dlp/yt-dlp)
+  (`yt-dlp -g <url>` renvoie une URL directe, ensuite ouvrable par
+  `gocv.VideoCaptureFile`/FFmpeg comme n'importe quel flux HTTP). **Ce
+  n'est pas une dépendance Go** — c'est un binaire externe à shell-out
+  (ou une lib équivalente si une existe en Go, non cherché). Implication :
+  le backend doit soit embarquer/exiger `yt-dlp` sur la machine, soit
+  gérer son absence proprement. Youtube change régulièrement son
+  fonctionnement interne (obfuscation, throttling) — `yt-dlp` est
+  maintenu activement justement pour ça, mais c'est un point de
+  fragilité externe au projet à surveiller (pas un choix "install once,
+  works forever"). Non testé à ce jour.
 
 ### 1.4 Galerie de références (feature métier à construire, effort M)
 
@@ -166,7 +186,8 @@ serveur backend en local au démarrage. Pas de travail UI dupliqué.
 | Vidéo + boxes + scores → GUI (affichage live) | backend → client | WebSocket | Frames JPEG (ou MJPEG-like) + JSON (boxes, label, score CLIP, track ID) par message | P0 | S |
 | Webcam navigateur → backend (pipeline YOLO/CLIP) | client → backend | **WebRTC** (prioritaire) | Flux vidéo décodé côté Go via `pion/webrtc` | P0 | L |
 | Webcam navigateur → backend (fallback) | client → backend | WebSocket (JPEG-over-WS) | Frame JPEG poussée à N fps | P1 (fallback si WebRTC bloque) | S |
-| Caméra USB/RTSP → backend | — (local au backend) | `gocv`/FFmpeg direct | — (ne repasse jamais par le navigateur) | P0 (USB) / P1 (RTSP, non testé) | XS (USB) / S (RTSP) |
+| Caméra USB/RTSP/fichier local → backend | — (local au backend) | `gocv`/FFmpeg direct | — (ne repasse jamais par le navigateur) | P0 (USB, fichier local) / P1 (RTSP, non testé) | XS (USB, fichier local — déjà prouvé) / S (RTSP) |
+| Flux YouTube/live externe → backend | — (local au backend) | `yt-dlp` (shell-out) résout l'URL réelle, puis `gocv`/FFmpeg direct | — | P1 | S (dépendance externe, non testée) |
 | Contrôle (filtres, seuils, galerie, sélection runtime) | client ↔ backend | REST (gin) pour commandes ponctuelles, WebSocket pour retour live (ex. score qui bouge pendant qu'on bouge un slider) | JSON | P0 | M |
 | Multi-flux / sessions | client ↔ backend | Chaque onglet/tuile = une session logique avec un ID, une connexion WS dédiée pour son flux vidéo, ses commandes REST scopées par `sessionID` | — | P0 | Dépend de § 1.2 |
 
@@ -265,7 +286,11 @@ Par ordre d'impact sur le planning :
    aucun flux RTSP testé bout-en-bout à ce jour.
 4. **WebRTC + NAT traversal** pour des sources non locales (caméras
    publiques) — STUN/TURN à prévoir, pas juste "WebRTC marche tout seul".
-5. **`gocv` en concurrence réelle** — `OPENCV_OPENCL_DEVICE=disabled`,
+5. **Dépendance externe `yt-dlp`** pour les flux YouTube — binaire non-Go
+   à shell-out, à installer/vérifier sur la machine cible, sujet à casser
+   quand YouTube change son fonctionnement interne (maintenu activement
+   pour ça, mais reste un point de fragilité hors du contrôle du projet).
+6. **`gocv` en concurrence réelle** — `OPENCV_OPENCL_DEVICE=disabled`,
    `SetNumThreads(1)`, `sharedFrameMat` validés pour un flux unique
    uniquement (`docs/adr/object-tracking.md`), jamais en charge
    multi-flux réelle.
