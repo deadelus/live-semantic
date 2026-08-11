@@ -81,9 +81,8 @@ func (rc *recognitionController) start(c *gin.Context) {
 	}()
 
 	c.JSON(http.StatusAccepted, gin.H{
-		"status":               "started",
-		"filter":               req.Filter,
-		"similarity_threshold": req.SimilarityThreshold,
+		"status": "started",
+		"filter": req.Filter,
 	})
 }
 

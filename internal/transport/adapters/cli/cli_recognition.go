@@ -12,26 +12,23 @@ import (
 func (s *SurveyController) createRecognitionFlow() error {
 	fmt.Println("\n📸 Recognition...")
 
+	// Label-based filter (TODO.md § A, decision 2026-08-11 — replaced the
+	// CLIP similarity-threshold prompt that used to be here, see
+	// docs/adr/clip-backend.md § 12): "person" (up to 1), "person*2" (up to
+	// 2), "person*2,car" (multiple independent terms, comma-separated).
+	// Validated against the 80 COCO classes by application/uc.parseFilterSpec
+	// once the request reaches RecognitionUseCase — a typo surfaces as a
+	// clear error there, not a silent "detects nothing".
 	var qs = []*survey.Question{
 		{
 			Name:     "filter",
-			Prompt:   &survey.Input{Message: "📝 What do you want to recognize?"},
-			Validate: survey.Required,
-		},
-		{
-			Name: "similarity-threshold",
-			// Lowered 0.25 -> 0.20 on 2026-08-11 (docs/adr/clip-backend.md
-			// § 10): real end-to-end runs scored genuine "person" matches at
-			// 0.235-0.238, just under the old 0.25 default — it was
-			// rejecting correct detections, not just noise.
-			Prompt:   &survey.Input{Message: "🔍 Similarity threshold between 0.0 and 1.0 (default: 0.20 — CLIP cosine similarity, not YOLO confidence: real scores sit around 0.20-0.30, see docs/adr/clip-backend.md § 7)", Default: "0.20"},
+			Prompt:   &survey.Input{Message: "📝 What do you want to recognize? (COCO label(s), e.g. \"person\", \"person*2\", \"person*2,car\")"},
 			Validate: survey.Required,
 		},
 	}
 
 	answers := struct {
-		Filter              string  `survey:"filter"`
-		SimilarityThreshold float32 `survey:"similarity-threshold"`
+		Filter string `survey:"filter"`
 	}{}
 
 	if err := survey.Ask(qs, &answers); err != nil {
@@ -41,7 +38,7 @@ func (s *SurveyController) createRecognitionFlow() error {
 	// Confirmer avant création
 	confirm := false
 	confirmPrompt := &survey.Confirm{
-		Message: fmt.Sprintf("Recognize %s? with similarity threshold %.2f", answers.Filter, answers.SimilarityThreshold),
+		Message: fmt.Sprintf("Recognize %s?", answers.Filter),
 	}
 	if err := survey.AskOne(confirmPrompt, &confirm); err != nil {
 		return err
@@ -55,8 +52,7 @@ func (s *SurveyController) createRecognitionFlow() error {
 	// Créer via le handler
 	req := envelopes.TransportRequest[dto.RecognitionRequest]{
 		Data: dto.RecognitionRequest{
-			Filter:              answers.Filter,
-			SimilarityThreshold: answers.SimilarityThreshold,
+			Filter: answers.Filter,
 		},
 		Context: context.Background(),
 		Source:  "interactive",

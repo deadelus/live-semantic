@@ -121,7 +121,30 @@ Signalé par l'utilisateur : session interactive réelle (`livesemantic -i`, web
 
 **Décision : défaut abaissé à 0.20** (`cli_recognition.go`, `cmd_realtime_analysis.go`) — toujours au-dessus du plancher de bruit empirique (~0.19, § 7), sous la marge des vrais matches mesurés ici (0.235-0.238). Point ouvert de § 7 toujours valable et non résolu par ce changement : un seuil absolu reste intrinsèquement fragile quelle que soit sa valeur — la piste "score relatif contre un prompt négatif" (softmax sur un ensemble, pas un seuil isolé) reste la vraie solution à long terme, pas explorée.
 
-## 11. Références
+## 12. Décision inversée : filtrage par label COCO, plus de gate CLIP (2026-08-11)
+
+Suite directe de § 10 : le défaut abaissé à 0.20 a bien rattrapé les vrais positifs manqués, mais a aussi laissé passer des confondants (ex. plante en arrière-plan scorant "person") — attendu, pas une surprise, § 7 avait déjà mesuré un crop "couch" à **0.2476** pour "person", au-dessus de 0.20 *et* de l'ancien 0.25. Les plages de score se chevauchent réellement (vrais "person" ~0.225-0.29, confondants ~0.20-0.2476+) : **aucune valeur de seuil absolu ne sépare proprement les deux**, confirmant l'ouverture laissée en § 7 ("piste plus robuste... pas fait").
+
+Deux options posées à l'utilisateur : (1) score relatif contre un/des prompt(s) négatif(s) générique(s), ou (2) filtrage exact par label YOLO. **Choix explicite : (2), pas (1)** — l'utilisateur ne veut pas de prompt négatif.
+
+**Décision : `reanchor()` (`internal/application/uc/tracking.go`) filtre désormais directement sur `box.Label` (le label YOLO), plus aucun appel CLIP sur ce chemin.** Ça **inverse** la décision "option a" du 2026-08-10 (§ ci-dessus, TODO.md § A) où CLIP décidait seul et le matching par label COCO avait été explicitement supprimé.
+
+**Nouvelle syntaxe de filtre** (`internal/application/uc/filter_spec.go`, `parseFilterSpec`) — demandée précisément par l'utilisateur, pas devinée :
+- `person` → jusqu'à 1 track "person" (plafond implicite).
+- `person*2` → jusqu'à 2.
+- `person*2,car` → plusieurs termes indépendants, un plafond chacun.
+- Labels dupliqués entre termes rejetés à l'analyse (erreur, pas un silence) — l'utilisateur veut qu'un futur système d'événements/actions (pas construit, TODO.md § A dernier item) ne se déclenche jamais deux fois pour la même box : avec un matching par label exact, une box n'a qu'un seul label, donc un terme par label suffit à garantir l'absence de chevauchement par construction.
+- Chaque label validé contre les 80 classes COCO à l'analyse — un typo (`"perso"`) devient une erreur claire, pas un filtre qui ne matche jamais rien silencieusement (piège déjà rencontré une fois sur ce projet avec `normalizeFilter`, TODO.md § F).
+
+**Conséquence assumée, pas un oubli** : plus de filtre texte libre hors vocabulaire COCO (ex. "sac abandonné" n'est plus filtrable par ce chemin — c'était pourtant la raison d'être initiale de CLIP dans ce projet, cf. § 1). `clip.Encoder` reste chargé/câblé (`main.go`, `uc.NewUseCase` exige toujours un `SemanticEncoder` non-nil) mais n'est plus appelé dans le chemin de matching — gardé pour la feature "galerie de références par image" (TODO.md § D, `EncodeImage` seul, pas `EncodeText`/score).
+
+`dto.RecognitionRequest.SimilarityThreshold` supprimé (devenu inutile) — CLI, cmd, API et tests mis à jour.
+
+**Testé en conditions réelles** (webcam, `--web`, filtre `person*2`) : track "person" confirmé en continu (`state: Confirmed` sur des dizaines de cycles reanchor consécutifs), `active_tracks` ne reste plus jamais bloqué à 0 comme lors du run initial (§ 10) sur la même scène/même personne. Bug annexe trouvé et corrigé au passage : `RecognitionUseCase` ouvrait la caméra *avant* de valider le filtre — un filtre invalide (typo) faisait quand même clignoter/ouvrir la webcam ~800ms pour rien avant d'échouer. Réordonné (`uc_recognition.go`) : validation du filtre en premier.
+
+**Limite qui reste ouverte, pas résolue par ce changement** : le `*N` est pour l'instant un plafond pur (n'accepte pas plus de N tracks). L'intention à terme de l'utilisateur est qu'une condition de scène (ex. "2 personnes simultanément") puisse déclencher une ou plusieurs actions/événements configurables — rien de conçu (ni le modèle d'action, ni la syntaxe pour l'associer à un terme), TODO.md § A dernier item.
+
+## 13. Références
 
 - Modèle original : [openai/clip-vit-base-patch32](https://huggingface.co/openai/clip-vit-base-patch32) (licence MIT, [openai/CLIP](https://github.com/openai/CLIP))
 - Export ONNX retenu : [Xenova/clip-vit-base-patch32](https://huggingface.co/Xenova/clip-vit-base-patch32)

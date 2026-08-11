@@ -334,14 +334,31 @@ filtres sont **par flux**, avec un raccourci "appliquer à toutes les
 sources actives" pour l'usage simple à une seule caméra — pas un choix
 global unique imposé.
 
+> ⚠️ **Conflit non résolu, trouvé le 2026-08-11 — à trancher avant de
+> commencer H2.** Cette section décrit un filtre texte libre + slider de
+> seuil CLIP comme l'interaction phare de la GUI. Depuis TODO.md § A
+> (décision 2026-08-11, `docs/adr/clip-backend.md` § 12), le backend a
+> **abandonné le matching CLIP** (seuil absolu jugé trop fragile en usage
+> réel — confondants scorant dans la même plage que de vrais positifs) au
+> profit d'un **filtrage exact par label COCO** (`person`, `person*2`,
+> `person*2,car` — voir `dto.RecognitionRequest.Filter`, plus de
+> `SimilarityThreshold`). Le slider de seuil décrit ci-dessous n'a plus
+> rien à piloter côté backend tel quel. À retrancher avec l'utilisateur :
+> soit la GUI expose un **sélecteur de labels COCO + plafond par label**
+> (ce que le backend fait réellement aujourd'hui) à la place du slider,
+> soit CLIP revient un jour sous une autre forme (score relatif, jamais
+> implémenté) et le slider redevient pertinent — ne pas construire cet
+> écran avant que ce soit clarifié.
+
 - Champ filtre texte libre — multi-filtres simultanés par flux (le
   backend n'accepte qu'une seule string aujourd'hui, `dto.RecognitionRequest.Filter`
-  — à faire évoluer vers une liste, § 1.1).
-- Slider de seuil de similarité **avec retour visuel en direct** (pas un
-  champ numérique aveugle) : le calibrage est instable et dépend de la
-  classe (`docs/adr/clip-backend.md` § 7-9, marges mesurées de 0.01-0.03
-  seulement) — voir le score bouger en live pendant qu'on ajuste vaut
-  mieux qu'une valeur par défaut statique.
+  — à faire évoluer vers une liste, § 1.1). ⚠️ Cette string est désormais
+  un spec de labels COCO (`person*2,car`), pas du texte libre sémantique —
+  voir l'encart ci-dessus.
+- ~~Slider de seuil de similarité avec retour visuel en direct~~ — ⚠️ plus
+  rien à piloter côté backend, voir l'encart ci-dessus. Remplacer par un
+  contrôle de plafond par label (`*N`) si la décision confirme le
+  filtrage par label côté GUI aussi.
 - Toggle par entrée de galerie (activer/désactiver sans supprimer).
 - Sélecteur tracker KCF/CSRT (existe en dur, jamais exposé).
 

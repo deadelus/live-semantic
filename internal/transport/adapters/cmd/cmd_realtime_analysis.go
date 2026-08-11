@@ -10,8 +10,8 @@ import (
 
 var recognitionCmd = &cobra.Command{
 	Use:   "recognition",
-	Short: "Run recognition with filter and similarity threshold",
-	Long:  `Execute the recognition use case with a filter and similarity threshold.`,
+	Short: "Run recognition with a label filter",
+	Long:  `Execute the recognition use case with a COCO label filter (e.g. "person", "person*2", "person*2,car").`,
 	Run: func(cmd *cobra.Command, args []string) {
 		filter, err := cmd.Flags().GetString("filter")
 
@@ -20,21 +20,8 @@ var recognitionCmd = &cobra.Command{
 			return
 		}
 
-		threshold, err := cmd.Flags().GetFloat32("similarity-threshold")
-
-		if err != nil {
-			fmt.Printf("❌ Error: %s\n", err.Error())
-			return
-		}
-
-		if threshold < 0.0 || threshold > 1.0 {
-			fmt.Println("❌ Error: Similarity threshold must be between 0.0 and 1.0")
-			return
-		}
-
 		req := dto.RecognitionRequest{
-			Filter:              filter,
-			SimilarityThreshold: threshold,
+			Filter: filter,
 		}
 
 		result, err := useCases.RecognitionUseCase(context.Background(), req)
@@ -52,17 +39,14 @@ var recognitionCmd = &cobra.Command{
 
 func init() {
 	rootCmd.AddCommand(recognitionCmd)
-	recognitionCmd.Flags().String("filter", "", "Text filter for semantic analysis")
-	// 0.20, not 0.8 (and not 0.25 anymore either): this gates a CLIP cosine
-	// similarity (crop vs filter text), not YOLO's old box.Confidence. Real
-	// measured CLIP ViT-B/32 zero-shot scores on webcam crops sit around
-	// 0.20-0.30 (2026-08-10 calibration, docs/adr/clip-backend.md § 7-10) —
-	// 0.8 would silently reject every detection. Lowered 0.25 -> 0.20 on
-	// 2026-08-11: real end-to-end runs (person.mp4, a real webcam session)
-	// scored genuine "person" matches at 0.235-0.238, just under 0.25 — the
-	// absolute threshold was rejecting correct detections, not just noise
-	// (docs/adr/clip-backend.md § 10, TODO.md § A).
-	recognitionCmd.Flags().Float32("similarity-threshold", 0.20, "Similarity threshold for match (CLIP cosine similarity, typically 0.20-0.30)")
+	// Label-based filter (TODO.md § A, decision 2026-08-11 — replaced the
+	// CLIP similarity-threshold flag that used to be here, see
+	// docs/adr/clip-backend.md § 12): comma-separated COCO label(s), each
+	// optionally capped with "*N" ("person" = up to 1, "person*2" = up to
+	// 2, "person*2,car" = two independent terms). Validated against the 80
+	// COCO classes by application/uc.parseFilterSpec once the request
+	// reaches RecognitionUseCase.
+	recognitionCmd.Flags().String("filter", "", `COCO label filter, e.g. "person", "person*2", "person*2,car"`)
 	err := recognitionCmd.MarkFlagRequired("filter")
 	if err != nil {
 		fmt.Printf("❌ Error: %s\n", err.Error())

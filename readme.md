@@ -18,7 +18,7 @@ LiveSemantic vise à analyser des flux vidéo en langage naturel ("person walkin
 
 | | Vision | Réalité actuelle |
 |---|---|---|
-| Filtres | Langage naturel libre (CLIP, embeddings) | Vocabulaire fermé : 80 classes COCO (YOLO), comparaison de chaîne |
+| Filtres | Langage naturel libre (CLIP, embeddings) | Vocabulaire fermé : 80 classes COCO (YOLO), filtrage exact par label + plafond par label (`person`, `person*2`, `person*2,car`) — CLIP intégré puis retiré du chemin de matching le 2026-08-11 (seuil de similarité absolu jugé trop fragile en usage réel, `docs/adr/clip-backend.md` § 12), infra CLIP toujours présente mais inutilisée pour l'instant |
 | Détection | Cascade YOLO → crop → CLIP | YOLO11s seul, ONNX natif Go ✅ |
 | Tracking | Tracker visuel (KCF/CSRT/MOSSE) + agrégat `Track` | Absent |
 | Modes | Realtime + Batch fichiers | Realtime webcam ✅ — Batch absent |
@@ -133,8 +133,10 @@ go build -o livesemantic ./cmd/livesemantic
 
 #### Classic CLI Commands (réellement implémenté)
 ```bash
-# Run realtime webcam recognition (YOLO11s, vocabulaire fermé COCO)
-./livesemantic recognition --filter="person" --similarity-threshold=0.7
+# Run realtime webcam recognition (YOLO11s, vocabulaire fermé COCO).
+# Filtre par label exact, pas de score/seuil : "person" (1 max),
+# "person*2" (2 max), "person*2,car" (plusieurs labels indépendants).
+./livesemantic recognition --filter="person*2,car"
 
 # Show help
 ./livesemantic help
@@ -160,7 +162,7 @@ go build -o livesemantic ./cmd/livesemantic
 
 curl -X POST http://localhost:8080/api/v1/recognition/start \
   -H "Content-Type: application/json" \
-  -d '{"filter":"person","similarity_threshold":0.20}'
+  -d '{"filter":"person*2,car"}'
 
 curl http://localhost:8080/api/v1/recognition/status
 curl -X POST http://localhost:8080/api/v1/recognition/stop

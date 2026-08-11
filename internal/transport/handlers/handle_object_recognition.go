@@ -11,8 +11,7 @@ func (h *BaseHandler) HandleRecognitionUseCase(req envelopes.TransportRequest[dt
 	// Log the request details
 	// This is where you would typically log the request for debugging or monitoring purposes
 	h.logger.Info("Handling Recognition request", map[string]interface{}{
-		"filter":               req.Data.Filter,
-		"similarity_threshold": req.Data.SimilarityThreshold,
+		"filter": req.Data.Filter,
 	})
 
 	// Call the use case with the request data

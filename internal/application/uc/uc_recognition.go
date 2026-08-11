@@ -44,14 +44,20 @@ func (uc *UseCase) RecognitionUseCase(ctx context.Context, req dto.RecognitionRe
 	default:
 	}
 
-	uc.streamingInput.Initialize()
-	uc.streamingOutput.Initialize()
-
+	// Parse/validate the filter before touching any I/O (camera, window):
+	// a bad filter (unknown label, e.g. a typo) should fail fast without
+	// opening the webcam first — found while testing (2026-08-11): the
+	// camera was opening for ~800ms then immediately tearing down again on
+	// every rejected filter, pure waste and a confusing brief flash for
+	// nothing.
 	tracks, err := newTrackManager(uc, req)
 	if err != nil {
-		return dto.Failure[dto.RecognitionResponse]("failed to prepare semantic filter"), err
+		return dto.Failure[dto.RecognitionResponse]("invalid filter"), err
 	}
 	defer tracks.cleanup()
+
+	uc.streamingInput.Initialize()
+	uc.streamingOutput.Initialize()
 
 	frameChan := make(chan *entities.Frame, 1)
 	detectionDone := make(chan struct{})

@@ -94,7 +94,7 @@ func TestStart_ValidRequest_ReturnsAcceptedAndRunsAsync(t *testing.T) {
 	mock := &mockUseCases{proceed: make(chan struct{})}
 	rc := newRecognitionController(mock, noopLogger{})
 
-	c, w := newTestContext(http.MethodPost, "/api/v1/recognition/start", `{"filter":"person","similarity_threshold":0.25}`)
+	c, w := newTestContext(http.MethodPost, "/api/v1/recognition/start", `{"filter":"person"}`)
 	rc.start(c)
 
 	if w.Code != http.StatusAccepted {
@@ -137,13 +137,13 @@ func TestStart_WhileAlreadyRunning_ReturnsConflict(t *testing.T) {
 	mock := &mockUseCases{proceed: make(chan struct{})}
 	rc := newRecognitionController(mock, noopLogger{})
 
-	c1, w1 := newTestContext(http.MethodPost, "/api/v1/recognition/start", `{"filter":"person","similarity_threshold":0.25}`)
+	c1, w1 := newTestContext(http.MethodPost, "/api/v1/recognition/start", `{"filter":"person"}`)
 	rc.start(c1)
 	if w1.Code != http.StatusAccepted {
 		t.Fatalf("first start: status = %d, want %d", w1.Code, http.StatusAccepted)
 	}
 
-	c2, w2 := newTestContext(http.MethodPost, "/api/v1/recognition/start", `{"filter":"car","similarity_threshold":0.3}`)
+	c2, w2 := newTestContext(http.MethodPost, "/api/v1/recognition/start", `{"filter":"car"}`)
 	rc.start(c2)
 	if w2.Code != http.StatusConflict {
 		t.Fatalf("second start: status = %d, want %d, body = %s", w2.Code, http.StatusConflict, w2.Body.String())
@@ -157,7 +157,7 @@ func TestStop_WhenRunning_CallsUseCasesStopAndReturnsAccepted(t *testing.T) {
 	mock := &mockUseCases{proceed: make(chan struct{})}
 	rc := newRecognitionController(mock, noopLogger{})
 
-	startCtx, _ := newTestContext(http.MethodPost, "/api/v1/recognition/start", `{"filter":"person","similarity_threshold":0.25}`)
+	startCtx, _ := newTestContext(http.MethodPost, "/api/v1/recognition/start", `{"filter":"person"}`)
 	rc.start(startCtx)
 	waitUntil(t, time.Second, rc.isRunningForTest)
 
@@ -209,7 +209,7 @@ func TestStatus_ReflectsRunningState(t *testing.T) {
 
 	assertStatus(false)
 
-	startCtx, _ := newTestContext(http.MethodPost, "/api/v1/recognition/start", `{"filter":"person","similarity_threshold":0.25}`)
+	startCtx, _ := newTestContext(http.MethodPost, "/api/v1/recognition/start", `{"filter":"person"}`)
 	rc.start(startCtx)
 	waitUntil(t, time.Second, rc.isRunningForTest)
 	assertStatus(true)
