@@ -107,7 +107,21 @@ Rétrécir aide un objet compact/premier-plan (moins de fond dans la boîte = si
 
 **Décision : pas de fix implémenté.** Un inset universel améliorerait certains filtres et en dégraderait d'autres silencieusement — pire qu'un statu quo documenté. Conditionner la marge sur le label COCO réintroduirait une dépendance à la classification fermée que la décision (a) (CLIP décide seul, TODO.md § A) visait explicitement à éliminer. Piste restant ouverte pour plus tard : une mesure indépendante de la classe (ex. variance de couleur/texture dans la boîte, ou un score de "confiance de bord" si le detector l'exposait) plutôt qu'un pourcentage fixe — pas creusé.
 
-## 10. Références
+## 10. Défaut abaissé 0.25 → 0.20 après un vrai run bloqué (2026-08-11)
+
+Signalé par l'utilisateur : session interactive réelle (`livesemantic -i`, webcam, filtre "person", seuil par défaut 0.25) — **aucune détection sur tout le run** (`active_tracks: 0` sur ~30 cycles de reanchor). Coïncidait avec la migration `DynamicAdvancedSession` de la veille (TODO.md § H1, commit `596d4c2`) — première hypothèse : régression de cette migration.
+
+**Écartée, pas supposée.** Outil de debug jetable (`cmd/debug-migration`, supprimé après usage) : YOLO + CLIP isolés de la webcam, testés sur `assets/videos/person.mp4`.
+
+- **YOLO fonctionne** : détecte "person" de façon fiable à partir de la frame 5 (0-4 sans personne visible dans le cadre, comme le fait déjà remarquer § 9/`cmd/tracking-drift-bench` pour `car.mp4` — pas toutes les vidéos ont la cible dès la frame 0).
+- **CLIP donne un score cohérent mais insuffisant** : 0.2351 et 0.2381 sur les deux boîtes "person" détectées (frame 5) — **sous le seuil par défaut 0.25**.
+- **Confirmation que ce n'est pas la migration** : mêmes deux crops rejoués sur le commit juste avant `596d4c2` (`AdvancedSession`, ancien pattern) → **résultat rigoureusement identique** (0.2351 / 0.2381, aux 4 décimales près). La migration n'a strictement rien changé numériquement, comme attendu (elle ne touche que l'allocation des tenseurs, pas le calcul).
+
+**Root cause réelle : § 7 se confirme en conditions réelles**, pas juste sur les crops webcam dégradés du run initial — même sur une vidéo de test propre (`person.mp4`, cadrage correct, pas de flou), le score d'un vrai match "person" (0.235-0.238) tombe sous 0.25. La marge documentée en § 7 (0.01-0.03 entre premier et second choix, y compris sur image propre) n'était pas qu'un cas limite isolé — 0.25 rejetait des détections correctes, pas seulement du bruit.
+
+**Décision : défaut abaissé à 0.20** (`cli_recognition.go`, `cmd_realtime_analysis.go`) — toujours au-dessus du plancher de bruit empirique (~0.19, § 7), sous la marge des vrais matches mesurés ici (0.235-0.238). Point ouvert de § 7 toujours valable et non résolu par ce changement : un seuil absolu reste intrinsèquement fragile quelle que soit sa valeur — la piste "score relatif contre un prompt négatif" (softmax sur un ensemble, pas un seuil isolé) reste la vraie solution à long terme, pas explorée.
+
+## 11. Références
 
 - Modèle original : [openai/clip-vit-base-patch32](https://huggingface.co/openai/clip-vit-base-patch32) (licence MIT, [openai/CLIP](https://github.com/openai/CLIP))
 - Export ONNX retenu : [Xenova/clip-vit-base-patch32](https://huggingface.co/Xenova/clip-vit-base-patch32)

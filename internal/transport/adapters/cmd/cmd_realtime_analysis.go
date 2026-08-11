@@ -53,12 +53,16 @@ var recognitionCmd = &cobra.Command{
 func init() {
 	rootCmd.AddCommand(recognitionCmd)
 	recognitionCmd.Flags().String("filter", "", "Text filter for semantic analysis")
-	// 0.25, not 0.8: this gates a CLIP cosine similarity (crop vs filter
-	// text), not YOLO's old box.Confidence. Real measured CLIP ViT-B/32
-	// zero-shot scores on webcam crops sit around 0.20-0.30 (2026-08-10
-	// calibration pass, docs/adr/clip-backend.md § 7) — 0.8 would silently
-	// reject every detection.
-	recognitionCmd.Flags().Float32("similarity-threshold", 0.25, "Similarity threshold for match (CLIP cosine similarity, typically 0.20-0.30)")
+	// 0.20, not 0.8 (and not 0.25 anymore either): this gates a CLIP cosine
+	// similarity (crop vs filter text), not YOLO's old box.Confidence. Real
+	// measured CLIP ViT-B/32 zero-shot scores on webcam crops sit around
+	// 0.20-0.30 (2026-08-10 calibration, docs/adr/clip-backend.md § 7-10) —
+	// 0.8 would silently reject every detection. Lowered 0.25 -> 0.20 on
+	// 2026-08-11: real end-to-end runs (person.mp4, a real webcam session)
+	// scored genuine "person" matches at 0.235-0.238, just under 0.25 — the
+	// absolute threshold was rejecting correct detections, not just noise
+	// (docs/adr/clip-backend.md § 10, TODO.md § A).
+	recognitionCmd.Flags().Float32("similarity-threshold", 0.20, "Similarity threshold for match (CLIP cosine similarity, typically 0.20-0.30)")
 	err := recognitionCmd.MarkFlagRequired("filter")
 	if err != nil {
 		fmt.Printf("❌ Error: %s\n", err.Error())

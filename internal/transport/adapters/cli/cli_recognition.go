@@ -19,8 +19,12 @@ func (s *SurveyController) createRecognitionFlow() error {
 			Validate: survey.Required,
 		},
 		{
-			Name:     "similarity-threshold",
-			Prompt:   &survey.Input{Message: "🔍 Similarity threshold between 0.0 and 1.0 (default: 0.25 — CLIP cosine similarity, not YOLO confidence: real scores sit around 0.20-0.30, see docs/adr/clip-backend.md § 7)", Default: "0.25"},
+			Name: "similarity-threshold",
+			// Lowered 0.25 -> 0.20 on 2026-08-11 (docs/adr/clip-backend.md
+			// § 10): real end-to-end runs scored genuine "person" matches at
+			// 0.235-0.238, just under the old 0.25 default — it was
+			// rejecting correct detections, not just noise.
+			Prompt:   &survey.Input{Message: "🔍 Similarity threshold between 0.0 and 1.0 (default: 0.20 — CLIP cosine similarity, not YOLO confidence: real scores sit around 0.20-0.30, see docs/adr/clip-backend.md § 7)", Default: "0.20"},
 			Validate: survey.Required,
 		},
 	}

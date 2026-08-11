@@ -160,7 +160,7 @@ go build -o livesemantic ./cmd/livesemantic
 
 curl -X POST http://localhost:8080/api/v1/recognition/start \
   -H "Content-Type: application/json" \
-  -d '{"filter":"person","similarity_threshold":0.25}'
+  -d '{"filter":"person","similarity_threshold":0.20}'
 
 curl http://localhost:8080/api/v1/recognition/status
 curl -X POST http://localhost:8080/api/v1/recognition/stop
