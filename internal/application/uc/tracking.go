@@ -98,6 +98,11 @@ const notifyDebounce = 5 * time.Second
 type termMatch struct {
 	Cap       int
 	Embedding entities.Embedding
+	// Overlap mirrors filterTerm.Overlap ("+overlap" in the filter spec) —
+	// carried through so it's available once reanchor is wired to consult
+	// it (TODO.md § A). Not read anywhere yet: every pass still treats
+	// every term as Overlap=false.
+	Overlap bool
 }
 
 // trackManager owns the set of active tracks, shared between the video loop
@@ -155,14 +160,14 @@ func newTrackManager(uc *UseCase, req dto.RecognitionRequest) (*trackManager, er
 	m.terms = make(map[string]termMatch, len(parsed))
 	for _, t := range parsed {
 		if isCOCOLabel(t.Key) {
-			m.terms[t.Key] = termMatch{Cap: t.Cap}
+			m.terms[t.Key] = termMatch{Cap: t.Cap, Overlap: t.Overlap}
 			continue
 		}
 		emb, err := uc.semanticEncoder.EncodeText(t.Key)
 		if err != nil {
 			return nil, fmt.Errorf("encode semantic filter term %q: %w", t.Key, err)
 		}
-		m.terms[t.Key] = termMatch{Cap: t.Cap, Embedding: emb}
+		m.terms[t.Key] = termMatch{Cap: t.Cap, Embedding: emb, Overlap: t.Overlap}
 	}
 
 	return m, nil

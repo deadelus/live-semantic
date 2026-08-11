@@ -12,18 +12,20 @@ import (
 func (s *SurveyController) createRecognitionFlow() error {
 	fmt.Println("\n📸 Recognition...")
 
-	// Hybrid filter (TODO.md § A, docs/adr/clip-backend.md § 12-13): a term
-	// that's one of the 80 COCO classes matches exactly, no similarity
-	// score involved ("person" up to 1, "person*2" up to 2). A term that
-	// isn't a COCO class is matched semantically via CLIP against a fixed,
-	// hidden default threshold ("person with a red hat*1" — see
+	// Hybrid filter (TODO.md § A, docs/adr/clip-backend.md § 12-13/16):
+	// "key[*cap][+option[=value]]...", comma-separated for multiple terms.
+	// A key that's one of the 80 COCO classes matches exactly, no
+	// similarity score involved ("person" up to 1, "person*2" up to 2). A
+	// key that isn't a COCO class is matched semantically via CLIP against
+	// a fixed, hidden default threshold ("person with a red hat*1" — see
 	// tracking.go's defaultSimilarityThreshold; not a CLI knob on purpose,
-	// meant to become a GUI control later). Comma-separates multiple
-	// independent terms either way: "person*2,person with a red hat*1".
+	// meant to become a GUI control later). "+overlap" (default false)
+	// lets a term claim a candidate box another term already claimed this
+	// cycle — parsed, not yet consulted by reanchor (TODO.md § A).
 	var qs = []*survey.Question{
 		{
 			Name:     "filter",
-			Prompt:   &survey.Input{Message: "📝 What do you want to recognize? (COCO label(s) and/or free text, e.g. \"person\", \"person*2\", \"person*2,person with a red hat*1\")"},
+			Prompt:   &survey.Input{Message: "📝 What do you want to recognize? (COCO label(s) and/or free text, e.g. \"person\", \"person*2\", \"person*2,person with a red hat*1+overlap\")"},
 			Validate: survey.Required,
 		},
 	}

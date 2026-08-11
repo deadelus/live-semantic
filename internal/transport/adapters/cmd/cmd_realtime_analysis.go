@@ -11,7 +11,7 @@ import (
 var recognitionCmd = &cobra.Command{
 	Use:   "recognition",
 	Short: "Run recognition with a hybrid label/semantic filter",
-	Long:  `Execute the recognition use case with a filter: COCO labels match exactly ("person", "person*2"), free text matches semantically via CLIP ("person with a red hat*1"). Comma-separated for multiple terms.`,
+	Long:  `Execute the recognition use case with a filter: "key[*cap][+option[=value]]...", comma-separated. COCO labels match exactly ("person", "person*2"), free text matches semantically via CLIP ("person with a red hat*1"). "+overlap" (default false) lets a term claim a box another term already claimed this cycle.`,
 	Run: func(cmd *cobra.Command, args []string) {
 		filter, err := cmd.Flags().GetString("filter")
 
@@ -39,13 +39,15 @@ var recognitionCmd = &cobra.Command{
 
 func init() {
 	rootCmd.AddCommand(recognitionCmd)
-	// Hybrid filter (TODO.md § A, docs/adr/clip-backend.md § 12-13):
+	// Hybrid filter (TODO.md § A, docs/adr/clip-backend.md § 12-13/16):
 	// comma-separated terms, each optionally capped with "*N" ("person" =
-	// up to 1, "person*2" = up to 2). A COCO-class term matches exactly; a
-	// free-text term matches semantically via CLIP against a fixed hidden
+	// up to 1, "person*2" = up to 2) and/or extended with "+option[=value]"
+	// (currently just "+overlap", default false, parsed but not yet
+	// consulted by reanchor). A COCO-class key matches exactly; a
+	// free-text key matches semantically via CLIP against a fixed hidden
 	// threshold (tracking.go's defaultSimilarityThreshold — not a flag on
 	// purpose, meant to become a GUI control later).
-	recognitionCmd.Flags().String("filter", "", `filter spec, e.g. "person", "person*2", "person*2,person with a red hat*1"`)
+	recognitionCmd.Flags().String("filter", "", `filter spec, e.g. "person", "person*2", "person*2,person with a red hat*1+overlap"`)
 	err := recognitionCmd.MarkFlagRequired("filter")
 	if err != nil {
 		fmt.Printf("❌ Error: %s\n", err.Error())

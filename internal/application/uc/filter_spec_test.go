@@ -26,6 +26,16 @@ func TestParseFilterSpec(t *testing.T) {
 		{"negative cap rejected", "person*-1", nil, true},
 		{"stray comma (empty term) rejected", "person,,car", nil, true},
 		{"empty term before * rejected", "*2", nil, true},
+		{"bare +overlap means true", "person*1+overlap", []filterTerm{{Key: "person", Cap: 1, Overlap: true}}, false},
+		{"+overlap=true explicit", "person*1+overlap=true", []filterTerm{{Key: "person", Cap: 1, Overlap: true}}, false},
+		{"+overlap=false explicit", "person*1+overlap=false", []filterTerm{{Key: "person", Cap: 1, Overlap: false}}, false},
+		{"no +overlap means false by default", "person*1", []filterTerm{{Key: "person", Cap: 1, Overlap: false}}, false},
+		{"+overlap on a semantic term, no explicit cap", "person with a red hat+overlap", []filterTerm{{Key: "person with a red hat", Cap: 1, Overlap: true}}, false},
+		{"+overlap combined across multiple terms", "person*2+overlap,car", []filterTerm{{Key: "person", Cap: 2, Overlap: true}, {Key: "car", Cap: 1, Overlap: false}}, false},
+		{"unknown option rejected", "person*1+bogus", nil, true},
+		{"non-bool value for overlap rejected", "person*1+overlap=maybe", nil, true},
+		{"repeated option in the same term rejected", "person*1+overlap+overlap", nil, true},
+		{"empty option (stray +) rejected", "person*1+", nil, true},
 	}
 
 	for _, tt := range tests {

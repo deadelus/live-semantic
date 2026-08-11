@@ -186,7 +186,28 @@ Fix : `startWebServer` (`main.go`) lance `server.Start()` dans une goroutine et 
 
 **Pourquoi ça n'était pas dans § H1 initial** : les tests précédents de câblage API (§ H1, TODO.md) validaient toujours `stop` puis laissaient plusieurs secondes avant `pkill`, ou ne vérifiaient que les logs sans `ps`/`lsof` après coup — la fenêtre de course du bug 1 ne s'est ouverte que sous charge CLIP (cycles plus longs), et le bug 2 était invisible sans vérifier l'état du process après le kill, pas juste ses logs.
 
-## 16. Références
+## 16. Syntaxe `+option` pour `overlap`, tranchée (2026-08-11 soir)
+
+Suite de § 13 : l'utilisateur avait confirmé vouloir `overlap=false` par défaut partout (pas de double box sur le même objet), avec un paramètre nommé pour l'activer explicitement plus tard — syntaxe laissée ouverte, un exemple jeté (`person*1!overlap`) sans être tranché.
+
+**`!overlap` écarté** : ambigu, `!x` se lit dans beaucoup de conventions (shell, comparateurs) comme une négation, pas une activation — `person*1!overlap` aurait pu se lire "overlap désactivé" plutôt que l'inverse. Pas une bonne base pour un vrai paramètre.
+
+**Grammaire retenue, proposée et validée avec l'utilisateur** :
+
+```
+key[*cap][+option[=valeur]]...
+```
+
+- `+overlap` seul → `true` implicite (la présence active l'option, cohérent avec `*cap` : présence = valeur définie).
+- `+overlap=true` / `+overlap=false` → valeur explicite (utile pour de la génération programmatique côté GUI, pas juste la saisie manuelle).
+- Chaînable pour de futures options : `person*2+overlap+futureopt=valeur`.
+- Grammaire de nom d'option **stricte**, contrairement au `key` (qui accepte n'importe quel texte libre depuis la décision hybride, § 12-13) : un nom d'option inconnu, une valeur non-booléenne pour `overlap`, ou une option répétée dans le même terme sont des erreurs de parsing, pas des silences — il n'y a pas d'interprétation de repli raisonnable pour un nom d'option, contrairement à un `key` qui peut toujours devenir un terme sémantique.
+
+**Implémenté (`internal/application/uc/filter_spec.go`)** : `filterTerm.Overlap bool`, propagé jusqu'à `termMatch.Overlap` (`tracking.go`) au niveau du store interne de `trackManager`. **Pas encore branché dans `reanchor()`** — la valeur est parsée et stockée mais aucune des deux passes ne la consulte ; le comportement observable reste `overlap=false` partout quel que soit ce qu'on écrit dans le filtre. Câblage réel laissé en TODO.md § A, faute de cas d'usage concret qui en dépende pour l'instant (attend aussi le système d'événements/actions, § A, pour qu'un chevauchement volontaire serve à quelque chose).
+
+11 nouveaux cas de test (`filter_spec_test.go`) : `+overlap` implicite/explicite, options inconnues rejetées, valeurs non-booléennes rejetées, option répétée rejetée, terme sémantique avec option sans cap explicite.
+
+## 17. Références
 
 - Modèle original : [openai/clip-vit-base-patch32](https://huggingface.co/openai/clip-vit-base-patch32) (licence MIT, [openai/CLIP](https://github.com/openai/CLIP))
 - Export ONNX retenu : [Xenova/clip-vit-base-patch32](https://huggingface.co/Xenova/clip-vit-base-patch32)
