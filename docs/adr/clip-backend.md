@@ -259,7 +259,19 @@ Nouveau test (`TestBoxes_ScoreReflectsWhatDecidedTheMatch`) : un terme exact et 
 
 **Pas re-vérifié visuellement à l'instant du fix** (webcam vide au moment de la capture) — à confirmer par l'utilisateur à son prochain test : le score affiché sur la box sémantique devrait maintenant être ~0.25-0.28 (pas 85%), rendant visible à l'œil que ce match est plus fragile que le match exact.
 
-## 21. Références
+## 21. Bug plus profond trouvé sous § 20 : `bestMatch` ignorait `filterKey` (2026-08-11, nuit)
+
+L'utilisateur reteste après § 20 et envoie une capture d'écran : les deux pourcentages sont toujours affichés, mais **échangés** — `person (20.95%)` (le terme exact, devrait montrer la confiance YOLO ~85-90%) et `person with a yellow hat (91.06%)` (le terme sémantique, devrait montrer le score CLIP ~0.20-0.28). Aussi demandé : normaliser l'affichage en `%` pour les deux (au lieu de mélanger `"score 0.XX"` et `"XX.XX%"`) — fait en même temps, `tb.Score*100` affiché avec le même format `%.2f%%` que la confiance YOLO.
+
+**Root cause du swap, pas hypothétique** : `bestMatch` (qui décide quel track existant réanchorer sur une box) ne filtrait que par `track.Class` — jamais par `filterKey`. Or un terme exact et un terme sémantique matchés sur le même objet physique (le cas `+overlap`) spawnent deux tracks avec le **même** `track.Class` ("person" pour les deux, hérité du `box.Label` YOLO) mais un `filterKey` différent. Comme `m.active` est une map Go (ordre randomisé), l'appel de la pass 1 (terme exact, `score=0`) pouvait retomber sur le track du terme sémantique plutôt que le sien, lui écrasant `lastScore` à 0 — et symétriquement l'appel de la pass 2 (terme sémantique, `score` réel) pouvait retomber sur le track du terme exact, lui donnant un score qui ne lui appartient pas. Le `filterKey` du track lui-même restait correct (jamais modifié après le spawn) — seul le `lastScore` fuyait vers le mauvais track, d'où l'échange visible à l'écran alors que les identités ("person" vs "person with a yellow hat") restaient bien étiquetées.
+
+**Fix** : `bestMatch` prend maintenant un paramètre `filterKey` et exige `obj.filterKey == filterKey` en plus de `obj.track.Class == box.Label` — un appel d'un terme ne peut plus jamais réanchorer le track d'un autre terme, même si les deux partagent la même classe YOLO.
+
+**Pourquoi les tests précédents ne l'avaient pas attrapé** : tous les tests d'intégration `+overlap` n'appelaient `reanchor()` qu'**une seule fois** — au premier cycle, `m.active` est vide, donc les deux appels passent par `spawn()`, jamais par `bestMatch()` (rien à matcher). Le bug ne se manifeste qu'à partir du **second** cycle, une fois que les deux tracks existent déjà. Nouveau test (`TestReanchor_OverlapTracks_ScoreStaysWithCorrectTrackAcrossCycles`, 5 cycles) — **vérifié qu'il détecte réellement le bug** : fix temporairement retiré, 20/20 runs en échec (la randomisation de la map Go le rend quasi systématique, pas juste occasionnel), fix restauré, 20/20 runs au vert.
+
+**Vérifié visuellement en conditions réelles** (webcam, capture via `/ws`) : `person (89.97%)` et `person with a yellow hat (22.63%)` — les deux formatés en `%`, valeurs enfin correctement associées à leur box (confiance YOLO forte pour l'exact, score CLIP fragile et cohérent avec l'absence réelle de casquette jaune pour le sémantique).
+
+## 22. Références
 
 - Modèle original : [openai/clip-vit-base-patch32](https://huggingface.co/openai/clip-vit-base-patch32) (licence MIT, [openai/CLIP](https://github.com/openai/CLIP))
 - Export ONNX retenu : [Xenova/clip-vit-base-patch32](https://huggingface.co/Xenova/clip-vit-base-patch32)

@@ -519,7 +519,7 @@ func (m *trackManager) reanchor(frame *entities.Frame, req dto.RecognitionReques
 // exact match, when its real CLIP margin was ~0.25-0.28). Only ever called
 // from reanchor() while m.mu is already held.
 func (m *trackManager) matchOrSpawn(frame *entities.Frame, box entities.BoundingBox, filterKey string, capVal int, score float32, now time.Time, matchedTrackIDs map[string]bool, req dto.RecognitionRequest) {
-	if id, ok := m.bestMatch(box, matchedTrackIDs); ok {
+	if id, ok := m.bestMatch(box, filterKey, matchedTrackIDs); ok {
 		obj := m.active[id]
 		evt := obj.track.MatchDetection(box, now, score)
 		obj.lastScore = score
@@ -573,21 +573,38 @@ func (m *trackManager) missUnmatched(now time.Time, matchedTrackIDs map[string]b
 }
 
 // bestMatch returns the active track with the highest IoU against box
-// (restricted to the same class, above iouAssociationThreshold, and not
-// already matched this cycle). Greedy per-detection association, not a
-// global optimum (Hungarian algorithm) — sufficient for a first version,
-// revisit if the drift test (TODO.md § B) shows association errors.
+// (restricted to the same class AND the same filterKey, above
+// iouAssociationThreshold, and not already matched this cycle). Greedy
+// per-detection association, not a global optimum (Hungarian algorithm) —
+// sufficient for a first version, revisit if the drift test (TODO.md § B)
+// shows association errors.
+//
+// filterKey restriction added 2026-08-11 (docs/adr/clip-backend.md § 21) —
+// a real bug, not hypothetical: an exact term and a "+overlap" semantic
+// term matched to the same physical object spawn two tracks with the
+// *same* track.Class (both "person", from the same YOLO box.Label) but
+// different filterKey. Without also checking filterKey here, whichever
+// term's matchOrSpawn call happened to run first would bestMatch its way
+// onto *either* track (map iteration order over m.active is randomized),
+// not necessarily its own — score/state updates (MatchDetection,
+// obj.lastScore) then landed on the wrong track: the CLIP score computed
+// for the semantic term could get written onto the exact term's track
+// (and vice versa, exact's score=0 overwriting the semantic track's real
+// score) — exactly what produced the swapped percentages the user saw
+// (§ 21: exact term showing ~21%, semantic term showing ~91%, backwards).
+// filterKey is fixed at spawn and never changes, so this restriction is
+// safe: a term's calls now only ever re-anchor a track *it* created.
 //
 // bestMatch/spawn/miss/emit below are internal helpers: only ever called
 // from advance()/reanchor() (via matchOrSpawn) while m.mu is already held.
 // They don't lock themselves — sync.Mutex isn't reentrant, a second Lock()
 // from the same goroutine would deadlock.
-func (m *trackManager) bestMatch(box entities.BoundingBox, taken map[string]bool) (string, bool) {
+func (m *trackManager) bestMatch(box entities.BoundingBox, filterKey string, taken map[string]bool) (string, bool) {
 	bestID := ""
 	bestIoU := float32(iouAssociationThreshold)
 
 	for id, obj := range m.active {
-		if taken[id] || obj.track.Class != box.Label {
+		if taken[id] || obj.track.Class != box.Label || obj.filterKey != filterKey {
 			continue
 		}
 		last := obj.track.LastBox()

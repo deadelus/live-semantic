@@ -663,3 +663,58 @@ func TestBoxes_ScoreReflectsWhatDecidedTheMatch(t *testing.T) {
 		t.Fatalf(`boxes()["person with a red hat"].Score = %v, want 0.27 (the CLIP score that decided the match)`, got)
 	}
 }
+
+// TestReanchor_OverlapTracks_ScoreStaysWithCorrectTrackAcrossCycles is a
+// regression test for docs/adr/clip-backend.md § 21: a real bug (not
+// hypothetical, found from a user screenshot) where an exact term and a
+// "+overlap" semantic term matched to the same physical object — same
+// track.Class ("person" for both, since both come from the same YOLO
+// box.Label) — could have their re-anchor calls land on *either* track,
+// because bestMatch only checked Class, not filterKey. The single-cycle
+// tests above (e.g. TestReanchor_ExactAndSemanticSameLabel_WithOverlap_
+// BothMatch) never caught this: on a first cycle m.active starts empty,
+// so both terms go through spawn(), never bestMatch() — the bug only
+// shows up from the *second* cycle onward, once both tracks already exist
+// and reanchor has to choose which one to re-anchor.
+func TestReanchor_OverlapTracks_ScoreStaysWithCorrectTrackAcrossCycles(t *testing.T) {
+	target := boxSized("person", 0, 40, 40)
+	const semanticScore = float32(0.21)
+
+	encoder := &mockSemanticEncoder{scoreByCropSize: map[string]float32{
+		cropSizeKey(target): semanticScore,
+	}}
+	detector := &mockObjectDetector{boxes: []entities.BoundingBox{target}}
+	uc := newTestUseCase(detector, encoder, &mockAlertSender{})
+
+	req := dto.RecognitionRequest{Filter: "person*1,person with a yellow hat*1+overlap"}
+	m, err := newTrackManager(uc, req)
+	if err != nil {
+		t.Fatalf("newTrackManager error = %v", err)
+	}
+
+	// Run several cycles — the bug (map iteration randomizing which call's
+	// bestMatch lands on which track) doesn't necessarily reproduce on the
+	// very first post-spawn cycle every single run, so check every cycle,
+	// not just the last.
+	for cycle := 1; cycle <= 5; cycle++ {
+		if err := m.reanchor(testFrame(), req); err != nil {
+			t.Fatalf("reanchor() cycle %d error = %v", cycle, err)
+		}
+
+		if got := m.count(); got != 2 {
+			t.Fatalf("cycle %d: active tracks = %d, want 2", cycle, got)
+		}
+
+		scoreByKey := map[string]float32{}
+		for _, b := range m.boxes() {
+			scoreByKey[b.FilterKey] = b.Score
+		}
+
+		if got, ok := scoreByKey["person"]; !ok || got != 0 {
+			t.Fatalf(`cycle %d: boxes()["person"].Score = %v, want 0 (exact term, no CLIP score — must never leak the semantic term's score)`, cycle, got)
+		}
+		if got, ok := scoreByKey["person with a yellow hat"]; !ok || got != semanticScore {
+			t.Fatalf(`cycle %d: boxes()["person with a yellow hat"].Score = %v, want %v (must never be overwritten by the exact term's call)`, cycle, got, semanticScore)
+		}
+	}
+}

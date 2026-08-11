@@ -147,12 +147,17 @@ func (uc *UseCase) RecognitionUseCase(ctx context.Context, req dto.RecognitionRe
 				// term or no-filter track has no CLIP score (Score == 0),
 				// so it keeps showing YOLO's confidence, which *is* what
 				// decided that match. Found misleading in real use
-				// (docs/adr/clip-backend.md § 20): a semantic match looked
-				// just as "confident" on screen as an exact one.
-				description := fmt.Sprintf("%s (%.2f%%)", tb.FilterKey, tb.Box.Confidence*100)
+				// (docs/adr/clip-backend.md § 20-21): a semantic match
+				// looked just as "confident" on screen as an exact one —
+				// same format (a "%") both times too, per the user's
+				// request, rather than mixing "0.XX" and "XX.XX%" — still
+				// two very different-looking numbers (~25% vs ~85%), just
+				// consistently formatted.
+				percent := tb.Box.Confidence * 100
 				if tb.Score != 0 {
-					description = fmt.Sprintf("%s (score %.2f)", tb.FilterKey, tb.Score)
+					percent = tb.Score * 100
 				}
+				description := fmt.Sprintf("%s (%.2f%%)", tb.FilterKey, percent)
 				drawBoxes = append(drawBoxes, drawer.Box{
 					ID:          id,
 					Description: description,
