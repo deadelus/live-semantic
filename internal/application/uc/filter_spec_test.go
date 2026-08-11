@@ -80,3 +80,49 @@ func TestIsCOCOLabel(t *testing.T) {
 		})
 	}
 }
+
+func TestSemanticLabelHint(t *testing.T) {
+	tests := []struct {
+		key       string
+		wantLabel string
+		wantOK    bool
+	}{
+		{"person with a yellow hat", "person", true},
+		{"a red car", "car", true},
+		{"person near a car", "", false},     // two COCO classes mentioned — ambiguous, no hint
+		{"a unicorn", "", false},             // no COCO class mentioned at all
+		{"scary carpet salesman", "", false}, // "car" must not match inside "scary"/"carpet" — word-boundary check
+		{"", "", false},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.key, func(t *testing.T) {
+			gotLabel, gotOK := semanticLabelHint(tt.key)
+			if gotOK != tt.wantOK || gotLabel != tt.wantLabel {
+				t.Fatalf("semanticLabelHint(%q) = (%q, %v), want (%q, %v)", tt.key, gotLabel, gotOK, tt.wantLabel, tt.wantOK)
+			}
+		})
+	}
+}
+
+func TestContainsWord(t *testing.T) {
+	tests := []struct {
+		haystack, needle string
+		want             bool
+	}{
+		{"person with a yellow hat", "person", true},
+		{"a hat and a person", "person", true},
+		{"scary carpet", "car", false},
+		{"a car nearby", "car", true},
+		{"car", "car", true},
+		{"cars", "car", false}, // "cars" isn't the word "car" — trailing 's' is a word byte
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.haystack+"/"+tt.needle, func(t *testing.T) {
+			if got := containsWord(tt.haystack, tt.needle); got != tt.want {
+				t.Fatalf("containsWord(%q, %q) = %v, want %v", tt.haystack, tt.needle, got, tt.want)
+			}
+		})
+	}
+}

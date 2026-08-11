@@ -98,11 +98,16 @@ const notifyDebounce = 5 * time.Second
 type termMatch struct {
 	Cap       int
 	Embedding entities.Embedding
-	// Overlap mirrors filterTerm.Overlap ("+overlap" in the filter spec) —
-	// carried through so it's available once reanchor is wired to consult
-	// it (TODO.md § A). Not read anywhere yet: every pass still treats
-	// every term as Overlap=false.
+	// Overlap mirrors filterTerm.Overlap ("+overlap" in the filter spec):
+	// when true, this term's semantic pass (reanchor) may still evaluate a
+	// candidate box another term already claimed this cycle. Consulted by
+	// reanchor's pass 2 — see its doc comment.
 	Overlap bool
+	// LabelHint (filter_spec.go's semanticLabelHint) restricts this term's
+	// candidates to boxes YOLO already labeled with this class — empty
+	// means no restriction, every box is a candidate. Only ever set for a
+	// semantic term (Embedding != nil); a nil Embedding never has a hint.
+	LabelHint string
 }
 
 // trackManager owns the set of active tracks, shared between the video loop
@@ -167,7 +172,8 @@ func newTrackManager(uc *UseCase, req dto.RecognitionRequest) (*trackManager, er
 		if err != nil {
 			return nil, fmt.Errorf("encode semantic filter term %q: %w", t.Key, err)
 		}
-		m.terms[t.Key] = termMatch{Cap: t.Cap, Embedding: emb, Overlap: t.Overlap}
+		labelHint, _ := semanticLabelHint(t.Key)
+		m.terms[t.Key] = termMatch{Cap: t.Cap, Embedding: emb, Overlap: t.Overlap, LabelHint: labelHint}
 	}
 
 	return m, nil
@@ -323,20 +329,13 @@ func (m *trackManager) reanchor(frame *entities.Frame, req dto.RecognitionReques
 	// Pass 1: exact COCO-label terms — a candidate whose own YOLO label is
 	// directly requested is claimed immediately, no CLIP involved.
 	//
-	// Deliberate default, confirmed by the user 2026-08-11 (not a bug to
-	// fix, reframed from an earlier doc comment that called it one — see
-	// TODO.md § A / docs/adr/clip-backend.md § 13 for the correction): a
-	// box claimed here (by an exact term) is excluded from every semantic
-	// term's candidate pool this cycle, even if that exact term's own cap
-	// is already full. Concretely, "person*1" alongside "person with a red
-	// hat*1" never draws two overlapping boxes on the same physical
-	// person — the user explicitly doesn't want that unless they ask for
-	// it. "Ask for it" isn't built: a named opt-in (e.g. a per-term
-	// "overlap" modifier) is on the backlog, TODO.md § A, not implemented.
-	// Until then, combining an exact term with a semantic term that
-	// targets the same underlying COCO class will always make the
-	// semantic term see zero candidates for that class — expected, not a
-	// defect.
+	// Deliberate default, confirmed by the user 2026-08-11: a box claimed
+	// here is excluded from every semantic term's candidate pool this
+	// cycle UNLESS that semantic term opts in with "+overlap" (see pass 2
+	// below) — "person*1" alongside "person with a red hat*1" never draws
+	// two boxes on the same physical person by default, but does if the
+	// second term is "person with a red hat*1+overlap" (TODO.md § A,
+	// docs/adr/clip-backend.md § 13/16/17).
 	for i, box := range result.BoundingBoxes {
 		term, ok := m.terms[box.Label]
 		if !ok || term.Embedding != nil {
@@ -346,15 +345,26 @@ func (m *trackManager) reanchor(frame *entities.Frame, req dto.RecognitionReques
 		m.matchOrSpawn(frame, box, box.Label, term.Cap, now, matchedTrackIDs, req)
 	}
 
-	// Pass 2: semantic terms — CLIP-scored against every candidate not
-	// already claimed in pass 1 (regardless of that candidate's own YOLO
-	// label: a semantic term describes something beyond the 80 COCO
-	// classes, so YOLO's own guess for that box is just a region proposal
-	// here, same principle as the 2026-08-10 "CLIP decides" design for
-	// this specific case). Ranked by score, top Cap kept — this is what
-	// makes the cap meaningful for a scored match ("the single best match"
-	// for "person with a red hat"*1), not just "first one YOLO happened to
-	// list".
+	// Pass 2: semantic terms — CLIP-scored, ranked, top Cap kept (the top-N
+	// selection is what makes the cap meaningful for a scored match, "the
+	// single best match" for "person with a red hat"*1, not just "first
+	// one YOLO happened to list").
+	//
+	// Candidate pool per term, in order:
+	//   - Skip a box already claimed this cycle (by pass 1 or another pass
+	//     2 term) UNLESS this term has Overlap=true (its own "+overlap").
+	//     A box this term does match is still marked claimed afterward —
+	//     a later term without Overlap still won't see it, only a term
+	//     that explicitly opts in can.
+	//   - Skip a box whose own YOLO label doesn't match this term's
+	//     LabelHint, when it has one (semanticLabelHint — a COCO class
+	//     name mentioned in the term's free text, e.g. "person" in "person
+	//     with a red hat"). Found necessary 2026-08-11, tested live: without
+	//     this, "person with a yellow hat" was scored against every
+	//     detected box including a couch and a potted plant, which
+	//     sometimes outscored the actual person (docs/adr/clip-backend.md
+	//     § 17). No hint (0 or 2+ COCO classes mentioned) means every box
+	//     is still a candidate, same as before.
 	for key, term := range m.terms {
 		if term.Embedding == nil {
 			continue
@@ -362,7 +372,10 @@ func (m *trackManager) reanchor(frame *entities.Frame, req dto.RecognitionReques
 
 		var candidates []scoredCandidate
 		for i, box := range result.BoundingBoxes {
-			if claimed[i] {
+			if claimed[i] && !term.Overlap {
+				continue
+			}
+			if term.LabelHint != "" && box.Label != term.LabelHint {
 				continue
 			}
 			crop, ok := frame.Crop(box)
@@ -436,7 +449,23 @@ func (m *trackManager) matchOrSpawn(frame *entities.Frame, box entities.Bounding
 		return
 	}
 
-	m.spawn(frame, box, filterKey, now)
+	if id, ok := m.spawn(frame, box, filterKey, now); ok {
+		// Found 2026-08-11 while wiring +overlap: a freshly spawned track
+		// MUST be marked matched this same cycle. Without this, two things
+		// went wrong — (1) a later term this same reanchor() call (e.g. an
+		// "+overlap" semantic term processed after an exact term already
+		// spawned this box) could bestMatch its way onto the brand-new
+		// track instead of spawning its own, since bestMatch only checks
+		// matchedTrackIDs; (2) missUnmatched (called once, after every
+		// term this cycle) would call Miss() on this track in the very
+		// cycle it was born, resetting its hit streak back to 0 — silently
+		// doubling how long every single spawn takes to reach
+		// StateConfirmed (minHitsToConfirm), for every filter, not just
+		// +overlap. Neither was caught by the test suite before the
+		// +overlap tests exercised two terms matching the same box in one
+		// cycle.
+		matchedTrackIDs[id] = true
+	}
 }
 
 // missUnmatched records a miss for every active track that wasn't matched
@@ -497,21 +526,25 @@ func (m *trackManager) countByFilterKey(key string) int {
 // spawn creates a new track + tracker for a detection that didn't match any
 // existing track. A brand-new track starts StateTentative (NewTrack already
 // counts the initial detection as hit #1) — no TrackEvent to emit yet.
-func (m *trackManager) spawn(frame *entities.Frame, box entities.BoundingBox, filterKey string, now time.Time) {
+// Returns the new track's ID and true on success — false (with a zero id)
+// if tracker creation/init failed, in which case no track exists to add to
+// matchedTrackIDs.
+func (m *trackManager) spawn(frame *entities.Frame, box entities.BoundingBox, filterKey string, now time.Time) (string, bool) {
 	trk, err := m.uc.trackerFactory()
 	if err != nil {
 		m.uc.logger.Info("Tracker creation failed", map[string]interface{}{"error": err.Error()})
-		return
+		return "", false
 	}
 	if err := trk.Init(frame, box); err != nil {
 		m.uc.logger.Info("Tracker init failed", map[string]interface{}{"error": err.Error()})
 		trk.Cleanup()
-		return
+		return "", false
 	}
 
 	m.nextTrackID++
 	id := fmt.Sprintf("track-%d", m.nextTrackID)
 	m.active[id] = &trackedObject{track: entities.NewTrack(id, box, now), tracker: trk, filterKey: filterKey}
+	return id, true
 }
 
 // miss records a track that wasn't matched this cycle (neither by the

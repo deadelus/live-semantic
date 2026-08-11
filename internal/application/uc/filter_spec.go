@@ -65,6 +65,70 @@ func isCOCOLabel(key string) bool {
 	return ok
 }
 
+// semanticLabelHint scans a semantic term's free-text key for exactly one
+// COCO class name mentioned as a whole word/phrase (e.g. "person with a
+// yellow hat" mentions "person") — trackManager uses this, when found, to
+// restrict that term's CLIP candidates to boxes YOLO already labeled with
+// the hinted class, instead of scoring every detected box regardless of
+// its own label.
+//
+// Found necessary 2026-08-11, tested live: without this, a query like
+// "person with a yellow hat" was scored against every candidate in the
+// frame — including a couch and a potted plant, which sometimes outscored
+// the actual (correctly detected, YOLO-labeled "person") person, because
+// nothing in the semantic pass restricted candidates to plausible ones
+// first (docs/adr/clip-backend.md § 13/17). Restricting to the mentioned
+// class both fixes that (a couch is never even considered for a
+// "person..." query) and is cheaper (fewer EncodeImage calls per cycle).
+//
+// Deliberately conservative: returns ("", false) — no restriction, every
+// box still scored, matching the pre-existing behavior — unless EXACTLY
+// one COCO class name appears in key. Zero matches means the term
+// genuinely doesn't reference a known class (nothing to restrict to).
+// More than one is ambiguous (e.g. "person near a car" mentions both) —
+// guessing which one is the real subject risks silently restricting to
+// the wrong class, worse than not restricting at all.
+func semanticLabelHint(key string) (string, bool) {
+	var found []string
+	for label := range cocoLabels {
+		if containsWord(key, label) {
+			found = append(found, label)
+		}
+	}
+	if len(found) == 1 {
+		return found[0], true
+	}
+	return "", false
+}
+
+// containsWord reports whether needle appears in haystack bounded by
+// non-alphanumeric characters (or string edges) on both sides — a plain
+// strings.Contains would let "car" match inside "scary" or "carpet", which
+// semanticLabelHint must not do. ASCII-only word-boundary notion, matching
+// the ASCII-only COCO class names this is checked against.
+func containsWord(haystack, needle string) bool {
+	for start := 0; ; {
+		idx := strings.Index(haystack[start:], needle)
+		if idx == -1 {
+			return false
+		}
+		idx += start
+		end := idx + len(needle)
+
+		beforeOK := idx == 0 || !isWordByte(haystack[idx-1])
+		afterOK := end == len(haystack) || !isWordByte(haystack[end])
+		if beforeOK && afterOK {
+			return true
+		}
+		start = idx + 1
+	}
+}
+
+func isWordByte(b byte) bool {
+	return b == '_' ||
+		(b >= 'a' && b <= 'z') || (b >= 'A' && b <= 'Z') || (b >= '0' && b <= '9')
+}
+
 // parseFilterSpec parses a comma-separated filter spec into a set of
 // filterTerm:
 //

@@ -364,3 +364,146 @@ func TestReanchor_SemanticTerm_BelowThresholdNeverSpawns(t *testing.T) {
 		t.Fatalf("active tracks = %d, want 0 (score below threshold)", got)
 	}
 }
+
+func TestReanchor_ExactAndSemanticSameLabel_DefaultNoOverlap_OnlyExactMatches(t *testing.T) {
+	target := boxSized("person", 0, 40, 40)
+	encoder := &mockSemanticEncoder{scoreByCropSize: map[string]float32{
+		cropSizeKey(target): 0.9, // would clearly match if ever evaluated
+	}}
+	detector := &mockObjectDetector{boxes: []entities.BoundingBox{target}}
+	uc := newTestUseCase(detector, encoder, &mockAlertSender{})
+
+	// "person with a red hat" mentions "person" (semanticLabelHint would
+	// restrict it to "person"-labeled boxes) — irrelevant here since the
+	// default (no +overlap) must already exclude this box at the claimed
+	// check, before the label hint is even consulted.
+	req := dto.RecognitionRequest{Filter: "person*1,person with a red hat*1"}
+	m, err := newTrackManager(uc, req)
+	if err != nil {
+		t.Fatalf("newTrackManager error = %v", err)
+	}
+
+	if err := m.reanchor(testFrame(), req); err != nil {
+		t.Fatalf("reanchor error = %v", err)
+	}
+
+	if got := m.count(); got != 1 {
+		t.Fatalf("active tracks = %d, want 1 (only the exact term should match — no +overlap on the semantic term)", got)
+	}
+	for _, obj := range m.active {
+		if obj.filterKey != "person" {
+			t.Fatalf("filterKey = %q, want %q (the exact term, not the semantic one)", obj.filterKey, "person")
+		}
+	}
+}
+
+func TestReanchor_ExactAndSemanticSameLabel_WithOverlap_BothMatch(t *testing.T) {
+	target := boxSized("person", 0, 40, 40)
+	encoder := &mockSemanticEncoder{scoreByCropSize: map[string]float32{
+		cropSizeKey(target): 0.9,
+	}}
+	detector := &mockObjectDetector{boxes: []entities.BoundingBox{target}}
+	uc := newTestUseCase(detector, encoder, &mockAlertSender{})
+
+	req := dto.RecognitionRequest{Filter: "person*1,person with a red hat*1+overlap"}
+	m, err := newTrackManager(uc, req)
+	if err != nil {
+		t.Fatalf("newTrackManager error = %v", err)
+	}
+
+	if err := m.reanchor(testFrame(), req); err != nil {
+		t.Fatalf("reanchor error = %v", err)
+	}
+
+	if got := m.count(); got != 2 {
+		t.Fatalf("active tracks = %d, want 2 (+overlap lets the semantic term also claim the box the exact term already claimed)", got)
+	}
+
+	gotKeys := map[string]bool{}
+	for _, obj := range m.active {
+		gotKeys[obj.filterKey] = true
+	}
+	for _, want := range []string{"person", "person with a red hat"} {
+		if !gotKeys[want] {
+			t.Fatalf("missing track with filterKey %q among active tracks %v", want, gotKeys)
+		}
+	}
+}
+
+func TestReanchor_SemanticTerm_LabelHintIgnoresMismatchedHighScorer(t *testing.T) {
+	// "person with a yellow hat" mentions "person" -> LabelHint="person".
+	// The couch scores far higher than the person, but must still be
+	// ignored — this is exactly the real-world case that motivated
+	// LabelHint (docs/adr/clip-backend.md § 17: a couch/potted plant
+	// outscoring the actual person for a "person ..." query).
+	person := boxSized("person", 0, 40, 40)
+	couch := boxSized("couch", 1, 90, 90)
+
+	encoder := &mockSemanticEncoder{scoreByCropSize: map[string]float32{
+		cropSizeKey(person): 0.25,
+		cropSizeKey(couch):  0.90,
+	}}
+	detector := &mockObjectDetector{boxes: []entities.BoundingBox{couch, person}}
+	uc := newTestUseCase(detector, encoder, &mockAlertSender{})
+
+	req := dto.RecognitionRequest{Filter: "person with a yellow hat*1"}
+	m, err := newTrackManager(uc, req)
+	if err != nil {
+		t.Fatalf("newTrackManager error = %v", err)
+	}
+	if got := m.terms["person with a yellow hat"].LabelHint; got != "person" {
+		t.Fatalf("LabelHint = %q, want %q", got, "person")
+	}
+
+	if err := m.reanchor(testFrame(), req); err != nil {
+		t.Fatalf("reanchor error = %v", err)
+	}
+
+	if got := m.count(); got != 1 {
+		t.Fatalf("active tracks = %d, want 1 (the couch must never be a candidate)", got)
+	}
+	for _, obj := range m.active {
+		if obj.track.Class != "person" {
+			t.Fatalf("matched track's class = %q, want %q (the couch outscored it but should have been excluded by LabelHint)", obj.track.Class, "person")
+		}
+	}
+}
+
+// TestReanchor_SpawnedTrackConfirmsInExactlyMinHitsCycles is a regression
+// test for a bug found 2026-08-11 while wiring +overlap (not specific to
+// it — affects every spawn, single-term filters included): spawn() didn't
+// register the new track's ID into matchedTrackIDs, so missUnmatched
+// (called once per reanchor cycle, after every term) would call Miss() on
+// a track in the very same cycle it was born — resetting its hit streak
+// back to 0 immediately. A persistently-matching box took one extra cycle
+// to reach StateConfirmed (4 instead of minHitsToConfirm=3), and in the
+// worst case (a brief miss on the cycle right after spawning) could reach
+// StateLost without ever confirming, since maxMissesBeforeLost=2.
+func TestReanchor_SpawnedTrackConfirmsInExactlyMinHitsCycles(t *testing.T) {
+	target := box("person", 0)
+	detector := &mockObjectDetector{boxes: []entities.BoundingBox{target}}
+	uc := newTestUseCase(detector, &mockSemanticEncoder{}, &mockAlertSender{})
+
+	req := dto.RecognitionRequest{Filter: "person"}
+	m, err := newTrackManager(uc, req)
+	if err != nil {
+		t.Fatalf("newTrackManager error = %v", err)
+	}
+
+	const minHitsToConfirm = 3 // entities.Track's own unexported constant, mirrored here
+	for cycle := 1; cycle <= minHitsToConfirm; cycle++ {
+		if err := m.reanchor(testFrame(), req); err != nil {
+			t.Fatalf("reanchor() cycle %d error = %v", cycle, err)
+		}
+	}
+
+	if got := m.count(); got != 1 {
+		t.Fatalf("active tracks = %d, want 1", got)
+	}
+	for _, obj := range m.active {
+		if obj.track.State != entities.StateConfirmed {
+			t.Fatalf("track state after %d matching cycles = %s, want %s (a same-cycle phantom Miss() on spawn would delay this by at least one extra cycle)",
+				minHitsToConfirm, obj.track.State, entities.StateConfirmed)
+		}
+	}
+}

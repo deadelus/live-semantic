@@ -207,7 +207,25 @@ key[*cap][+option[=valeur]]...
 
 11 nouveaux cas de test (`filter_spec_test.go`) : `+overlap` implicite/explicite, options inconnues rejetées, valeurs non-booléennes rejetées, option répétée rejetée, terme sémantique avec option sans cap explicite.
 
-## 17. Références
+## 17. `Overlap` câblé + restriction par label mentionné + bug de confirmation trouvé (2026-08-11, fin de soirée)
+
+Suite de § 16 : l'utilisateur voulait tester en vrai `person` + `person with a yellow hat` avec overlap actif (deux boxes sur la même personne), et voulait explicitement éliminer le bruit couch/plant relevé en § 13.
+
+**Deux mécanismes ajoutés à `reanchor()` (pass 2) :**
+
+1. **`Overlap` consulté** : `if claimed[i] && !term.Overlap { continue }` — une box déjà réclamée par un autre terme ce cycle reste candidate si le terme sémantique courant a `Overlap=true`. Symétrique et simple à raisonner : chaque terme décide pour lui-même s'il accepte de partager, indépendamment de qui a déjà réclamé la box.
+
+2. **`semanticLabelHint` (`filter_spec.go`)** : si le texte libre d'un terme sémantique mentionne **exactement une** classe COCO comme mot entier (ex. "person" dans "person with a yellow hat", détecté avec vérification de frontière de mot pour éviter qu'un `containsWord` naïf ne matche "car" dans "scary"/"carpet"), les candidats de ce terme sont restreints aux boxes déjà labellisées ainsi par YOLO. Zéro ou 2+ classes mentionnées (ex. "person near a car") → pas de restriction, comportement inchangé (trop ambigu pour deviner laquelle est le vrai sujet). Effet direct : un canapé ou une plante ne sont plus jamais candidats pour une requête qui mentionne "person" — pas seulement moins bien notés, **jamais évalués du tout** (bonus : moins d'appels `EncodeImage` par cycle).
+
+**Bug plus profond trouvé en écrivant le test d'intégration pour `Overlap`, pas spécifique à cette feature.** Premier test écrit (`person*1` exact + `person with a red hat*1+overlap` sémantique sur la même box) échouait : 1 track au lieu de 2. Investigation : `spawn()` ne renseignait jamais `matchedTrackIDs` pour le track qu'il venait de créer. Deux conséquences :
+- Dans le cas testé : le terme sémantique, en repassant sur la même box via `matchOrSpawn` → `bestMatch`, "volait" le track fraîchement spawné par le terme exact (même `Class`, IoU=1.0, pas dans `matchedTrackIDs` donc considéré libre) au lieu d'en créer un second.
+- **Plus grave et indépendant d'`overlap`** : `missUnmatched` (appelé une fois par cycle, après toutes les passes) itère `m.active` et appelle `Miss()` sur tout track absent de `matchedTrackIDs` — un track tout juste `spawn()`-é en faisait partie, à chaque cycle, pour **tout** filtre, pas seulement les cas `overlap`. `Miss()` remet `hits` à 0 : un track qui vient de naître se faisait donc immédiatement infliger un miss dans le même cycle, retardant sa confirmation d'un cycle supplémentaire à chaque fois (`minHitsToConfirm=3` devenait effectivement 4 cycles), et dans le pire cas (un vrai miss juste après le spawn) pouvait le faire passer direct en `StateLost` (`maxMissesBeforeLost=2`) sans jamais confirmer. Bug présent depuis la création de l'agrégat `Track` (TODO.md § D, 2026-08-09), jamais détecté faute d'un test qui vérifiait le nombre de cycles nécessaires à la confirmation.
+
+**Fix** : `spawn()` renvoie désormais `(id string, ok bool)` ; `matchOrSpawn` ajoute l'id à `matchedTrackIDs` sur un spawn réussi, exactement comme il le fait déjà sur un match. Test de régression dédié (`TestReanchor_SpawnedTrackConfirmsInExactlyMinHitsCycles`) — **vérifié qu'il détecte réellement le bug** : fix temporairement désactivé (une ligne commentée), test repassé, confirmé en échec (`Tentative` au lieu de `Confirmed` après 3 cycles), fix restauré, test repassé au vert. Pas juste écrit et supposé correct.
+
+**Testé en conditions réelles** (webcam, filtre `person*1,person with a yellow hat*1+overlap`) : `track-1` (`class:"person"`, terme exact) et `track-2` (`filterKey:"person with a yellow hat"`, terme sémantique) tous les deux `Confirmed` en continu sur la même personne — le double-box demandé fonctionne. Scores sémantiques systématiquement `yolo_label:"person"` (jamais couch/plant) à ~0.25-0.27 sur une dizaine de cycles consécutifs — la restriction par label élimine bien le bruit sans dégrader le vrai match.
+
+## 18. Références
 
 - Modèle original : [openai/clip-vit-base-patch32](https://huggingface.co/openai/clip-vit-base-patch32) (licence MIT, [openai/CLIP](https://github.com/openai/CLIP))
 - Export ONNX retenu : [Xenova/clip-vit-base-patch32](https://huggingface.co/Xenova/clip-vit-base-patch32)
