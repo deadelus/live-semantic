@@ -299,11 +299,10 @@ func TestReanchor_SemanticTerm_RanksAndCaps(t *testing.T) {
 
 func TestReanchor_MixedExactAndSemanticTerms(t *testing.T) {
 	// Deliberately different YOLO labels ("car" vs "person") — see
-	// reanchor's doc comment / TODO.md § A for the known, unresolved
-	// interaction when an exact term and a semantic term could both want
-	// the *same* YOLO label (pass 1 claims every box with that label
-	// first, cap or not, so a semantic term never gets a chance at one
-	// pass 1 already dropped to its cap). Not what this test is about.
+	// reanchor's doc comment / TODO.md § A: an exact term and a semantic
+	// term sharing the *same* YOLO label is the deliberate no-overlap
+	// default (pass 1 claims every box with that label first, cap or
+	// not), confirmed by the user 2026-08-11, not tested here on purpose.
 	car := box("car", 0)                       // claimed by the exact "car" term
 	hatPerson := boxSized("person", 1, 40, 40) // "person" isn't requested as an exact term here, so pass 1 never touches it — scored by the semantic term in pass 2
 

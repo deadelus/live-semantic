@@ -318,18 +318,20 @@ func (m *trackManager) reanchor(frame *entities.Frame, req dto.RecognitionReques
 	// Pass 1: exact COCO-label terms — a candidate whose own YOLO label is
 	// directly requested is claimed immediately, no CLIP involved.
 	//
-	// Known limitation, not resolved (TODO.md § A): every box with a
-	// requested label is marked claimed here even if its exact term's cap
-	// is already full and matchOrSpawn ends up dropping it — it does NOT
-	// fall through to pass 2. So an exact term and a semantic term sharing
-	// the same underlying YOLO label (e.g. "person*1" alongside "person
-	// with a red hat*1" — both would-be matches are YOLO-labeled "person")
-	// can starve the semantic term of candidates once the exact term's cap
-	// is reached, even if the semantic term's own cap has room. Not hit by
-	// the test suite's happy-path scenarios (which use non-overlapping
-	// labels between exact and semantic terms) — only matters if a caller
-	// actually combines an exact term with a semantic term targeting the
-	// same COCO class.
+	// Deliberate default, confirmed by the user 2026-08-11 (not a bug to
+	// fix, reframed from an earlier doc comment that called it one — see
+	// TODO.md § A / docs/adr/clip-backend.md § 13 for the correction): a
+	// box claimed here (by an exact term) is excluded from every semantic
+	// term's candidate pool this cycle, even if that exact term's own cap
+	// is already full. Concretely, "person*1" alongside "person with a red
+	// hat*1" never draws two overlapping boxes on the same physical
+	// person — the user explicitly doesn't want that unless they ask for
+	// it. "Ask for it" isn't built: a named opt-in (e.g. a per-term
+	// "overlap" modifier) is on the backlog, TODO.md § A, not implemented.
+	// Until then, combining an exact term with a semantic term that
+	// targets the same underlying COCO class will always make the
+	// semantic term see zero candidates for that class — expected, not a
+	// defect.
 	for i, box := range result.BoundingBoxes {
 		term, ok := m.terms[box.Label]
 		if !ok || term.Embedding != nil {
