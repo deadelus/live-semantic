@@ -144,7 +144,27 @@ Deux options posées à l'utilisateur : (1) score relatif contre un/des prompt(s
 
 **Limite qui reste ouverte, pas résolue par ce changement** : le `*N` est pour l'instant un plafond pur (n'accepte pas plus de N tracks). L'intention à terme de l'utilisateur est qu'une condition de scène (ex. "2 personnes simultanément") puisse déclencher une ou plusieurs actions/événements configurables — rien de conçu (ni le modèle d'action, ni la syntaxe pour l'associer à un terme), TODO.md § A dernier item.
 
-## 13. Références
+## 13. Retour en arrière partiel : filtre hybride label + CLIP (2026-08-11, même après-midi)
+
+Suite directe de § 12, quelques heures plus tard. L'utilisateur reprend : CLIP "était utile quand même" — la demande n'était pas de le supprimer, mais de ne plus l'avoir comme *seul* mécanisme, avec un défaut fixe non exposé (la GUI, § H, le remplacera par un vrai contrôle un jour). Spec donnée explicitement par l'utilisateur, pas devinée :
+
+> si je mets `"person with a red hat"*1` → YOLO propose des candidats, CLIP les score, on affiche 1 seule box (le "bruit" au-delà du plafond pourra déclencher une action ou non, pas construit) ; si je mets juste `person`, le seuil reste par défaut et **n'est pas appliqué** — c'est une classe COCO, elle sait ce qu'elle cherche.
+
+**Décision : `reanchor()` tourne en deux passes.**
+- **Pass 1 (exacte)** : un terme qui est une des 80 classes COCO matche directement sur `box.Label` — inchangé vs § 12, toujours aucun appel CLIP.
+- **Pass 2 (sémantique)** : un terme qui n'est *pas* une classe COCO est scoré via CLIP contre chaque candidat **non déjà réclamé par la pass 1**, filtré à `defaultSimilarityThreshold` (constante cachée, `0.20` — même valeur que le défaut abaissé en § 10, pas re-calibrée spécifiquement pour ce nouvel usage), **classé par score décroissant**, seuls les `N` meilleurs (le plafond du terme) sont retenus. Le plafond devient donc un vrai top-N pour un terme sémantique — c'est ce qui rend `"..."*1` réellement "1 seule box, la meilleure", pas juste "la première trouvée".
+
+`filterTerm.Label` renommé `Key` (peut être un label exact ou du texte libre). `parseFilterSpec` **n'erreure plus sur un terme hors COCO** — c'est désormais un terme sémantique valide, pas un typo (le typo-protection de § 12 disparaît de facto pour les termes non-COCO ; un vrai typo de "person" devient un filtre sémantique bizarre et probablement peu discriminant plutôt qu'une erreur claire — compromis accepté, pas re-questionné). `dto.RecognitionRequest.SimilarityThreshold` reste supprimé (toujours pas un champ exposé) — le seuil sémantique est une constante interne, pas un paramètre de requête.
+
+**Limite connue, documentée, pas résolue** : un terme exact et un terme sémantique visant le **même label YOLO sous-jacent** (ex. `person*1,person avec quelque chose*1`, les deux `person`-labellisés par YOLO) interagissent mal — la pass 1 réclame toute box labellisée "person" avant que la pass 2 ne les voie, plafond ou pas ; une box qui dépasse le plafond du terme exact ne "retombe" jamais vers le terme sémantique pour une seconde chance. Documenté dans le doc-comment de `reanchor()`, pas contourné — nécessiterait de repenser l'ordre des passes ou de fusionner les deux dans une seule logique de priorité, pas fait.
+
+**Testé en conditions réelles** (webcam, `--web`, filtre `person*1,person with a red hat*1`) : aucune personne dans le cadre au moment du test → le terme exact ne matche rien. Le terme sémantique, lui, matche — une **plante en pot** (`class: potted plant`, `state: Confirmed` en continu, plafond=1 respecté, aucune erreur). Résultat à double lecture : (1) **confirme mécaniquement que le pipeline hybride fonctionne** — partition exact/sémantique correcte, classement par score opérant, plafond respecté ; (2) **confirme aussi, sans le vouloir, que la fragilité documentée en § 7/§ 10 est toujours bien réelle** — maintenant visible sur le chemin sémantique plutôt que sur un ancien gate global unique. Pas une régression du changement de cette section : c'est la même limite de fond que § 12 a déjà actée comme non résolue, juste réapparue dans le nouveau contexte hybride au premier vrai test.
+
+**Questions soulevées par l'utilisateur, pas actées en code** :
+- **Auto-calibration** : les futures actions (§ système d'événements, TODO.md § A, pas construit) pourraient ajuster `defaultSimilarityThreshold` automatiquement selon le "bruit" observé — aucune métrique de bruit définie, aucune fenêtre d'observation choisie, dépend du système d'actions pour avoir un point d'accroche.
+- **`box.Confidence` (YOLO) et score CLIP sont-ils normalisables ?** Non, pas numériquement — grandeurs de nature différente (probabilité de classification fermée à 80 classes, plage ~0.5-1.0, vs similarité cosinus dans un espace joint image/texte, plage réelle ~0.19-0.29). Les fusionner par min-max ou z-score serait arbitraire. Ce qui est réellement unifiable, c'est le **concept UX** — un seuil de confiance par terme, calculé différemment selon que le terme est exact ou sémantique — pas le calcul lui-même. `thresholdConfidence` (YOLO, `yolo11s.go`, 0.5) reste une constante globale non paramétrable par terme ; `defaultSimilarityThreshold` (CLIP) est déjà conceptuellement "par terme" côté code (`termMatch` est par terme) mais pas encore exposé comme tel. Piste pour plus tard, pas commencée.
+
+## 14. Références
 
 - Modèle original : [openai/clip-vit-base-patch32](https://huggingface.co/openai/clip-vit-base-patch32) (licence MIT, [openai/CLIP](https://github.com/openai/CLIP))
 - Export ONNX retenu : [Xenova/clip-vit-base-patch32](https://huggingface.co/Xenova/clip-vit-base-patch32)

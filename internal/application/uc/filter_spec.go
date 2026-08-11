@@ -8,28 +8,35 @@ import (
 	"live-semantic/internal/domain/entities"
 )
 
-// filterTerm is one parsed "label" or "label*cap" component of a
-// recognition filter spec (TODO.md § A, decision 2026-08-11: label-based
-// filtering replaced the CLIP semantic gate — see docs/adr/clip-backend.md
-// § 12).
+// filterTerm is one parsed "key" or "key*cap" component of a recognition
+// filter spec (TODO.md § A). key is either a YOLO11s/COCO class name
+// (exact label match, no CLIP involved) or free text (matched
+// semantically via CLIP against every YOLO candidate box not already
+// claimed by an exact term this cycle) — trackManager decides which via
+// isCOCOLabel(key), filterTerm itself doesn't know or care. Decision
+// history: CLIP-only (2026-08-10) → label-only (2026-08-11 morning) →
+// this hybrid (2026-08-11 afternoon, docs/adr/clip-backend.md § 12-13) —
+// exact labels stay exact (no threshold fragility for the 80 classes
+// YOLO already knows by name), free text gets CLIP back for anything
+// outside that vocabulary.
 type filterTerm struct {
-	// Label is a YOLO11s/COCO class name (entities.Yolo11sClasses()),
-	// already normalized (trim+lowercase, normalizeFilter).
-	Label string
+	// Key is the term's identity: a COCO label for an exact match, or the
+	// raw (trimmed/lowercased) free text for a semantic match. Doubles as
+	// the cap-counting bucket (trackManager.countByFilterKey) and the
+	// dedup key below.
+	Key string
 	// Cap is the maximum number of simultaneous tracks accepted for this
-	// label — a "scene condition" (TODO.md § A/I): 1 by default ("person"
+	// term — a "scene condition" (TODO.md § A/I): 1 by default ("person"
 	// means "I expect a person box"), explicit with "*N" ("person*2" means
-	// "up to 2 person boxes"). Enforced in trackManager.reanchor via
-	// countByLabel — never blocks re-anchoring an *existing* track, only
-	// spawning a *new* one once the cap is already reached.
+	// "up to 2 person boxes"). For a semantic term, candidates are ranked
+	// by CLIP score and only the top Cap above threshold are kept. Never
+	// blocks re-anchoring an *existing* track, only spawning a *new* one
+	// once the cap is already reached.
 	Cap int
 }
 
 // cocoLabels is the set of valid YOLO11s/COCO class names, built once from
-// entities.Yolo11sClasses() — used to reject a typo'd filter label at parse
-// time with a clear error, rather than silently detecting nothing (this
-// project has hit that exact silent-failure shape before, see
-// normalizeFilter's doc comment).
+// entities.Yolo11sClasses().
 var cocoLabels = func() map[string]struct{} {
 	classes := entities.Yolo11sClasses()
 	set := make(map[string]struct{}, len(classes))
@@ -39,23 +46,35 @@ var cocoLabels = func() map[string]struct{} {
 	return set
 }()
 
+// isCOCOLabel reports whether key is one of the 80 COCO classes YOLO11s
+// can detect — trackManager uses this to decide whether a term matches by
+// exact label (true) or semantically via CLIP (false).
+func isCOCOLabel(key string) bool {
+	_, ok := cocoLabels[key]
+	return ok
+}
+
 // parseFilterSpec parses a comma-separated filter spec into a set of
-// filterTerm — "person" (cap 1, implicit), "person*2" (cap 2, explicit),
-// "person*2,car" (two terms). Empty raw (after trimming) returns (nil, nil):
-// "no filter", trackManager.acceptsLabel then accepts every label, matching
-// the pre-2026-08-11 behavior of "no filter = track everything".
+// filterTerm — "person" (cap 1, implicit, exact — a COCO label), "person*2"
+// (cap 2, exact), "person with a red hat*1" (cap 1, semantic — not a COCO
+// label), "person*2,car" (two exact terms). Empty raw (after trimming)
+// returns (nil, nil): "no filter", trackManager then accepts every label
+// and never calls CLIP.
 //
 // Rejects (rather than silently ignoring):
-//   - a label that isn't one of the 80 COCO classes YOLO11s can detect —
-//     typo protection, not a real filter otherwise (would just never match
-//     anything, indistinguishable from "detection is broken").
-//   - a duplicate label across terms (e.g. "person*2,person*3") — the
-//     caller (2026-08-11 decision) explicitly doesn't want overlapping
-//     filter terms, since each is meant to be able to drive its own
-//     event/action later (TODO.md § I) and a box can only have one label,
-//     so a duplicate can never be a meaningful second condition, only a
+//   - a duplicate key across terms (e.g. "person*2,person*3", or the same
+//     free-text term twice) — each term is meant to be able to drive its
+//     own event/action later (TODO.md § A/I) and a candidate box can only
+//     be claimed by one term per cycle (trackManager.reanchor), so a
+//     duplicate can never be a meaningful second condition, only a
 //     mistake.
 //   - a non-positive or non-numeric "*N".
+//
+// Does NOT reject an unknown (non-COCO) key anymore — that used to be an
+// error (2026-08-11 morning decision) but is now a valid semantic term.
+// A genuine typo of a COCO label (e.g. "pesron") silently becomes a
+// (probably low-scoring) semantic filter instead of erroring — an
+// accepted tradeoff of opening up free text again, not re-litigated here.
 func parseFilterSpec(raw string) ([]filterTerm, error) {
 	raw = strings.TrimSpace(raw)
 	if raw == "" {
@@ -72,10 +91,10 @@ func parseFilterSpec(raw string) ([]filterTerm, error) {
 			return nil, fmt.Errorf("empty term in filter %q (stray comma?)", raw)
 		}
 
-		label, capStr, hasCap := strings.Cut(part, "*")
-		label = normalizeFilter(label)
-		if label == "" {
-			return nil, fmt.Errorf("empty label in filter term %q", part)
+		key, capStr, hasCap := strings.Cut(part, "*")
+		key = normalizeFilter(key)
+		if key == "" {
+			return nil, fmt.Errorf("empty term before '*' in filter term %q", part)
 		}
 
 		capValue := 1
@@ -88,15 +107,12 @@ func parseFilterSpec(raw string) ([]filterTerm, error) {
 			capValue = n
 		}
 
-		if _, ok := cocoLabels[label]; !ok {
-			return nil, fmt.Errorf("unknown label %q in filter term %q — not one of the 80 COCO classes YOLO11s can detect", label, part)
+		if _, dup := seen[key]; dup {
+			return nil, fmt.Errorf("duplicate term %q in filter %q — each term can only appear once (no overlapping filter terms)", key, raw)
 		}
-		if _, dup := seen[label]; dup {
-			return nil, fmt.Errorf("duplicate label %q in filter %q — each label can only appear once (no overlapping filter terms)", label, raw)
-		}
-		seen[label] = struct{}{}
+		seen[key] = struct{}{}
 
-		terms = append(terms, filterTerm{Label: label, Cap: capValue})
+		terms = append(terms, filterTerm{Key: key, Cap: capValue})
 	}
 
 	return terms, nil

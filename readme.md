@@ -18,7 +18,7 @@ LiveSemantic vise à analyser des flux vidéo en langage naturel ("person walkin
 
 | | Vision | Réalité actuelle |
 |---|---|---|
-| Filtres | Langage naturel libre (CLIP, embeddings) | Vocabulaire fermé : 80 classes COCO (YOLO), filtrage exact par label + plafond par label (`person`, `person*2`, `person*2,car`) — CLIP intégré puis retiré du chemin de matching le 2026-08-11 (seuil de similarité absolu jugé trop fragile en usage réel, `docs/adr/clip-backend.md` § 12), infra CLIP toujours présente mais inutilisée pour l'instant |
+| Filtres | Langage naturel libre (CLIP, embeddings) | **Hybride** (`docs/adr/clip-backend.md` § 12-13) : un terme classe COCO matche exactement, un terme texte libre matche via CLIP contre un seuil par défaut caché (pas de prompt CLI/API — prévu pour la GUI, § H) — `person`, `person*2`, `"person with a red hat"*1`, plusieurs termes indépendants par virgule. Plafond = premier arrivé pour un terme exact, top-N par score pour un terme sémantique |
 | Détection | Cascade YOLO → crop → CLIP | YOLO11s seul, ONNX natif Go ✅ |
 | Tracking | Tracker visuel (KCF/CSRT/MOSSE) + agrégat `Track` | Absent |
 | Modes | Realtime + Batch fichiers | Realtime webcam ✅ — Batch absent |
@@ -133,10 +133,12 @@ go build -o livesemantic ./cmd/livesemantic
 
 #### Classic CLI Commands (réellement implémenté)
 ```bash
-# Run realtime webcam recognition (YOLO11s, vocabulaire fermé COCO).
-# Filtre par label exact, pas de score/seuil : "person" (1 max),
-# "person*2" (2 max), "person*2,car" (plusieurs labels indépendants).
+# Run realtime webcam recognition (YOLO11s + filtre hybride label/CLIP).
+# Terme classe COCO = match exact, pas de score : "person" (1 max),
+# "person*2" (2 max). Terme hors COCO = match sémantique via CLIP contre
+# un seuil par défaut caché (docs/adr/clip-backend.md § 13).
 ./livesemantic recognition --filter="person*2,car"
+./livesemantic recognition --filter="person*2,person with a red hat*1"
 
 # Show help
 ./livesemantic help

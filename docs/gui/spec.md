@@ -334,31 +334,42 @@ filtres sont **par flux**, avec un raccourci "appliquer à toutes les
 sources actives" pour l'usage simple à une seule caméra — pas un choix
 global unique imposé.
 
-> ⚠️ **Conflit non résolu, trouvé le 2026-08-11 — à trancher avant de
-> commencer H2.** Cette section décrit un filtre texte libre + slider de
-> seuil CLIP comme l'interaction phare de la GUI. Depuis TODO.md § A
-> (décision 2026-08-11, `docs/adr/clip-backend.md` § 12), le backend a
-> **abandonné le matching CLIP** (seuil absolu jugé trop fragile en usage
-> réel — confondants scorant dans la même plage que de vrais positifs) au
-> profit d'un **filtrage exact par label COCO** (`person`, `person*2`,
-> `person*2,car` — voir `dto.RecognitionRequest.Filter`, plus de
-> `SimilarityThreshold`). Le slider de seuil décrit ci-dessous n'a plus
-> rien à piloter côté backend tel quel. À retrancher avec l'utilisateur :
-> soit la GUI expose un **sélecteur de labels COCO + plafond par label**
-> (ce que le backend fait réellement aujourd'hui) à la place du slider,
-> soit CLIP revient un jour sous une autre forme (score relatif, jamais
-> implémenté) et le slider redevient pertinent — ne pas construire cet
-> écran avant que ce soit clarifié.
+> ⚠️ **Mis à jour le 2026-08-11 (après-midi) — le backend est redevenu
+> hybride, ce qui rouvre (partiellement) le slider mais change sa portée.**
+> Trouvé plus tôt le même jour : le backend avait abandonné CLIP pour un
+> filtrage exact par label COCO (`docs/adr/clip-backend.md` § 12). Ça a été
+> révisé quelques heures après (§ 13) : **un terme classe COCO matche
+> exactement (pas de score, pas de slider possible/utile)** ; **un terme
+> texte libre matche via CLIP** contre un seuil (toujours fragile, §7/§10,
+> pour l'instant une constante cachée côté backend, pas exposée
+> CLI/API). Implication GUI, pas encore construite :
+> - Le champ filtre doit couvrir les deux cas : un **sélecteur de labels
+>   COCO** (match exact, pas de slider) **et** un **champ texte libre**
+>   (match sémantique, avec un slider de seuil qui redevient pertinent —
+>   mais seulement pour les termes texte libre, pas les labels).
+> - Le plafond (`*N`) a aussi deux sens différents à refléter dans l'UI :
+>   pour un label, c'est un plafond simple (premier arrivé) ; pour du texte
+>   libre, c'est un **top-N par score** (les N meilleurs candidats, pas les
+>   N premiers détectés) — probablement pas la même UI pour les deux.
+> - Le seuil sémantique n'est toujours pas un paramètre de requête
+>   aujourd'hui (constante `defaultSimilarityThreshold`, backend) — il faut
+>   décider si/quand cette constante devient un vrai paramètre exposé côté
+>   API avant de construire un slider qui n'aurait rien à piloter à
+>   distance.
 
-- Champ filtre texte libre — multi-filtres simultanés par flux (le
-  backend n'accepte qu'une seule string aujourd'hui, `dto.RecognitionRequest.Filter`
-  — à faire évoluer vers une liste, § 1.1). ⚠️ Cette string est désormais
-  un spec de labels COCO (`person*2,car`), pas du texte libre sémantique —
-  voir l'encart ci-dessus.
-- ~~Slider de seuil de similarité avec retour visuel en direct~~ — ⚠️ plus
-  rien à piloter côté backend, voir l'encart ci-dessus. Remplacer par un
-  contrôle de plafond par label (`*N`) si la décision confirme le
-  filtrage par label côté GUI aussi.
+- Champ filtre — **hybride** : sélecteur de labels COCO (match exact) et/ou
+  champ texte libre (match sémantique CLIP) par flux ; le backend
+  n'accepte qu'une seule string aujourd'hui (`dto.RecognitionRequest.Filter`,
+  spec `"label*N,texte libre*N"` — à faire évoluer vers une structure plus
+  riche côté transport si la GUI a besoin de distinguer les deux visuellement
+  avant sérialisation, § 1.1).
+- Slider de seuil de similarité avec retour visuel en direct — **redevient
+  pertinent, mais seulement pour les termes texte libre** (pas les labels
+  COCO, qui n'ont pas de score). Le calibrage reste instable et dépend de
+  la classe (`docs/adr/clip-backend.md` § 7-10, marges de 0.01-0.03) — voir
+  le score bouger en live pendant qu'on ajuste vaut mieux qu'une valeur par
+  défaut statique. Nécessite d'abord que le seuil devienne un vrai
+  paramètre de requête côté backend (voir encart ci-dessus).
 - Toggle par entrée de galerie (activer/désactiver sans supprimer).
 - Sélecteur tracker KCF/CSRT (existe en dur, jamais exposé).
 

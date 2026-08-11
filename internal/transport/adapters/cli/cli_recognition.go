@@ -12,17 +12,18 @@ import (
 func (s *SurveyController) createRecognitionFlow() error {
 	fmt.Println("\n📸 Recognition...")
 
-	// Label-based filter (TODO.md § A, decision 2026-08-11 — replaced the
-	// CLIP similarity-threshold prompt that used to be here, see
-	// docs/adr/clip-backend.md § 12): "person" (up to 1), "person*2" (up to
-	// 2), "person*2,car" (multiple independent terms, comma-separated).
-	// Validated against the 80 COCO classes by application/uc.parseFilterSpec
-	// once the request reaches RecognitionUseCase — a typo surfaces as a
-	// clear error there, not a silent "detects nothing".
+	// Hybrid filter (TODO.md § A, docs/adr/clip-backend.md § 12-13): a term
+	// that's one of the 80 COCO classes matches exactly, no similarity
+	// score involved ("person" up to 1, "person*2" up to 2). A term that
+	// isn't a COCO class is matched semantically via CLIP against a fixed,
+	// hidden default threshold ("person with a red hat*1" — see
+	// tracking.go's defaultSimilarityThreshold; not a CLI knob on purpose,
+	// meant to become a GUI control later). Comma-separates multiple
+	// independent terms either way: "person*2,person with a red hat*1".
 	var qs = []*survey.Question{
 		{
 			Name:     "filter",
-			Prompt:   &survey.Input{Message: "📝 What do you want to recognize? (COCO label(s), e.g. \"person\", \"person*2\", \"person*2,car\")"},
+			Prompt:   &survey.Input{Message: "📝 What do you want to recognize? (COCO label(s) and/or free text, e.g. \"person\", \"person*2\", \"person*2,person with a red hat*1\")"},
 			Validate: survey.Required,
 		},
 	}

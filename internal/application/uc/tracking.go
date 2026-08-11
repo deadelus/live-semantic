@@ -3,6 +3,8 @@ package uc
 import (
 	"fmt"
 	"image"
+	"math"
+	"sort"
 	"strings"
 	"sync"
 	"time"
@@ -12,13 +14,13 @@ import (
 	"live-semantic/internal/infrastructure/tracking"
 )
 
-// normalizeFilter trims and lowercases a user-supplied class filter before
-// comparing it against a COCO label (always lowercase, entities.class.go).
-// Found in real usage (2026-08-09): an untrimmed CLI survey answer (a
-// single leading space, "person" typed as " person") silently filtered out
-// every detection — exact string comparison, no error, looked exactly like
-// "detection is broken" from the user's side. Applied at every comparison
-// site rather than trusting callers to normalize req.Filter once.
+// normalizeFilter trims and lowercases a user-supplied filter term before
+// comparing/hashing it. Found in real usage (2026-08-09): an untrimmed CLI
+// survey answer (a single leading space, "person" typed as " person")
+// silently filtered out every detection — exact string comparison, no
+// error, looked exactly like "detection is broken" from the user's side.
+// Applied at every comparison site rather than trusting callers to
+// normalize req.Filter once.
 func normalizeFilter(filter string) string {
 	return strings.ToLower(strings.TrimSpace(filter))
 }
@@ -34,6 +36,17 @@ func normalizeFilter(filter string) string {
 // track lingers (maxMissesBeforeLost in entities/track.go) — worth staying
 // at the permissive end of the documented range.
 const iouAssociationThreshold = 0.3
+
+// defaultSimilarityThreshold gates a semantic (non-COCO) filter term's CLIP
+// cosine similarity (TODO.md § A, docs/adr/clip-backend.md § 13). Hardcoded
+// on purpose (2026-08-11): the user wants a fixed default for now, not a
+// CLI/API knob — that's meant to become a GUI control (TODO.md § H) once
+// there's a live-feedback slider to make the threshold's fragility
+// (§ 7/§ 10, margins of 0.01-0.03) something a user can actually see and
+// react to, rather than a number typed blind into a prompt. Still the same
+// underlying fragility as before — this default doesn't fix that, it just
+// isn't exposed as a knob right now.
+const defaultSimilarityThreshold float32 = 0.20
 
 // Note on reanchor cadence: there used to be an explicit
 // defaultReanchorInterval (frame-count-based gate, plus a
@@ -52,6 +65,14 @@ type trackedObject struct {
 	track   *entities.Track
 	tracker tracking.ObjectTracker
 
+	// filterKey is the filterTerm.Key that caused this track to spawn —
+	// the cap-counting bucket (countByFilterKey), not necessarily the same
+	// as track.Class (a semantic term's Key is free text, e.g. "person
+	// with a red hat", while track.Class is still whatever COCO label YOLO
+	// itself gave the box, e.g. "person"). Empty string when no filter was
+	// active at all (no cap to enforce).
+	filterKey string
+
 	// lastNotifiedAt debounces AlertSender.Notify for this track — see
 	// notifyDebounce's doc comment.
 	lastNotifiedAt time.Time
@@ -68,6 +89,16 @@ type trackedObject struct {
 // instead of one per frame") — reanchor became frequent enough to
 // effectively become "per frame" again from the alerting point of view.
 const notifyDebounce = 5 * time.Second
+
+// termMatch is how trackManager remembers a parsed filterTerm internally:
+// Embedding nil means an exact COCO-label term (matched directly against
+// box.Label, no CLIP call); non-nil means a semantic term (matched via
+// CLIP cosine similarity against every still-unclaimed candidate box,
+// ranked, capped — see reanchor).
+type termMatch struct {
+	Cap       int
+	Embedding entities.Embedding
+}
 
 // trackManager owns the set of active tracks, shared between the video loop
 // (advance/boxes, per frame) and the detection loop (reanchor, whenever a
@@ -88,43 +119,76 @@ type trackManager struct {
 	active      map[string]*trackedObject
 	nextTrackID uint64
 
-	// filterTerms maps a requested COCO label to its cap (filter_spec.go),
-	// parsed once here (not per frame) rather than in NewUseCase: the
-	// filter is only known per RecognitionUseCase call. nil/empty means "no
-	// filter requested" — acceptsLabel then accepts every label (tracks
-	// everything YOLO finds).
+	// terms maps each filterTerm.Key to its cap/embedding (filter_spec.go),
+	// parsed/encoded once here (not per frame) rather than in NewUseCase:
+	// the filter is only known per RecognitionUseCase call. nil/empty
+	// means "no filter requested" — reanchor then accepts every box, never
+	// calls CLIP.
 	//
-	// Replaced the CLIP semantic gate (cosine similarity vs a text
-	// embedding) on 2026-08-11 — decision reversal, TODO.md § A,
-	// docs/adr/clip-backend.md § 12: label filtering is exact and doesn't
-	// share the CLIP absolute-threshold fragility (§ 7/§ 10) for anything
-	// that's already one of the 80 COCO classes. Free-text filters for
-	// non-COCO concepts (e.g. "sac abandonné") are no longer possible
-	// through this path — parseFilterSpec rejects any label that isn't a
-	// known COCO class rather than silently matching nothing.
-	filterTerms map[string]int
+	// History (TODO.md § A, docs/adr/clip-backend.md § 12-13): CLIP-only
+	// (2026-08-10) → exact-label-only (2026-08-11 morning, CLIP's absolute
+	// threshold was rejecting real matches at any value tried) → this
+	// hybrid (2026-08-11 afternoon, user's explicit request): a term that
+	// is a COCO label matches exactly (no threshold fragility for the 80
+	// classes YOLO already knows by name); a term that isn't matches
+	// semantically via CLIP against whatever candidates aren't already
+	// claimed by an exact term this cycle.
+	terms map[string]termMatch
 }
 
 // newTrackManager parses the filter spec once here (not per frame), before
-// the video/detection loops start — cheap (pure string parsing, no ONNX
-// call anymore, TODO.md § A 2026-08-11) but still the right place for it:
-// the filter is only known per RecognitionUseCase call, not at NewUseCase
-// time.
+// the video/detection loops start: cheap for exact terms (pure string
+// parsing), one ONNX EncodeText call per semantic term for the rest — still
+// the right place for it either way, since the filter is only known per
+// RecognitionUseCase call, not at NewUseCase time.
 func newTrackManager(uc *UseCase, req dto.RecognitionRequest) (*trackManager, error) {
 	m := &trackManager{uc: uc, active: make(map[string]*trackedObject)}
 
-	terms, err := parseFilterSpec(req.Filter)
+	parsed, err := parseFilterSpec(req.Filter)
 	if err != nil {
 		return nil, fmt.Errorf("invalid filter %q: %w", req.Filter, err)
 	}
-	if len(terms) > 0 {
-		m.filterTerms = make(map[string]int, len(terms))
-		for _, t := range terms {
-			m.filterTerms[t.Label] = t.Cap
+	if len(parsed) == 0 {
+		return m, nil
+	}
+
+	m.terms = make(map[string]termMatch, len(parsed))
+	for _, t := range parsed {
+		if isCOCOLabel(t.Key) {
+			m.terms[t.Key] = termMatch{Cap: t.Cap}
+			continue
 		}
+		emb, err := uc.semanticEncoder.EncodeText(t.Key)
+		if err != nil {
+			return nil, fmt.Errorf("encode semantic filter term %q: %w", t.Key, err)
+		}
+		m.terms[t.Key] = termMatch{Cap: t.Cap, Embedding: emb}
 	}
 
 	return m, nil
+}
+
+// cosineSimilarity returns the cosine similarity of a and b, in [-1, 1] for
+// well-formed embeddings (0 for mismatched/empty inputs). Doesn't assume
+// its inputs are already unit vectors (clip.Encoder happens to L2-normalize
+// its output, but the SemanticEncoder port doesn't contractually guarantee
+// that — computing the true cosine similarity here keeps this package
+// decoupled from that implementation detail).
+func cosineSimilarity(a, b entities.Embedding) float32 {
+	if len(a) != len(b) || len(a) == 0 {
+		return 0
+	}
+
+	var dot, normA, normB float64
+	for i := range a {
+		dot += float64(a[i]) * float64(b[i])
+		normA += float64(a[i]) * float64(a[i])
+		normB += float64(b[i]) * float64(b[i])
+	}
+	if normA == 0 || normB == 0 {
+		return 0
+	}
+	return float32(dot / (math.Sqrt(normA) * math.Sqrt(normB)))
 }
 
 // count returns the number of active tracks — safe accessor for logging
@@ -202,11 +266,23 @@ func boxWithinFrame(box entities.BoundingBox, bounds image.Rectangle) bool {
 		box.Y2 > float32(bounds.Min.Y) && box.Y1 < float32(bounds.Max.Y)
 }
 
-// reanchor runs a full YOLO detection and IoU-associates the results
-// against active tracks, spawning new tracks for unmatched detections and
-// missing tracks that weren't matched this cycle. The expensive path — runs
-// on the detection loop's own goroutine, not gated by a frame count
-// (TODO.md § C, see uc_recognition.go's RecognitionUseCase doc comment).
+// scoredCandidate pairs a still-unclaimed YOLO box (by index into the
+// original detection result) with its CLIP score against one semantic
+// term — reanchor's semantic pass ranks these to enforce a term's cap by
+// "best matches first" rather than detection order.
+type scoredCandidate struct {
+	index int
+	box   entities.BoundingBox
+	score float32
+}
+
+// reanchor runs a full YOLO detection, gates/associates the results against
+// the active filter (exact COCO-label terms first, then semantic/CLIP terms
+// on whatever's left, TODO.md § A), and IoU-associates survivors against
+// active tracks — spawning new tracks for unmatched detections and missing
+// tracks that weren't matched this cycle. The expensive path — runs on the
+// detection loop's own goroutine, not gated by a frame count (TODO.md § C,
+// see uc_recognition.go's RecognitionUseCase doc comment).
 //
 // AnalyzeFrame deliberately runs before the lock is taken: it's the
 // dominant cost (~150-270ms measured) and touches no trackManager state at
@@ -225,53 +301,137 @@ func (m *trackManager) reanchor(frame *entities.Frame, req dto.RecognitionReques
 	now := time.Now()
 	matchedTrackIDs := make(map[string]bool, len(m.active))
 
-	for _, box := range result.BoundingBoxes {
-		// Label gate (TODO.md § A, decision 2026-08-11 — reverses the
-		// 2026-08-10 "CLIP decides alone" decision, docs/adr/clip-backend.md
-		// § 12): exact match against the requested COCO label(s), no CLIP
-		// call, no absolute-threshold fragility (§ 7/§ 10). req.Filter == ""
-		// -> filterTerms is nil -> no gate at all, track everything YOLO
-		// finds.
-		if !m.acceptsLabel(box.Label) {
-			continue
+	if len(m.terms) == 0 {
+		// No filter requested: track everything YOLO finds, no cap, no
+		// CLIP call — pre-filter behavior. filterKey doesn't matter here
+		// (no cap will ever be checked against it), box.Label is as good
+		// a bucket as any for bookkeeping consistency.
+		for _, box := range result.BoundingBoxes {
+			m.matchOrSpawn(frame, box, box.Label, 0, now, matchedTrackIDs, req)
 		}
-
-		if id, ok := m.bestMatch(box, matchedTrackIDs); ok {
-			obj := m.active[id]
-			// score is always 0 now — no semantic score to thread onto the
-			// event anymore (label matching is exact, not scored). Kept as
-			// a TrackEvent field for whatever eventually consumes
-			// EncodeImage again (galerie de références, TODO.md § D).
-			evt := obj.track.MatchDetection(box, now, 0)
-			// Re-anchor the tracker itself on the fresh detection to wipe
-			// out any drift accumulated since the last re-detection.
-			if err := obj.tracker.Init(frame, box); err != nil {
-				m.uc.logger.Info("Tracker re-init failed", map[string]interface{}{"track_id": id, "error": err.Error()})
-			}
-			matchedTrackIDs[id] = true
-			m.emit(obj, evt, req)
-			continue
-		}
-
-		// Scene cap (TODO.md § A/I): once this label already has as many
-		// active tracks as its filter term allows, an unmatched extra
-		// detection doesn't spawn a new track. Only gates *new* spawns —
-		// re-anchoring an existing track above never goes through here.
-		if capVal, capped := m.filterTerms[box.Label]; capped && m.countByLabel(box.Label) >= capVal {
-			continue
-		}
-
-		m.spawn(frame, box, now)
+		m.missUnmatched(now, matchedTrackIDs, req)
+		return nil
 	}
 
+	claimed := make([]bool, len(result.BoundingBoxes))
+
+	// Pass 1: exact COCO-label terms — a candidate whose own YOLO label is
+	// directly requested is claimed immediately, no CLIP involved.
+	//
+	// Known limitation, not resolved (TODO.md § A): every box with a
+	// requested label is marked claimed here even if its exact term's cap
+	// is already full and matchOrSpawn ends up dropping it — it does NOT
+	// fall through to pass 2. So an exact term and a semantic term sharing
+	// the same underlying YOLO label (e.g. "person*1" alongside "person
+	// with a red hat*1" — both would-be matches are YOLO-labeled "person")
+	// can starve the semantic term of candidates once the exact term's cap
+	// is reached, even if the semantic term's own cap has room. Not hit by
+	// the test suite's happy-path scenarios (which use non-overlapping
+	// labels between exact and semantic terms) — only matters if a caller
+	// actually combines an exact term with a semantic term targeting the
+	// same COCO class.
+	for i, box := range result.BoundingBoxes {
+		term, ok := m.terms[box.Label]
+		if !ok || term.Embedding != nil {
+			continue
+		}
+		claimed[i] = true
+		m.matchOrSpawn(frame, box, box.Label, term.Cap, now, matchedTrackIDs, req)
+	}
+
+	// Pass 2: semantic terms — CLIP-scored against every candidate not
+	// already claimed in pass 1 (regardless of that candidate's own YOLO
+	// label: a semantic term describes something beyond the 80 COCO
+	// classes, so YOLO's own guess for that box is just a region proposal
+	// here, same principle as the 2026-08-10 "CLIP decides" design for
+	// this specific case). Ranked by score, top Cap kept — this is what
+	// makes the cap meaningful for a scored match ("the single best match"
+	// for "person with a red hat"*1), not just "first one YOLO happened to
+	// list".
+	for key, term := range m.terms {
+		if term.Embedding == nil {
+			continue
+		}
+
+		var candidates []scoredCandidate
+		for i, box := range result.BoundingBoxes {
+			if claimed[i] {
+				continue
+			}
+			crop, ok := frame.Crop(box)
+			if !ok {
+				continue
+			}
+			embedding, err := m.uc.semanticEncoder.EncodeImage(crop)
+			if err != nil {
+				m.uc.logger.Info("Semantic encode failed", map[string]interface{}{"error": err.Error()})
+				continue
+			}
+			score := cosineSimilarity(embedding, term.Embedding)
+			if score < defaultSimilarityThreshold {
+				continue
+			}
+			candidates = append(candidates, scoredCandidate{index: i, box: box, score: score})
+		}
+
+		sort.Slice(candidates, func(a, b int) bool { return candidates[a].score > candidates[b].score })
+
+		for _, c := range candidates {
+			claimed[c.index] = true
+			m.matchOrSpawn(frame, c.box, key, term.Cap, now, matchedTrackIDs, req)
+		}
+	}
+
+	m.missUnmatched(now, matchedTrackIDs, req)
+	return nil
+}
+
+// matchOrSpawn re-anchors box onto its best-matching existing track (always
+// allowed, regardless of cap — a cap only ever blocks a *new* spawn, TODO.md
+// § A/I), or spawns a new track for it if the filterKey's cap (0 = no cap)
+// isn't already reached. Only ever called from reanchor() while m.mu is
+// already held.
+func (m *trackManager) matchOrSpawn(frame *entities.Frame, box entities.BoundingBox, filterKey string, capVal int, now time.Time, matchedTrackIDs map[string]bool, req dto.RecognitionRequest) {
+	if id, ok := m.bestMatch(box, matchedTrackIDs); ok {
+		obj := m.active[id]
+		// score is always 0 now — TrackEvent.Score used to carry the CLIP
+		// score that gated the match (2026-08-10 design); matching is
+		// exact-or-already-ranked-and-filtered by the time this runs, so
+		// there's no additional score to thread through here. Kept as a
+		// TrackEvent field for whatever eventually reintroduces a
+		// per-match score (galerie de références, TODO.md § D).
+		evt := obj.track.MatchDetection(box, now, 0)
+		// Re-anchor the tracker itself on the fresh detection to wipe out
+		// any drift accumulated since the last re-detection.
+		if err := obj.tracker.Init(frame, box); err != nil {
+			m.uc.logger.Info("Tracker re-init failed", map[string]interface{}{"track_id": id, "error": err.Error()})
+		}
+		matchedTrackIDs[id] = true
+		m.emit(obj, evt, req)
+		return
+	}
+
+	// Scene cap (TODO.md § A/I): once this term already has as many active
+	// tracks as it allows, an unmatched extra candidate doesn't spawn a
+	// new one — the "noise" this drops is exactly what a future event/
+	// action system (not built) would hook into, per the user's request.
+	if capVal > 0 && m.countByFilterKey(filterKey) >= capVal {
+		return
+	}
+
+	m.spawn(frame, box, filterKey, now)
+}
+
+// missUnmatched records a miss for every active track that wasn't matched
+// this reanchor cycle. Only ever called from reanchor() while m.mu is
+// already held.
+func (m *trackManager) missUnmatched(now time.Time, matchedTrackIDs map[string]bool, req dto.RecognitionRequest) {
 	for id, obj := range m.active {
 		if matchedTrackIDs[id] {
 			continue
 		}
 		m.miss(id, obj, now, req)
 	}
-
-	return nil
 }
 
 // bestMatch returns the active track with the highest IoU against box
@@ -281,9 +441,9 @@ func (m *trackManager) reanchor(frame *entities.Frame, req dto.RecognitionReques
 // revisit if the drift test (TODO.md § B) shows association errors.
 //
 // bestMatch/spawn/miss/emit below are internal helpers: only ever called
-// from advance()/reanchor() while m.mu is already held. They don't lock
-// themselves — sync.Mutex isn't reentrant, a second Lock() from the same
-// goroutine would deadlock.
+// from advance()/reanchor() (via matchOrSpawn) while m.mu is already held.
+// They don't lock themselves — sync.Mutex isn't reentrant, a second Lock()
+// from the same goroutine would deadlock.
 func (m *trackManager) bestMatch(box entities.BoundingBox, taken map[string]bool) (string, bool) {
 	bestID := ""
 	bestIoU := float32(iouAssociationThreshold)
@@ -302,25 +462,15 @@ func (m *trackManager) bestMatch(box entities.BoundingBox, taken map[string]bool
 	return bestID, bestID != ""
 }
 
-// acceptsLabel reports whether label passes the current filter — every
-// label if no filter was requested (m.filterTerms empty/nil), otherwise
-// only labels explicitly listed in the filter spec (TODO.md § A,
-// filter_spec.go).
-func (m *trackManager) acceptsLabel(label string) bool {
-	if len(m.filterTerms) == 0 {
-		return true
-	}
-	_, ok := m.filterTerms[label]
-	return ok
-}
-
-// countByLabel returns how many active tracks currently have this class —
-// used to enforce a filter term's cap (TODO.md § A/I). Only ever called
-// from reanchor() while m.mu is already held.
-func (m *trackManager) countByLabel(label string) int {
+// countByFilterKey returns how many active tracks currently belong to this
+// filter term — used to enforce a term's cap (TODO.md § A/I). Keyed by
+// filterTerm.Key (trackedObject.filterKey), not by COCO class: for an
+// exact term the two happen to be the same string, but a semantic term's
+// key is free text, not a class name, so it needs its own bucket.
+func (m *trackManager) countByFilterKey(key string) int {
 	n := 0
 	for _, obj := range m.active {
-		if obj.track.Class == label {
+		if obj.filterKey == key {
 			n++
 		}
 	}
@@ -330,7 +480,7 @@ func (m *trackManager) countByLabel(label string) int {
 // spawn creates a new track + tracker for a detection that didn't match any
 // existing track. A brand-new track starts StateTentative (NewTrack already
 // counts the initial detection as hit #1) — no TrackEvent to emit yet.
-func (m *trackManager) spawn(frame *entities.Frame, box entities.BoundingBox, now time.Time) {
+func (m *trackManager) spawn(frame *entities.Frame, box entities.BoundingBox, filterKey string, now time.Time) {
 	trk, err := m.uc.trackerFactory()
 	if err != nil {
 		m.uc.logger.Info("Tracker creation failed", map[string]interface{}{"error": err.Error()})
@@ -344,7 +494,7 @@ func (m *trackManager) spawn(frame *entities.Frame, box entities.BoundingBox, no
 
 	m.nextTrackID++
 	id := fmt.Sprintf("track-%d", m.nextTrackID)
-	m.active[id] = &trackedObject{track: entities.NewTrack(id, box, now), tracker: trk}
+	m.active[id] = &trackedObject{track: entities.NewTrack(id, box, now), tracker: trk, filterKey: filterKey}
 }
 
 // miss records a track that wasn't matched this cycle (neither by the
@@ -366,10 +516,10 @@ func (m *trackManager) miss(id string, obj *trackedObject, now time.Time, req dt
 // than the original "per lifecycle transition" intent.
 //
 // No re-check of the filter here on purpose: by construction, every track
-// that exists already passed the semantic gate in reanchor() (or no filter
-// was requested at all, in which case there's nothing to alert on either —
-// that's what the req.Filter == "" check below is for, not a redundant
-// semantic re-check).
+// that exists already passed the gate in reanchor() (exact label or CLIP
+// threshold) — or no filter was requested at all, in which case there's
+// nothing to alert on either, that's what the req.Filter == "" check below
+// is for, not a redundant re-check.
 func (m *trackManager) emit(obj *trackedObject, evt *entities.TrackEvent, req dto.RecognitionRequest) {
 	if evt == nil {
 		return
@@ -396,16 +546,15 @@ func (m *trackManager) emit(obj *trackedObject, evt *entities.TrackEvent, req dt
 	}
 	obj.lastNotifiedAt = now
 
-	// MatchedFilter reports the specific label that matched (evt.Track.
-	// Class), not the raw multi-term filter spec (req.Filter can list
-	// several labels, e.g. "person*2,car") — the label is what's actually
-	// meaningful per event now that matching is exact (TODO.md § A,
-	// 2026-08-11). Confidence/evt.Score is always 0 since the CLIP
-	// semantic gate that used to compute it is gone (docs/adr/clip-backend.md
-	// § 12) — kept as a field on entities.Message for whatever eventually
-	// reintroduces a real score (galerie de références, TODO.md § D).
+	// MatchedFilter reports the specific filter term that matched
+	// (obj.filterKey — a COCO label for an exact term, free text for a
+	// semantic one), not the raw multi-term filter spec (req.Filter can
+	// list several terms, e.g. "person*2,car"). Confidence/evt.Score is
+	// always 0 (see matchOrSpawn's doc comment) — kept as a field on
+	// entities.Message for whatever eventually reintroduces a per-match
+	// score (galerie de références, TODO.md § D).
 	if err := m.uc.notifier.Notify(entities.Message{
-		MatchedFilter: evt.Track.Class,
+		MatchedFilter: obj.filterKey,
 		Confidence:    evt.Score,
 	}); err != nil {
 		m.uc.logger.Info("Notify failed", map[string]interface{}{"error": err.Error()})

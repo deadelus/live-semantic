@@ -11,19 +11,21 @@ func TestParseFilterSpec(t *testing.T) {
 	}{
 		{"empty string means no filter", "", nil, false},
 		{"whitespace-only means no filter", "   ", nil, false},
-		{"single label, implicit cap 1", "person", []filterTerm{{Label: "person", Cap: 1}}, false},
-		{"single label, explicit cap", "person*2", []filterTerm{{Label: "person", Cap: 2}}, false},
-		{"two independent terms", "person*2,car", []filterTerm{{Label: "person", Cap: 2}, {Label: "car", Cap: 1}}, false},
-		{"case/whitespace tolerant", "  Person , CAR*3 ", []filterTerm{{Label: "person", Cap: 1}, {Label: "car", Cap: 3}}, false},
-		{"unknown label rejected", "unicorn", nil, true},
-		{"unknown label rejected even with a cap", "unicorn*2", nil, true},
-		{"duplicate label rejected (implicit vs implicit)", "person,person", nil, true},
-		{"duplicate label rejected (implicit vs explicit)", "person,person*2", nil, true},
+		{"single exact term, implicit cap 1", "person", []filterTerm{{Key: "person", Cap: 1}}, false},
+		{"single exact term, explicit cap", "person*2", []filterTerm{{Key: "person", Cap: 2}}, false},
+		{"two independent exact terms", "person*2,car", []filterTerm{{Key: "person", Cap: 2}, {Key: "car", Cap: 1}}, false},
+		{"case/whitespace tolerant", "  Person , CAR*3 ", []filterTerm{{Key: "person", Cap: 1}, {Key: "car", Cap: 3}}, false},
+		{"non-COCO term is valid — semantic, not rejected", "person with a red hat", []filterTerm{{Key: "person with a red hat", Cap: 1}}, false},
+		{"non-COCO term with explicit cap", "person with a red hat*1", []filterTerm{{Key: "person with a red hat", Cap: 1}}, false},
+		{"mixed exact and semantic terms", "person*2,person with a red hat*1", []filterTerm{{Key: "person", Cap: 2}, {Key: "person with a red hat", Cap: 1}}, false},
+		{"duplicate term rejected (implicit vs implicit)", "person,person", nil, true},
+		{"duplicate term rejected (implicit vs explicit)", "person,person*2", nil, true},
+		{"duplicate semantic term rejected", "unicorn,unicorn*2", nil, true},
 		{"non-numeric cap rejected", "person*abc", nil, true},
 		{"zero cap rejected", "person*0", nil, true},
 		{"negative cap rejected", "person*-1", nil, true},
 		{"stray comma (empty term) rejected", "person,,car", nil, true},
-		{"empty label before * rejected", "*2", nil, true},
+		{"empty term before * rejected", "*2", nil, true},
 	}
 
 	for _, tt := range tests {
@@ -42,6 +44,28 @@ func TestParseFilterSpec(t *testing.T) {
 				if got[i] != tt.want[i] {
 					t.Fatalf("parseFilterSpec(%q)[%d] = %+v, want %+v", tt.raw, i, got[i], tt.want[i])
 				}
+			}
+		})
+	}
+}
+
+func TestIsCOCOLabel(t *testing.T) {
+	tests := []struct {
+		key  string
+		want bool
+	}{
+		{"person", true},
+		{"car", true},
+		{"banana", true}, // yes, a real COCO class — verified against entities.Yolo11sClasses()
+		{"unicorn", false},
+		{"person with a red hat", false},
+		{"", false},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.key, func(t *testing.T) {
+			if got := isCOCOLabel(tt.key); got != tt.want {
+				t.Fatalf("isCOCOLabel(%q) = %v, want %v", tt.key, got, tt.want)
 			}
 		})
 	}

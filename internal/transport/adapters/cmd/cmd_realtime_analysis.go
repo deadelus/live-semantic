@@ -10,8 +10,8 @@ import (
 
 var recognitionCmd = &cobra.Command{
 	Use:   "recognition",
-	Short: "Run recognition with a label filter",
-	Long:  `Execute the recognition use case with a COCO label filter (e.g. "person", "person*2", "person*2,car").`,
+	Short: "Run recognition with a hybrid label/semantic filter",
+	Long:  `Execute the recognition use case with a filter: COCO labels match exactly ("person", "person*2"), free text matches semantically via CLIP ("person with a red hat*1"). Comma-separated for multiple terms.`,
 	Run: func(cmd *cobra.Command, args []string) {
 		filter, err := cmd.Flags().GetString("filter")
 
@@ -39,14 +39,13 @@ var recognitionCmd = &cobra.Command{
 
 func init() {
 	rootCmd.AddCommand(recognitionCmd)
-	// Label-based filter (TODO.md § A, decision 2026-08-11 — replaced the
-	// CLIP similarity-threshold flag that used to be here, see
-	// docs/adr/clip-backend.md § 12): comma-separated COCO label(s), each
-	// optionally capped with "*N" ("person" = up to 1, "person*2" = up to
-	// 2, "person*2,car" = two independent terms). Validated against the 80
-	// COCO classes by application/uc.parseFilterSpec once the request
-	// reaches RecognitionUseCase.
-	recognitionCmd.Flags().String("filter", "", `COCO label filter, e.g. "person", "person*2", "person*2,car"`)
+	// Hybrid filter (TODO.md § A, docs/adr/clip-backend.md § 12-13):
+	// comma-separated terms, each optionally capped with "*N" ("person" =
+	// up to 1, "person*2" = up to 2). A COCO-class term matches exactly; a
+	// free-text term matches semantically via CLIP against a fixed hidden
+	// threshold (tracking.go's defaultSimilarityThreshold — not a flag on
+	// purpose, meant to become a GUI control later).
+	recognitionCmd.Flags().String("filter", "", `filter spec, e.g. "person", "person*2", "person*2,person with a red hat*1"`)
 	err := recognitionCmd.MarkFlagRequired("filter")
 	if err != nil {
 		fmt.Printf("❌ Error: %s\n", err.Error())
