@@ -50,6 +50,10 @@ func (m *mockUseCases) Stop() {
 	m.stopCalls++
 }
 
+// Wait is a no-op here: these tests don't exercise main.go's shutdown
+// path, just recognitionController's REST handlers.
+func (m *mockUseCases) Wait() {}
+
 func (m *mockUseCases) stopCallCount() int {
 	m.mu.Lock()
 	defer m.mu.Unlock()

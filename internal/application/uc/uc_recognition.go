@@ -33,6 +33,12 @@ import (
 // Alerts fire once per track lifecycle event (TrackEntered/TrackMatched,
 // TODO.md § D) rather than once per frame.
 func (uc *UseCase) RecognitionUseCase(ctx context.Context, req dto.RecognitionRequest) (dto.Result[dto.RecognitionResponse], error) {
+	// Tracked end-to-end (every return path, including the early-exit ones
+	// below) so UseCases.Wait() can block until this call has genuinely
+	// finished — see its doc comment for the SIGSEGV this prevents.
+	uc.activeSessions.Add(1)
+	defer uc.activeSessions.Done()
+
 	defer func() {
 		// Ensure cleanup is called only after loop exits
 		uc.streamingOutput.Cleanup()

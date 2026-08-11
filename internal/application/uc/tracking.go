@@ -368,6 +368,16 @@ func (m *trackManager) reanchor(frame *entities.Frame, req dto.RecognitionReques
 				continue
 			}
 			score := cosineSimilarity(embedding, term.Embedding)
+			// Logged regardless of whether it clears the threshold — the
+			// only visibility into *why* a semantic term matched (or
+			// didn't) something surprising, e.g. TODO.md § A's "potted
+			// plant" case. Cheap relative to the EncodeImage call above.
+			m.uc.logger.Info("Semantic candidate scored", map[string]interface{}{
+				"term":            key,
+				"yolo_label":      box.Label,
+				"score":           score,
+				"above_threshold": score >= defaultSimilarityThreshold,
+			})
 			if score < defaultSimilarityThreshold {
 				continue
 			}

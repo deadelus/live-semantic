@@ -9,6 +9,7 @@ import (
 	"live-semantic/internal/infrastructure/notifier"
 	"live-semantic/internal/infrastructure/streamer"
 	"live-semantic/internal/infrastructure/tracking"
+	"sync"
 
 	"github.com/deadelus/go-clean-app/v2/logger"
 )
@@ -24,6 +25,17 @@ type UseCases interface {
 	// a second session concurrently. Revisit once multi-flux gives each
 	// session its own UseCase/InputStream.
 	Stop()
+	// Wait blocks until any in-flight RecognitionUseCase call has fully
+	// returned. Found necessary 2026-08-11 (real crash, not hypothetical —
+	// docs/adr/clip-backend.md § 15, TODO.md § H1): main.go's graceful
+	// shutdown handler used to call objectDetector.Cleanup()/
+	// semanticEncoder.Cleanup() unconditionally on SIGTERM, destroying the
+	// shared ONNX sessions while RecognitionUseCase's detection goroutine
+	// could still be mid-EncodeImage/AnalyzeFrame on those exact sessions
+	// (SIGSEGV inside the CGo call). Callers should call Stop() first (to
+	// actually unstick a session that's still blocked reading frames),
+	// then Wait(), before tearing down objectDetector/semanticEncoder.
+	Wait()
 }
 
 // useCase implements the UseCases interface.
@@ -35,6 +47,11 @@ type UseCase struct {
 	objectDetector  inference.ObjectDetector
 	semanticEncoder inference.SemanticEncoder
 	trackerFactory  tracking.TrackerFactory
+
+	// activeSessions tracks in-flight RecognitionUseCase calls — see
+	// Wait's doc comment. Incremented/decremented in RecognitionUseCase
+	// itself (uc_recognition.go), not here.
+	activeSessions sync.WaitGroup
 }
 
 // NewUseCase initializes your use cases with all the necessary dependencies

@@ -22,3 +22,12 @@ package uc
 func (uc *UseCase) Stop() {
 	uc.streamingInput.Stop()
 }
+
+// Wait blocks until any in-flight RecognitionUseCase call has fully
+// returned — see the UseCases interface doc comment for why this exists
+// (a real SIGSEGV, not a hypothetical). Safe to call even if nothing is
+// currently running (sync.WaitGroup.Wait() on a zero counter returns
+// immediately).
+func (uc *UseCase) Wait() {
+	uc.activeSessions.Wait()
+}

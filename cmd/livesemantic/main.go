@@ -112,8 +112,28 @@ func main() {
 		return
 	}
 
+	useCases, err := uc.NewUseCase(engine.Context(), engine.Logger(), streamingInput, streamingOutput, notifier, objectDetector, semanticEncoder, trackerFactory)
+	if err != nil {
+		engine.Logger().Error("Failed to create use cases", err)
+		return
+	}
+
+	engine.Logger().Info("✅ Use cases initialized")
+
+	// Registered after useCases exists (moved 2026-08-11, real crash found
+	// while testing — docs/adr/clip-backend.md § 15, TODO.md § H1): a
+	// SIGTERM used to destroy objectDetector/semanticEncoder's shared ONNX
+	// sessions immediately, even while RecognitionUseCase's detection
+	// goroutine was still mid-EncodeImage/AnalyzeFrame on those exact
+	// sessions (SIGSEGV inside the CGo call — worse the slower a reanchor
+	// cycle is, e.g. with CLIP semantic filter terms in play). useCases.
+	// Stop() unsticks any session still blocked reading frames;
+	// useCases.Wait() blocks until it has genuinely returned — only then
+	// is it safe to destroy the sessions it was using.
 	engine.Gracefull().Register("Stopping application gracefully", func() error {
 		fmt.Println("🔒 Stopping application gracefully...")
+		useCases.Stop()
+		useCases.Wait()
 		if notifier != nil {
 			fmt.Println("Cleaning up notifier...")
 		}
@@ -136,14 +156,6 @@ func main() {
 		fmt.Println("Application stopped gracefully.")
 		return nil
 	})
-
-	useCases, err := uc.NewUseCase(engine.Context(), engine.Logger(), streamingInput, streamingOutput, notifier, objectDetector, semanticEncoder, trackerFactory)
-	if err != nil {
-		engine.Logger().Error("Failed to create use cases", err)
-		return
-	}
-
-	engine.Logger().Info("✅ Use cases initialized")
 
 	// Decide which mode to start based on flags
 	switch {
@@ -253,10 +265,32 @@ func startWebServer(engine *application.Engine, useCases uc.UseCases, wsOutput *
 	})
 
 	server := api.NewServer(useCases, wsOutput, engine.Logger(), port)
-	if err := server.Start(); err != nil {
-		engine.Logger().Error("Web server failed", map[string]interface{}{
-			"error": err.Error(),
-		})
-		os.Exit(1)
+
+	errCh := make(chan error, 1)
+	go func() {
+		errCh <- server.Start()
+	}()
+
+	// Found 2026-08-11 testing the SIGSEGV fix above (docs/adr/clip-backend.md
+	// § 15): the graceful shutdown hooks (camera/ORT cleanup) used to run
+	// to completion — logged "Shutdown is over." — but the process never
+	// actually exited: gin's router.Run() blocks the goroutine it's called
+	// from forever (it's a thin wrapper over http.ListenAndServe, which
+	// only returns on a listener error) and doesn't expose the underlying
+	// *http.Server to call Shutdown(ctx) on, so nothing ever unblocked it.
+	// A SIGKILL was the only way out. Exiting explicitly here once
+	// Gracefull().Done() fires is the straightforward fix — there's no
+	// cleaner handle to the listener available through gin's API as used
+	// here.
+	select {
+	case err := <-errCh:
+		if err != nil {
+			engine.Logger().Error("Web server failed", map[string]interface{}{
+				"error": err.Error(),
+			})
+			os.Exit(1)
+		}
+	case <-engine.Gracefull().Done():
+		os.Exit(0)
 	}
 }
