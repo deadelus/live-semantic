@@ -235,7 +235,31 @@ L'utilisateur relance en CLI (`go run ./cmd/livesemantic recognition --filter="p
 
 **Limite qui reste, pas dans le périmètre de ce fix** : les deux boxes restent **superposées aux mêmes coordonnées** (X1/Y1/X2/Y2 identiques — c'est factuellement correct, les deux tracks suivent le même objet physique) — seules la couleur et l'étiquette texte les distinguent maintenant, pas de décalage visuel entre les rectangles. Pas testé visuellement en conditions réelles à l'instant où ce correctif a été écrit (webcam vide au moment de la vérification, capture de frame via `/ws` sans personne dans le cadre) — à confirmer par l'utilisateur à son prochain test.
 
-## 19. Références
+## 19. Décalage en cascade des boxes superposées (2026-08-11, nuit)
+
+Suite immédiate de § 18 : couleur/texte distincts ne suffisent pas si les deux boxes restent aux mêmes coordonnées exactes — le texte de l'une reste caché derrière/sur celui de l'autre. Demandé explicitement : les décaler pour que les deux textes soient lisibles.
+
+**`cascadeOffsets` (`tracking.go`)** : pour chaque box, compte combien d'*autres* boxes ont déjà (par ordre de `TrackID`, pas l'ordre de la slice — `trackManager.boxes()` itère une map Go, ordre randomisé à chaque appel) une IoU mutuelle ≥ `cascadeOverlapIoU` (0.85, volontairement proche de 1 pour ne capturer que de vrais doublons sur le même objet physique, pas deux objets différents qui se chevauchent un peu) — ce rang devient un décalage diagonal de `cascadeStepPx` (16px) par cran, appliqué aux 4 coordonnées de la box avant dessin. Tri par `TrackID` explicitement pour la stabilité : sans ça, l'ordre aléatoire de la map ferait "sauter" le décalage d'une frame à l'autre pour la même paire de tracks — visuellement, un scintillement au lieu d'un décalage stable.
+
+5 tests (`TestCascadeOffsets`) : box seule, boxes non chevauchantes, 2/3 boxes identiques (décalage incrémental), stabilité indépendante de l'ordre de la slice d'entrée.
+
+**Vérifié visuellement** (webcam réelle cette fois, capture d'une frame via `/ws`) : deux rectangles décalés en diagonale, l'un rouge "person (86.35%)", l'autre gris "person with a yellow hat (86.35%)", les deux textes lisibles simultanément. Confirme que le fix § 18 (identité par `FilterKey`) et ce décalage fonctionnent ensemble comme prévu.
+
+## 20. Score affiché trompeur — corrigé (2026-08-11, nuit)
+
+L'utilisateur relance § 19 sans casquette jaune (pas de "yellow hat") et voit quand même 2 boxes, toutes les deux à "85.37%". Deux constats distincts :
+
+1. **Attendu, pas un bug** : ça confirme en conditions réelles et contrôlées la fragilité déjà documentée (§ 7, § 14 "bag-of-words") — CLIP matche "person with a yellow hat" sur n'importe quelle personne, casquette ou pas. Cette fois le test est propre (le terme exact "person" confirme qu'une personne est bien présente, donc ce n'est pas juste "rien dans le cadre, le bruit gagne par défaut" comme en § 13) : c'est bien le terme sémantique qui ne discrimine pas l'attribut.
+
+2. **Bug réel, distinct** : les deux boxes affichaient le **même** "85.37%" — qui s'avère être `box.Confidence` (la confiance de détection **YOLO**, générique, pas liée à CLIP) recopiée sur les deux tracks, y compris le track sémantique. Le vrai score CLIP qui a décidé le match sémantique (~0.25-0.28, visible dans les logs `"Semantic candidate scored"`) n'était jamais affiché — le chiffre à l'écran donnait une fausse impression de confiance forte et identique pour les deux conditions, alors que l'une est un match exact (pas de score) et l'autre un match sémantique avec une marge fragile.
+
+**Fix** : le score CLIP qui décide un match sémantique est maintenant threadé jusqu'à l'affichage — `trackedObject.lastScore` (mis à jour dans `matchOrSpawn`/`spawn`, qui prennent désormais un paramètre `score float32`), exposé via `trackedBox.Score` (`boxes()`). `uc_recognition.go` affiche `"<terme> (score 0.XX)"` quand `Score != 0` (terme sémantique), sinon garde `"<terme> (XX.XX%)"` (confiance YOLO, pertinente pour un terme exact). Un terme exact n'a jamais de score CLIP — `Score` reste à 0, comportement d'affichage inchangé pour lui.
+
+Nouveau test (`TestBoxes_ScoreReflectsWhatDecidedTheMatch`) : un terme exact et un terme sémantique sur des boxes différentes, vérifie que seul le second a un `Score` non nul et qu'il correspond exactement au score CLIP mocké.
+
+**Pas re-vérifié visuellement à l'instant du fix** (webcam vide au moment de la capture) — à confirmer par l'utilisateur à son prochain test : le score affiché sur la box sémantique devrait maintenant être ~0.25-0.28 (pas 85%), rendant visible à l'œil que ce match est plus fragile que le match exact.
+
+## 21. Références
 
 - Modèle original : [openai/clip-vit-base-patch32](https://huggingface.co/openai/clip-vit-base-patch32) (licence MIT, [openai/CLIP](https://github.com/openai/CLIP))
 - Export ONNX retenu : [Xenova/clip-vit-base-patch32](https://huggingface.co/Xenova/clip-vit-base-patch32)

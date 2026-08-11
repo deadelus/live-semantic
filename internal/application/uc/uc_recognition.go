@@ -120,25 +120,48 @@ func (uc *UseCase) RecognitionUseCase(ctx context.Context, req dto.RecognitionRe
 		renderStart := time.Now()
 		outImage := frame.Image
 		if boxes := tracks.boxes(); len(boxes) > 0 {
+			// cascadeOffsets stacks boxes that share (near-)identical
+			// coordinates — e.g. an exact term + a "+overlap" semantic
+			// term both anchored to the same physical object — so both
+			// labels stay readable instead of one hiding the other
+			// (docs/adr/clip-backend.md § 18-19).
+			offsets := cascadeOffsets(boxes)
+
 			drawBoxes := make([]drawer.Box, 0, len(boxes))
-			for _, tb := range boxes {
+			for i, tb := range boxes {
 				// Keyed on FilterKey (the filter term that matched this
 				// track), not tb.Box.Label (YOLO's own class label) — two
-				// tracks matched to the same physical object (an exact
-				// term + a "+overlap" semantic term) share the same
-				// box.Label ("person" for both) but must be drawn as two
-				// visually distinct boxes, not one. See trackManager.boxes'
-				// doc comment / docs/adr/clip-backend.md § 18.
+				// tracks matched to the same physical object share the
+				// same box.Label ("person" for both) but must be drawn as
+				// two visually distinct boxes, not one. See
+				// trackManager.boxes' doc comment / docs/adr/clip-backend.md
+				// § 18.
 				id := drawer.BoxID(tb.FilterKey)
+				off := offsets[i]
+				// tb.Score (non-zero only for a semantic-term match) is the
+				// CLIP cosine similarity that actually decided this match —
+				// shown instead of tb.Box.Confidence (YOLO's own detection
+				// confidence, unrelated to CLIP and typically much higher-
+				// looking, e.g. ~85% regardless of whether the semantic
+				// condition is really a close call at ~0.25-0.28). An exact
+				// term or no-filter track has no CLIP score (Score == 0),
+				// so it keeps showing YOLO's confidence, which *is* what
+				// decided that match. Found misleading in real use
+				// (docs/adr/clip-backend.md § 20): a semantic match looked
+				// just as "confident" on screen as an exact one.
+				description := fmt.Sprintf("%s (%.2f%%)", tb.FilterKey, tb.Box.Confidence*100)
+				if tb.Score != 0 {
+					description = fmt.Sprintf("%s (score %.2f)", tb.FilterKey, tb.Score)
+				}
 				drawBoxes = append(drawBoxes, drawer.Box{
 					ID:          id,
-					Description: fmt.Sprintf("%s (%.2f%%)", tb.FilterKey, tb.Box.Confidence*100),
+					Description: description,
 					Color:       entities.BoxColor(id),
 					Thickness:   5,
-					X1:          tb.Box.X1,
-					Y1:          tb.Box.Y1,
-					X2:          tb.Box.X2,
-					Y2:          tb.Box.Y2,
+					X1:          tb.Box.X1 + off,
+					Y1:          tb.Box.Y1 + off,
+					X2:          tb.Box.X2 + off,
+					Y2:          tb.Box.Y2 + off,
 				})
 			}
 

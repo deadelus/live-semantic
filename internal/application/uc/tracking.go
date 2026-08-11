@@ -73,6 +73,18 @@ type trackedObject struct {
 	// active at all (no cap to enforce).
 	filterKey string
 
+	// lastScore is the CLIP cosine similarity that most recently matched
+	// this track to a semantic term's candidate — 0 for an exact-term or
+	// no-filter track, which never has a CLIP score at all (label match
+	// isn't scored). Found necessary 2026-08-11: the box label used to
+	// show YOLO's own box.Confidence for every track regardless of term,
+	// which for a semantic term isn't the number that actually decided
+	// the match and can misleadingly look like a strong, confident result
+	// (e.g. "85%") when the real CLIP margin was ~0.25-0.28 — exactly the
+	// documented threshold fragility (docs/adr/clip-backend.md § 7/§ 14),
+	// just hidden from view instead of shown honestly.
+	lastScore float32
+
 	// lastNotifiedAt debounces AlertSender.Notify for this track — see
 	// notifyDebounce's doc comment.
 	lastNotifiedAt time.Time
@@ -218,6 +230,13 @@ type trackedBox struct {
 	Box       entities.BoundingBox
 	FilterKey string
 	TrackID   string
+	// Score is the CLIP cosine similarity that matched this track, for a
+	// semantic term — 0 for an exact-term/no-filter track (see
+	// trackedObject.lastScore). Callers should display this instead of
+	// Box.Confidence whenever it's non-zero: Box.Confidence is YOLO's own
+	// detection confidence, unrelated to (and typically far higher-looking
+	// than) whatever CLIP score actually decided a semantic match.
+	Score float32
 }
 
 // boxes returns the current bounding box of every active track, for
@@ -240,9 +259,60 @@ func (m *trackManager) boxes() []trackedBox {
 
 	boxes := make([]trackedBox, 0, len(m.active))
 	for id, obj := range m.active {
-		boxes = append(boxes, trackedBox{Box: obj.track.LastBox(), FilterKey: obj.filterKey, TrackID: id})
+		boxes = append(boxes, trackedBox{Box: obj.track.LastBox(), FilterKey: obj.filterKey, TrackID: id, Score: obj.lastScore})
 	}
 	return boxes
+}
+
+// cascadeOverlapIoU/cascadeStepPx tune cascadeOffsets — see its doc
+// comment. 0.85 is deliberately close to 1.0 (near-identical, not just
+// "close"): this must only catch genuine duplicates on the same physical
+// object (e.g. an exact term + a "+overlap" semantic term both anchored to
+// the same YOLO box), not two different nearby objects that happen to
+// overlap a bit, which should stay drawn at their real position.
+const (
+	cascadeOverlapIoU = float32(0.85)
+	cascadeStepPx     = float32(16)
+)
+
+// cascadeOffsets returns, for each entry in boxes (same index), a pixel
+// offset to add to all four of its box coordinates (X1/Y1/X2/Y2) before
+// drawing. Requested by the user 2026-08-11 (docs/adr/clip-backend.md
+// § 18-19): two tracks matched to the same physical object (e.g.
+// "person*1" + "person with a red hat*1+overlap") are now drawn with
+// different colors/labels (boxes' doc comment) but still at the exact
+// same coordinates — same rectangle, same label position, one still
+// hides the other's text. Boxes found to mutually overlap above
+// cascadeOverlapIoU are staggered diagonally by cascadeStepPx per rank,
+// cheap-window-manager style, so every label stays readable.
+//
+// Deterministic by TrackID (sorted first), not by boxes' slice order —
+// trackManager.boxes() iterates a Go map, whose order is randomized per
+// call. Ranking by raw slice order would make the stagger direction/
+// amount flicker between frames for the exact same two tracks; ranking by
+// TrackID keeps a given track at the same stack position across frames.
+func cascadeOffsets(boxes []trackedBox) []float32 {
+	order := make([]int, len(boxes))
+	for i := range order {
+		order[i] = i
+	}
+	sort.Slice(order, func(a, b int) bool {
+		return boxes[order[a]].TrackID < boxes[order[b]].TrackID
+	})
+
+	offsets := make([]float32, len(boxes))
+	for rank, idx := range order {
+		box := boxes[idx].Box
+		stack := 0
+		for _, priorIdx := range order[:rank] {
+			prior := boxes[priorIdx].Box
+			if prior.IoU(&box) >= cascadeOverlapIoU {
+				stack++
+			}
+		}
+		offsets[idx] = float32(stack) * cascadeStepPx
+	}
+	return offsets
 }
 
 // cleanup releases every active tracker. Call once when the video loop
@@ -338,7 +408,7 @@ func (m *trackManager) reanchor(frame *entities.Frame, req dto.RecognitionReques
 		// (no cap will ever be checked against it), box.Label is as good
 		// a bucket as any for bookkeeping consistency.
 		for _, box := range result.BoundingBoxes {
-			m.matchOrSpawn(frame, box, box.Label, 0, now, matchedTrackIDs, req)
+			m.matchOrSpawn(frame, box, box.Label, 0, 0, now, matchedTrackIDs, req)
 		}
 		m.missUnmatched(now, matchedTrackIDs, req)
 		return nil
@@ -362,7 +432,7 @@ func (m *trackManager) reanchor(frame *entities.Frame, req dto.RecognitionReques
 			continue
 		}
 		claimed[i] = true
-		m.matchOrSpawn(frame, box, box.Label, term.Cap, now, matchedTrackIDs, req)
+		m.matchOrSpawn(frame, box, box.Label, term.Cap, 0, now, matchedTrackIDs, req)
 	}
 
 	// Pass 2: semantic terms — CLIP-scored, ranked, top Cap kept (the top-N
@@ -428,7 +498,7 @@ func (m *trackManager) reanchor(frame *entities.Frame, req dto.RecognitionReques
 
 		for _, c := range candidates {
 			claimed[c.index] = true
-			m.matchOrSpawn(frame, c.box, key, term.Cap, now, matchedTrackIDs, req)
+			m.matchOrSpawn(frame, c.box, key, term.Cap, c.score, now, matchedTrackIDs, req)
 		}
 	}
 
@@ -439,18 +509,20 @@ func (m *trackManager) reanchor(frame *entities.Frame, req dto.RecognitionReques
 // matchOrSpawn re-anchors box onto its best-matching existing track (always
 // allowed, regardless of cap — a cap only ever blocks a *new* spawn, TODO.md
 // § A/I), or spawns a new track for it if the filterKey's cap (0 = no cap)
-// isn't already reached. Only ever called from reanchor() while m.mu is
-// already held.
-func (m *trackManager) matchOrSpawn(frame *entities.Frame, box entities.BoundingBox, filterKey string, capVal int, now time.Time, matchedTrackIDs map[string]bool, req dto.RecognitionRequest) {
+// isn't already reached. score is the CLIP cosine similarity that produced
+// this candidate for a semantic term (0 for an exact-term/no-filter call,
+// which never has one) — threaded onto the TrackEvent and stored on the
+// track for display (trackedObject.lastScore), not just discarded, so the
+// UI shows the number that actually decided a semantic match instead of
+// YOLO's unrelated box.Confidence (docs/adr/clip-backend.md § 20 — found
+// misleading in real use: a semantic match displayed the same ~85% as an
+// exact match, when its real CLIP margin was ~0.25-0.28). Only ever called
+// from reanchor() while m.mu is already held.
+func (m *trackManager) matchOrSpawn(frame *entities.Frame, box entities.BoundingBox, filterKey string, capVal int, score float32, now time.Time, matchedTrackIDs map[string]bool, req dto.RecognitionRequest) {
 	if id, ok := m.bestMatch(box, matchedTrackIDs); ok {
 		obj := m.active[id]
-		// score is always 0 now — TrackEvent.Score used to carry the CLIP
-		// score that gated the match (2026-08-10 design); matching is
-		// exact-or-already-ranked-and-filtered by the time this runs, so
-		// there's no additional score to thread through here. Kept as a
-		// TrackEvent field for whatever eventually reintroduces a
-		// per-match score (galerie de références, TODO.md § D).
-		evt := obj.track.MatchDetection(box, now, 0)
+		evt := obj.track.MatchDetection(box, now, score)
+		obj.lastScore = score
 		// Re-anchor the tracker itself on the fresh detection to wipe out
 		// any drift accumulated since the last re-detection.
 		if err := obj.tracker.Init(frame, box); err != nil {
@@ -469,7 +541,7 @@ func (m *trackManager) matchOrSpawn(frame *entities.Frame, box entities.Bounding
 		return
 	}
 
-	if id, ok := m.spawn(frame, box, filterKey, now); ok {
+	if id, ok := m.spawn(frame, box, filterKey, score, now); ok {
 		// Found 2026-08-11 while wiring +overlap: a freshly spawned track
 		// MUST be marked matched this same cycle. Without this, two things
 		// went wrong — (1) a later term this same reanchor() call (e.g. an
@@ -549,7 +621,7 @@ func (m *trackManager) countByFilterKey(key string) int {
 // Returns the new track's ID and true on success — false (with a zero id)
 // if tracker creation/init failed, in which case no track exists to add to
 // matchedTrackIDs.
-func (m *trackManager) spawn(frame *entities.Frame, box entities.BoundingBox, filterKey string, now time.Time) (string, bool) {
+func (m *trackManager) spawn(frame *entities.Frame, box entities.BoundingBox, filterKey string, score float32, now time.Time) (string, bool) {
 	trk, err := m.uc.trackerFactory()
 	if err != nil {
 		m.uc.logger.Info("Tracker creation failed", map[string]interface{}{"error": err.Error()})
@@ -563,7 +635,7 @@ func (m *trackManager) spawn(frame *entities.Frame, box entities.BoundingBox, fi
 
 	m.nextTrackID++
 	id := fmt.Sprintf("track-%d", m.nextTrackID)
-	m.active[id] = &trackedObject{track: entities.NewTrack(id, box, now), tracker: trk, filterKey: filterKey}
+	m.active[id] = &trackedObject{track: entities.NewTrack(id, box, now), tracker: trk, filterKey: filterKey, lastScore: score}
 	return id, true
 }
 

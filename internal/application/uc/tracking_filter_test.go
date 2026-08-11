@@ -552,3 +552,114 @@ func TestBoxes_DistinguishesTracksSharingTheSamePhysicalBox(t *testing.T) {
 		}
 	}
 }
+
+func TestCascadeOffsets(t *testing.T) {
+	sameBox := entities.BoundingBox{X1: 0, Y1: 0, X2: 100, Y2: 100}
+	nearbyBox := entities.BoundingBox{X1: 500, Y1: 500, X2: 600, Y2: 600} // no overlap at all with sameBox
+
+	t.Run("single box gets no offset", func(t *testing.T) {
+		boxes := []trackedBox{{Box: sameBox, TrackID: "track-1"}}
+		got := cascadeOffsets(boxes)
+		if len(got) != 1 || got[0] != 0 {
+			t.Fatalf("cascadeOffsets = %v, want [0]", got)
+		}
+	})
+
+	t.Run("non-overlapping boxes get no offset", func(t *testing.T) {
+		boxes := []trackedBox{{Box: sameBox, TrackID: "track-1"}, {Box: nearbyBox, TrackID: "track-2"}}
+		got := cascadeOffsets(boxes)
+		for i, off := range got {
+			if off != 0 {
+				t.Fatalf("offset[%d] = %v, want 0 (no overlap)", i, off)
+			}
+		}
+	})
+
+	t.Run("two identical boxes stagger by TrackID order", func(t *testing.T) {
+		boxes := []trackedBox{{Box: sameBox, TrackID: "track-2"}, {Box: sameBox, TrackID: "track-1"}}
+		got := cascadeOffsets(boxes)
+		// track-1 sorts before track-2 regardless of slice position, so
+		// track-1 (index 1 here) must be the one with offset 0.
+		if got[1] != 0 {
+			t.Fatalf("offset for track-1 = %v, want 0 (first in TrackID order)", got[1])
+		}
+		if got[0] != cascadeStepPx {
+			t.Fatalf("offset for track-2 = %v, want %v (second in TrackID order)", got[0], cascadeStepPx)
+		}
+	})
+
+	t.Run("three identical boxes stagger incrementally", func(t *testing.T) {
+		boxes := []trackedBox{{Box: sameBox, TrackID: "track-a"}, {Box: sameBox, TrackID: "track-b"}, {Box: sameBox, TrackID: "track-c"}}
+		got := cascadeOffsets(boxes)
+		want := []float32{0, cascadeStepPx, 2 * cascadeStepPx}
+		for i := range want {
+			if got[i] != want[i] {
+				t.Fatalf("offset[%d] = %v, want %v", i, got[i], want[i])
+			}
+		}
+	})
+
+	t.Run("stable regardless of input slice order", func(t *testing.T) {
+		a := []trackedBox{{Box: sameBox, TrackID: "track-1"}, {Box: sameBox, TrackID: "track-2"}}
+		b := []trackedBox{{Box: sameBox, TrackID: "track-2"}, {Box: sameBox, TrackID: "track-1"}}
+
+		offA := cascadeOffsets(a)
+		offB := cascadeOffsets(b)
+
+		byTrack := func(boxes []trackedBox, offs []float32, id string) float32 {
+			for i, tb := range boxes {
+				if tb.TrackID == id {
+					return offs[i]
+				}
+			}
+			t.Fatalf("track %q not found", id)
+			return -1
+		}
+
+		if byTrack(a, offA, "track-1") != byTrack(b, offB, "track-1") {
+			t.Fatal("track-1's offset changed depending on input slice order — must be stable across frames")
+		}
+		if byTrack(a, offA, "track-2") != byTrack(b, offB, "track-2") {
+			t.Fatal("track-2's offset changed depending on input slice order — must be stable across frames")
+		}
+	})
+}
+
+// TestBoxes_ScoreReflectsWhatDecidedTheMatch is a regression test for
+// docs/adr/clip-backend.md § 20: the box drawn for a semantic-term track
+// used to show YOLO's own box.Confidence (unrelated to CLIP, and
+// typically far higher-looking than the real CLIP margin) instead of the
+// score that actually decided the match. Exact-term tracks have no CLIP
+// score at all — they should keep reporting 0 (display code falls back to
+// Box.Confidence in that case).
+func TestBoxes_ScoreReflectsWhatDecidedTheMatch(t *testing.T) {
+	exactTarget := box("car", 0)
+	semanticTarget := boxSized("person", 1, 40, 40)
+
+	encoder := &mockSemanticEncoder{scoreByCropSize: map[string]float32{
+		cropSizeKey(semanticTarget): 0.27,
+	}}
+	detector := &mockObjectDetector{boxes: []entities.BoundingBox{exactTarget, semanticTarget}}
+	uc := newTestUseCase(detector, encoder, &mockAlertSender{})
+
+	req := dto.RecognitionRequest{Filter: "car,person with a red hat*1"}
+	m, err := newTrackManager(uc, req)
+	if err != nil {
+		t.Fatalf("newTrackManager error = %v", err)
+	}
+	if err := m.reanchor(testFrame(), req); err != nil {
+		t.Fatalf("reanchor error = %v", err)
+	}
+
+	scoreByKey := map[string]float32{}
+	for _, b := range m.boxes() {
+		scoreByKey[b.FilterKey] = b.Score
+	}
+
+	if got := scoreByKey["car"]; got != 0 {
+		t.Fatalf(`boxes()["car"].Score = %v, want 0 (exact term, no CLIP score)`, got)
+	}
+	if got := scoreByKey["person with a red hat"]; got != 0.27 {
+		t.Fatalf(`boxes()["person with a red hat"].Score = %v, want 0.27 (the CLIP score that decided the match)`, got)
+	}
+}
