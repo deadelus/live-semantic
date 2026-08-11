@@ -507,3 +507,48 @@ func TestReanchor_SpawnedTrackConfirmsInExactlyMinHitsCycles(t *testing.T) {
 		}
 	}
 }
+
+// TestBoxes_DistinguishesTracksSharingTheSamePhysicalBox is a regression
+// test for docs/adr/clip-backend.md § 18: two tracks matched to the same
+// physical detection (an exact term + a "+overlap" semantic term) share
+// the same underlying YOLO box.Label ("person" for both) — drawing code
+// must key color/label off FilterKey instead, which requires boxes() to
+// actually return it.
+func TestBoxes_DistinguishesTracksSharingTheSamePhysicalBox(t *testing.T) {
+	target := boxSized("person", 0, 40, 40)
+	encoder := &mockSemanticEncoder{scoreByCropSize: map[string]float32{
+		cropSizeKey(target): 0.9,
+	}}
+	detector := &mockObjectDetector{boxes: []entities.BoundingBox{target}}
+	uc := newTestUseCase(detector, encoder, &mockAlertSender{})
+
+	req := dto.RecognitionRequest{Filter: "person*1,person with a red hat*1+overlap"}
+	m, err := newTrackManager(uc, req)
+	if err != nil {
+		t.Fatalf("newTrackManager error = %v", err)
+	}
+	if err := m.reanchor(testFrame(), req); err != nil {
+		t.Fatalf("reanchor error = %v", err)
+	}
+
+	boxes := m.boxes()
+	if len(boxes) != 2 {
+		t.Fatalf("boxes() returned %d entries, want 2", len(boxes))
+	}
+
+	gotKeys := map[string]bool{}
+	for _, b := range boxes {
+		if b.Box.Label != "person" {
+			t.Fatalf("Box.Label = %q, want %q (YOLO's own label, same for both tracks)", b.Box.Label, "person")
+		}
+		if b.TrackID == "" {
+			t.Fatal("TrackID is empty, want a real track ID")
+		}
+		gotKeys[b.FilterKey] = true
+	}
+	for _, want := range []string{"person", "person with a red hat"} {
+		if !gotKeys[want] {
+			t.Fatalf("missing FilterKey %q among boxes() results %v — drawing can't distinguish the two tracks without it", want, gotKeys)
+		}
+	}
+}

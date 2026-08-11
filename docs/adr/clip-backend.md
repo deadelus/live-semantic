@@ -225,7 +225,17 @@ Suite de § 16 : l'utilisateur voulait tester en vrai `person` + `person with a 
 
 **Testé en conditions réelles** (webcam, filtre `person*1,person with a yellow hat*1+overlap`) : `track-1` (`class:"person"`, terme exact) et `track-2` (`filterKey:"person with a yellow hat"`, terme sémantique) tous les deux `Confirmed` en continu sur la même personne — le double-box demandé fonctionne. Scores sémantiques systématiquement `yolo_label:"person"` (jamais couch/plant) à ~0.25-0.27 sur une dizaine de cycles consécutifs — la restriction par label élimine bien le bruit sans dégrader le vrai match.
 
-## 18. Références
+## 18. Bug d'affichage trouvé en testant § 17 à la main (2026-08-11, nuit)
+
+L'utilisateur relance en CLI (`go run ./cmd/livesemantic recognition --filter="person*1,person with a yellow hat*1+overlap"`) pour vérifier visuellement le double-box confirmé par les logs en § 17 — et ne voit **pas** deux boxes.
+
+**Cause : bug de rendu, pas de matching.** `trackManager.boxes()` (consommé par `RecognitionUseCase` pour dessiner, `uc_recognition.go`) renvoyait `entities.BoundingBox` brut — dont le champ `Label` est **celui de YOLO** ("person" pour les deux tracks, puisque les deux sont ancrés sur la même détection physique), pas le terme de filtre qui a fait matcher chaque track. Le code de dessin faisait `drawer.BoxID(box.Label)` → même `id` pour les deux tracks → **même couleur, même texte, mêmes coordonnées** (les deux tracks pointent sur la même box physique) → deux rectangles rigoureusement identiques et superposés, visuellement indiscernables d'un seul. Les deux tracks existaient bel et bien (déjà confirmé par les logs en § 17, `track-1`/`track-2` tous les deux `Confirmed`) — seul l'affichage ne les distinguait pas.
+
+**Fix** : `trackManager.boxes()` renvoie désormais `[]trackedBox{Box, FilterKey, TrackID}` au lieu de `[]entities.BoundingBox` nu. `uc_recognition.go` dessine avec `drawer.BoxID(tb.FilterKey)` — couleur et texte dérivés du terme de filtre (`"person"` vs `"person with a yellow hat"`), plus de collision entre deux tracks sur le même objet physique. Nouveau test (`TestBoxes_DistinguishesTracksSharingTheSamePhysicalBox`) verrouille le contrat : `boxes()` doit renvoyer un `FilterKey` distinct par track même quand `Box.Label` est identique.
+
+**Limite qui reste, pas dans le périmètre de ce fix** : les deux boxes restent **superposées aux mêmes coordonnées** (X1/Y1/X2/Y2 identiques — c'est factuellement correct, les deux tracks suivent le même objet physique) — seules la couleur et l'étiquette texte les distinguent maintenant, pas de décalage visuel entre les rectangles. Pas testé visuellement en conditions réelles à l'instant où ce correctif a été écrit (webcam vide au moment de la vérification, capture de frame via `/ws` sans personne dans le cadre) — à confirmer par l'utilisateur à son prochain test.
+
+## 19. Références
 
 - Modèle original : [openai/clip-vit-base-patch32](https://huggingface.co/openai/clip-vit-base-patch32) (licence MIT, [openai/CLIP](https://github.com/openai/CLIP))
 - Export ONNX retenu : [Xenova/clip-vit-base-patch32](https://huggingface.co/Xenova/clip-vit-base-patch32)

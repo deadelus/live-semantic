@@ -211,16 +211,36 @@ func (m *trackManager) count() int {
 	return len(m.active)
 }
 
+// trackedBox pairs a track's current position with the identity that
+// should drive how it's drawn — see boxes' doc comment for why this can't
+// just be entities.BoundingBox.Label.
+type trackedBox struct {
+	Box       entities.BoundingBox
+	FilterKey string
+	TrackID   string
+}
+
 // boxes returns the current bounding box of every active track, for
 // drawing — regardless of state (Tentative tracks are drawn too, they're
 // still a real detection, just not confirmed as stable yet).
-func (m *trackManager) boxes() []entities.BoundingBox {
+//
+// Returns FilterKey (trackedObject.filterKey) alongside each box, not just
+// entities.BoundingBox — found necessary 2026-08-11, tested live: two
+// tracks matched to the same physical box (an exact term + a "+overlap"
+// semantic term both on the same person) both carry the *same* underlying
+// YOLO box.Label ("person" for both — that's the detector's label, not the
+// filter term that matched), so drawing keyed on box.Label alone drew two
+// visually identical, exactly overlapping rectangles — indistinguishable
+// from a single box, even though two tracks genuinely existed
+// (docs/adr/clip-backend.md § 18). Callers should key color/label off
+// FilterKey instead.
+func (m *trackManager) boxes() []trackedBox {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
-	boxes := make([]entities.BoundingBox, 0, len(m.active))
-	for _, obj := range m.active {
-		boxes = append(boxes, obj.track.LastBox())
+	boxes := make([]trackedBox, 0, len(m.active))
+	for id, obj := range m.active {
+		boxes = append(boxes, trackedBox{Box: obj.track.LastBox(), FilterKey: obj.filterKey, TrackID: id})
 	}
 	return boxes
 }

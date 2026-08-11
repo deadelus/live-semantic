@@ -121,17 +121,24 @@ func (uc *UseCase) RecognitionUseCase(ctx context.Context, req dto.RecognitionRe
 		outImage := frame.Image
 		if boxes := tracks.boxes(); len(boxes) > 0 {
 			drawBoxes := make([]drawer.Box, 0, len(boxes))
-			for _, box := range boxes {
-				id := drawer.BoxID(box.Label)
+			for _, tb := range boxes {
+				// Keyed on FilterKey (the filter term that matched this
+				// track), not tb.Box.Label (YOLO's own class label) — two
+				// tracks matched to the same physical object (an exact
+				// term + a "+overlap" semantic term) share the same
+				// box.Label ("person" for both) but must be drawn as two
+				// visually distinct boxes, not one. See trackManager.boxes'
+				// doc comment / docs/adr/clip-backend.md § 18.
+				id := drawer.BoxID(tb.FilterKey)
 				drawBoxes = append(drawBoxes, drawer.Box{
 					ID:          id,
-					Description: fmt.Sprintf("%s (%.2f%%)", box.Label, box.Confidence*100),
+					Description: fmt.Sprintf("%s (%.2f%%)", tb.FilterKey, tb.Box.Confidence*100),
 					Color:       entities.BoxColor(id),
 					Thickness:   5,
-					X1:          box.X1,
-					Y1:          box.Y1,
-					X2:          box.X2,
-					Y2:          box.Y2,
+					X1:          tb.Box.X1,
+					Y1:          tb.Box.Y1,
+					X2:          tb.Box.X2,
+					Y2:          tb.Box.Y2,
 				})
 			}
 
