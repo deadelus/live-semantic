@@ -271,7 +271,21 @@ L'utilisateur reteste après § 20 et envoie une capture d'écran : les deux pou
 
 **Vérifié visuellement en conditions réelles** (webcam, capture via `/ws`) : `person (89.97%)` et `person with a yellow hat (22.63%)` — les deux formatés en `%`, valeurs enfin correctement associées à leur box (confiance YOLO forte pour l'exact, score CLIP fragile et cohérent avec l'absence réelle de casquette jaune pour le sémantique).
 
-## 22. Références
+## 22. Confirmation contrôlée : CLIP ne discrimine pas l'attribut "yellow" (2026-08-11, nuit)
+
+Suite de § 14 (hypothèse posée, pas testée) et § 20-21 (bugs d'affichage/association corrigés, le pipeline est maintenant fiable pour ce test). L'utilisateur fait le test contrôlé qui manquait : filtre `person with a yellow hat`, comparé casquette **noire** vs casquette **jaune**, même personne, même cadrage. **Score quasi identique dans les deux cas, la box apparaît à chaque fois.**
+
+**Ça confirme précisément l'hypothèse de § 14, pas juste "CLIP est fragile" en général** : le modèle détecte correctement les concepts "person" et "hat" (la box apparaît de façon cohérente dès qu'il y a une personne avec quelque chose sur la tête), mais **ne lie pas l'attribut couleur "yellow" à l'objet "hat"** — exactement le défaut "bag-of-words cross-modal" documenté dans la littérature (§ 14, CLIP Behaves like a Bag-of-Words Model Cross-modally but not Uni-modally, ICLR 2026). Pas une marge insuffisante (§ 7/§ 10) qu'un seuil mieux calé résoudrait — un défaut structurel de l'alignement cross-modal de CLIP ViT-B/32, documenté comme non résolu dans la recherche actuelle.
+
+**Implication concrète, à trancher** : le filtre texte libre par attribut de couleur (`"person with a yellow hat"`, `"a red car"`, etc.) n'est **pas fiable** avec ce modèle — au mieux équivalent à filtrer sur "person with a hat" (ou même juste "person" selon la marge), pas sur la couleur spécifique. Les filtres texte libre sur un **objet/concept** entier (hors couleur — ex. "a person carrying a box", "an abandoned bag") restent la vraie proposition de valeur de ce mécanisme ; les filtres par **attribut visuel fin** (couleur, motif, petit détail) ne le sont pas avec la configuration actuelle.
+
+**Options pour la suite, aucune tranchée** :
+- Accepter la limite, la documenter clairement côté produit/GUI (ne pas promettre le filtrage par couleur) — coût zéro, mais réduit la portée du "langage naturel" annoncé dans la vision du projet.
+- Modèle CLIP plus grand (ViT-L/14 ou supérieur) — meilleure résolution spatiale et un peu plus de capacité compositionnelle en général, mais le défaut de binding cross-modal est documenté comme **persistant même sur des modèles plus grands** dans la littérature récente (§ 14) — pas une garantie de fix, coût réel (poids plus lourds, latence plus élevée, § 8).
+- Un modèle spécialisé attribut/couleur en aval du crop YOLO (ex. classification de couleur dominante sur la région, indépendant de CLIP) pour les requêtes qui mentionnent explicitement une couleur — changerait l'architecture, pas juste un réglage.
+- Ne rien faire de plus pour l'instant, prioriser le reste du backlog (§ H, multi-flux, etc.) — la limite est désormais documentée et confirmée, pas juste supposée.
+
+## 23. Références
 
 - Modèle original : [openai/clip-vit-base-patch32](https://huggingface.co/openai/clip-vit-base-patch32) (licence MIT, [openai/CLIP](https://github.com/openai/CLIP))
 - Export ONNX retenu : [Xenova/clip-vit-base-patch32](https://huggingface.co/Xenova/clip-vit-base-patch32)
