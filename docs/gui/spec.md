@@ -370,6 +370,15 @@ global unique imposé.
   le score bouger en live pendant qu'on ajuste vaut mieux qu'une valeur par
   défaut statique. Nécessite d'abord que le seuil devienne un vrai
   paramètre de requête côté backend (voir encart ci-dessus).
+- **Décidé le 2026-08-11** : case à cocher **par terme de filtre** pour
+  autoriser le chevauchement (`overlap`, TODO.md § A, pas construit côté
+  backend — juste la syntaxe/le paramètre nommé, pas encore d'implémentation
+  à piloter). Par défaut décoché : un terme exact et un terme sémantique
+  visant le même objet physique ne dessinent jamais deux boxes superposées
+  (confirmé par l'utilisateur, testé en réel — seul devant la caméra,
+  aucune double box voulue). Cochée, la GUI devra indiquer clairement que
+  deux entrées de galerie/deux conditions peuvent se déclencher sur le même
+  objet — pas un défaut silencieux.
 - Toggle par entrée de galerie (activer/désactiver sans supprimer).
 - Sélecteur tracker KCF/CSRT (existe en dur, jamais exposé).
 
