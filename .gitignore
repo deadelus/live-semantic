@@ -13,3 +13,13 @@ assets/videos/*.mp4
 # Logs applicatifs (cmd/livesemantic/logging.go, withFileLogging) : générés
 # à l'exécution, jamais versionnés. Dossier préservé via .gitkeep.
 logs/*.log
+
+# Pipeline de fine-tuning YOLO (training/, TODO.md § A) : données
+# téléchargées et artefacts d'entraînement, jamais versionnés — seuls les
+# scripts le sont.
+training/dataset/
+training/runs/
+*.pt
+
+training/__pycache__/
+*.pyc

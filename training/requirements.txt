@@ -1,0 +1,5 @@
+# Not verified against a real install in this environment — see README.md
+# "Reality check". Version floors, not exact pins: resolve/lock on the
+# machine that actually runs this.
+ultralytics>=8.3.0
+fiftyone>=0.24.0
