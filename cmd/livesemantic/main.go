@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"live-semantic/internal/application/session"
 	"live-semantic/internal/application/uc"
+	"live-semantic/internal/implementation/gallery/inmemory"
 	"live-semantic/internal/implementation/inference/onnx/clip"
 	"live-semantic/internal/implementation/inference/onnx/yolo11s"
 	lognotifier "live-semantic/internal/implementation/notifier/log-notifier"
@@ -118,10 +119,13 @@ func main() {
 	// Shared across the single-session UseCase above and (web mode only)
 	// every session.Manager-owned UseCase — TODO.md § H1 Multi-flux: a
 	// reference gallery entry added from one flux must be usable as a
-	// filter term on every other flux, not siloed per-session.
-	gallery := uc.NewReferenceGallery()
+	// filter term on every other flux, not siloed per-session. Concrete
+	// implementation/gallery/inmemory.Gallery constructed here, the
+	// composition root — application/uc only ever sees it through the
+	// gallery.Repository port (dependency inversion, 2026-08-12).
+	galleryRepo := inmemory.New()
 
-	useCases, err := uc.NewUseCase(engine.Context(), engine.Logger(), localInput, browserInput, streamingOutput, notifier, objectDetector, semanticEncoder, trackerFactory, gallery)
+	useCases, err := uc.NewUseCase(engine.Context(), engine.Logger(), localInput, browserInput, streamingOutput, notifier, objectDetector, semanticEncoder, trackerFactory, galleryRepo)
 	if err != nil {
 		engine.Logger().Error("Failed to create use cases", err)
 		return
@@ -132,17 +136,18 @@ func main() {
 	// Registered after useCases exists (moved 2026-08-11, real crash found
 	// while testing — docs/adr/clip-backend.md § 15, TODO.md § H1): a
 	// SIGTERM used to destroy objectDetector/semanticEncoder's shared ONNX
-	// sessions immediately, even while RecognitionUseCase's detection
-	// goroutine was still mid-EncodeImage/AnalyzeFrame on those exact
-	// sessions (SIGSEGV inside the CGo call — worse the slower a reanchor
-	// cycle is, e.g. with CLIP semantic filter terms in play). useCases.
-	// Stop() unsticks any session still blocked reading frames;
-	// useCases.Wait() blocks until it has genuinely returned — only then
-	// is it safe to destroy the sessions it was using.
+	// sessions immediately, even while Recognize's detection goroutine was
+	// still mid-EncodeImage/AnalyzeFrame on those exact sessions (SIGSEGV
+	// inside the CGo call — worse the slower a reanchor cycle is, e.g.
+	// with CLIP semantic filter terms in play). useCases.
+	// StopRecognition() unsticks any session still blocked reading
+	// frames; useCases.WaitRecognition() blocks until it has genuinely
+	// returned — only then is it safe to destroy the sessions it was
+	// using.
 	engine.Gracefull().Register("Stopping application gracefully", func() error {
 		fmt.Println("🔒 Stopping application gracefully...")
-		useCases.Stop()
-		useCases.Wait()
+		useCases.StopRecognition()
+		useCases.WaitRecognition()
 		if notifier != nil {
 			fmt.Println("Cleaning up notifier...")
 		}
@@ -173,7 +178,7 @@ func main() {
 		// in this branch — asserted here (rather than threading the
 		// concrete type through NewUseCase's interface-typed parameter)
 		// so the api.Server can register WebSocket clients against the
-		// exact instance RecognitionUseCase renders to.
+		// exact instance Recognize renders to.
 		wsOutput, ok := streamingOutput.(*output.WebSocketOutput)
 		if !ok {
 			engine.Logger().Error("Web mode requires a WebSocketOutput, got something else", nil)
@@ -188,7 +193,7 @@ func main() {
 			objectDetector,
 			semanticEncoder,
 			trackerFactory,
-			gallery,
+			galleryRepo,
 		)
 		startWebServer(engine, useCases, wsOutput, browserInput, sessionManager, serverPort)
 	case *interactive:

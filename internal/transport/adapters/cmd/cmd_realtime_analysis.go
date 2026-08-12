@@ -24,7 +24,7 @@ var recognitionCmd = &cobra.Command{
 			Filter: filter,
 		}
 
-		result, err := useCases.RecognitionUseCase(context.Background(), req)
+		result, err := useCases.Recognize(context.Background(), req)
 		if err != nil {
 			fmt.Printf("❌ Error: %s\n", err.Error())
 			return

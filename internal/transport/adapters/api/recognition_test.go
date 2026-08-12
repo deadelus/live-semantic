@@ -42,10 +42,10 @@ type mockUseCases struct {
 
 	// gallery is a minimal real in-memory store (name -> enabled), enough
 	// to exercise galleryController's REST handlers without depending on
-	// uc.UseCase's own gallery.go (a different package's internals) —
+	// implementation/gallery/inmemory (a different package's internals) —
 	// this mock only needs to prove the HTTP layer wires calls through
-	// correctly, not re-verify ReferenceGallery's own logic (already
-	// covered by internal/application/uc's tests).
+	// correctly, not re-verify gallery.Repository's own logic (already
+	// covered by implementation/gallery/inmemory's tests).
 	galleryMu      sync.Mutex
 	galleryEntries map[string]bool // name -> enabled
 }
@@ -101,22 +101,22 @@ func (m *mockUseCases) ListGalleryReferences(_ context.Context) []uc.GalleryEntr
 	return out
 }
 
-func (m *mockUseCases) RecognitionUseCase(_ context.Context, _ dto.RecognitionRequest) (dto.Result[dto.RecognitionResponse], error) {
+func (m *mockUseCases) Recognize(_ context.Context, _ dto.RecognitionRequest) (dto.Result[dto.RecognitionResponse], error) {
 	if m.proceed != nil {
 		<-m.proceed
 	}
 	return m.result, m.resultErr
 }
 
-func (m *mockUseCases) Stop() {
+func (m *mockUseCases) StopRecognition() {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	m.stopCalls++
 }
 
-// Wait is a no-op here: these tests don't exercise main.go's shutdown
-// path, just recognitionController's REST handlers.
-func (m *mockUseCases) Wait() {}
+// WaitRecognition is a no-op here: these tests don't exercise main.go's
+// shutdown path, just recognitionController's REST handlers.
+func (m *mockUseCases) WaitRecognition() {}
 
 func (m *mockUseCases) stopCallCount() int {
 	m.mu.Lock()

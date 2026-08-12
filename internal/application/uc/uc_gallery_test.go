@@ -21,6 +21,33 @@ func TestUseCase_AddGalleryReference_EncodesAndStores(t *testing.T) {
 	}
 }
 
+// TestUseCase_AddGalleryReference_CocoCollisionRejected moved here from
+// the old application/uc/gallery_test.go (2026-08-12 port extraction,
+// see infrastructure/gallery.Repository's doc comment): COCO-collision
+// is a business rule the use case validates before ever reaching the
+// Repository, which no longer knows what a COCO class is.
+func TestUseCase_AddGalleryReference_CocoCollisionRejected(t *testing.T) {
+	uc := newTestUseCase(&mockObjectDetector{}, &mockSemanticEncoder{}, &mockAlertSender{})
+	err := uc.AddGalleryReference(context.Background(), "person", image.NewRGBA(image.Rect(0, 0, 10, 10)))
+	if err == nil {
+		t.Fatal("AddGalleryReference() with a name colliding with a COCO class should error — it would never be reachable as a filter term")
+	}
+}
+
+// TestUseCase_RenameGalleryReference_CocoCollisionRejected — same rule,
+// applied to the rename target.
+func TestUseCase_RenameGalleryReference_CocoCollisionRejected(t *testing.T) {
+	encoder := &mockSemanticEncoder{}
+	uc := newTestUseCase(&mockObjectDetector{}, encoder, &mockAlertSender{})
+	ctx := context.Background()
+	if err := uc.AddGalleryReference(ctx, "thing", image.NewRGBA(image.Rect(0, 0, 10, 10))); err != nil {
+		t.Fatalf("AddGalleryReference() error = %v", err)
+	}
+	if err := uc.RenameGalleryReference(ctx, "thing", "car"); err == nil {
+		t.Fatal("RenameGalleryReference() onto a COCO class name should error")
+	}
+}
+
 func TestUseCase_AddGalleryReference_PropagatesEncodeError(t *testing.T) {
 	boom := errors.New("boom")
 	encoder := &mockSemanticEncoder{encodeImageErr: boom}

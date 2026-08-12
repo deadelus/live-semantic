@@ -1,9 +1,14 @@
-package uc
+package inmemory
 
 import "testing"
 
-func TestReferenceGallery_AddThenGet(t *testing.T) {
-	g := NewReferenceGallery()
+// COCO-collision rejection isn't tested here — that validation moved to
+// application/uc.UseCase.AddGalleryReference/RenameGalleryReference
+// during the 2026-08-12 port extraction (this package must not know what
+// a COCO class is) — see internal/application/uc/uc_gallery_test.go.
+
+func TestGallery_AddThenGet(t *testing.T) {
+	g := New()
 	emb := []float32{1, 0, 0}
 	if err := g.Add("mon_sac", emb); err != nil {
 		t.Fatalf("Add() error = %v", err)
@@ -17,43 +22,36 @@ func TestReferenceGallery_AddThenGet(t *testing.T) {
 	}
 }
 
-func TestReferenceGallery_Get_UnknownName(t *testing.T) {
-	g := NewReferenceGallery()
+func TestGallery_Get_UnknownName(t *testing.T) {
+	g := New()
 	if _, ok := g.Get("nope"); ok {
 		t.Fatal("Get() ok = true for a name never added, want false")
 	}
 }
 
-func TestReferenceGallery_Get_NilGallery(t *testing.T) {
-	var g *ReferenceGallery
+func TestGallery_Get_NilGallery(t *testing.T) {
+	var g *Gallery
 	if _, ok := g.Get("anything"); ok {
-		t.Fatal("Get() on a nil *ReferenceGallery should return ok=false, not panic")
+		t.Fatal("Get() on a nil *Gallery should return ok=false, not panic")
 	}
 }
 
-func TestReferenceGallery_Add_EmptyNameRejected(t *testing.T) {
-	g := NewReferenceGallery()
+func TestGallery_Add_EmptyNameRejected(t *testing.T) {
+	g := New()
 	if err := g.Add("", []float32{1}); err == nil {
 		t.Fatal("Add() with an empty name should error")
 	}
 }
 
-func TestReferenceGallery_Add_EmptyEmbeddingRejected(t *testing.T) {
-	g := NewReferenceGallery()
+func TestGallery_Add_EmptyEmbeddingRejected(t *testing.T) {
+	g := New()
 	if err := g.Add("thing", nil); err == nil {
 		t.Fatal("Add() with an empty embedding should error")
 	}
 }
 
-func TestReferenceGallery_Add_CocoCollisionRejected(t *testing.T) {
-	g := NewReferenceGallery()
-	if err := g.Add("person", []float32{1}); err == nil {
-		t.Fatal("Add() with a name colliding with a COCO class should error — it would never be reachable as a filter term")
-	}
-}
-
-func TestReferenceGallery_Add_DuplicateRejected(t *testing.T) {
-	g := NewReferenceGallery()
+func TestGallery_Add_DuplicateRejected(t *testing.T) {
+	g := New()
 	if err := g.Add("thing", []float32{1}); err != nil {
 		t.Fatalf("first Add() error = %v", err)
 	}
@@ -62,8 +60,8 @@ func TestReferenceGallery_Add_DuplicateRejected(t *testing.T) {
 	}
 }
 
-func TestReferenceGallery_Add_CaseAndWhitespaceNormalized(t *testing.T) {
-	g := NewReferenceGallery()
+func TestGallery_Add_CaseAndWhitespaceNormalized(t *testing.T) {
+	g := New()
 	if err := g.Add("  Mon Sac  ", []float32{1}); err != nil {
 		t.Fatalf("Add() error = %v", err)
 	}
@@ -72,8 +70,8 @@ func TestReferenceGallery_Add_CaseAndWhitespaceNormalized(t *testing.T) {
 	}
 }
 
-func TestReferenceGallery_Remove_IsIdempotent(t *testing.T) {
-	g := NewReferenceGallery()
+func TestGallery_Remove_IsIdempotent(t *testing.T) {
+	g := New()
 	_ = g.Add("thing", []float32{1})
 	g.Remove("thing")
 	g.Remove("thing") // must not panic/error the second time
@@ -82,8 +80,8 @@ func TestReferenceGallery_Remove_IsIdempotent(t *testing.T) {
 	}
 }
 
-func TestReferenceGallery_SetEnabled_DisabledEntryNotReturnedByGet(t *testing.T) {
-	g := NewReferenceGallery()
+func TestGallery_SetEnabled_DisabledEntryNotReturnedByGet(t *testing.T) {
+	g := New()
 	_ = g.Add("thing", []float32{1})
 	if err := g.SetEnabled("thing", false); err != nil {
 		t.Fatalf("SetEnabled() error = %v", err)
@@ -99,15 +97,15 @@ func TestReferenceGallery_SetEnabled_DisabledEntryNotReturnedByGet(t *testing.T)
 	}
 }
 
-func TestReferenceGallery_SetEnabled_UnknownNameErrors(t *testing.T) {
-	g := NewReferenceGallery()
+func TestGallery_SetEnabled_UnknownNameErrors(t *testing.T) {
+	g := New()
 	if err := g.SetEnabled("nope", true); err == nil {
 		t.Fatal("SetEnabled() on an unknown name should error")
 	}
 }
 
-func TestReferenceGallery_Rename(t *testing.T) {
-	g := NewReferenceGallery()
+func TestGallery_Rename(t *testing.T) {
+	g := New()
 	_ = g.Add("old_name", []float32{1})
 	if err := g.Rename("old_name", "new_name"); err != nil {
 		t.Fatalf("Rename() error = %v", err)
@@ -120,8 +118,8 @@ func TestReferenceGallery_Rename(t *testing.T) {
 	}
 }
 
-func TestReferenceGallery_Rename_TargetCollisionRejected(t *testing.T) {
-	g := NewReferenceGallery()
+func TestGallery_Rename_TargetCollisionRejected(t *testing.T) {
+	g := New()
 	_ = g.Add("a", []float32{1})
 	_ = g.Add("b", []float32{0, 1})
 	if err := g.Rename("a", "b"); err == nil {
@@ -129,15 +127,15 @@ func TestReferenceGallery_Rename_TargetCollisionRejected(t *testing.T) {
 	}
 }
 
-func TestReferenceGallery_Rename_MissingSourceErrors(t *testing.T) {
-	g := NewReferenceGallery()
+func TestGallery_Rename_MissingSourceErrors(t *testing.T) {
+	g := New()
 	if err := g.Rename("nope", "new_name"); err == nil {
 		t.Fatal("Rename() on a missing source should error")
 	}
 }
 
-func TestReferenceGallery_List_SortedByName_IncludesDisabled(t *testing.T) {
-	g := NewReferenceGallery()
+func TestGallery_List_SortedByName_IncludesDisabled(t *testing.T) {
+	g := New()
 	_ = g.Add("zebra_bag", []float32{1})
 	_ = g.Add("apple_box", []float32{1})
 	_ = g.SetEnabled("zebra_bag", false)

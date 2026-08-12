@@ -5,7 +5,7 @@
 // own InputStream/OutputStream, own trackManager per call — unchanged
 // from the single-session path) while sharing the expensive ONNX
 // resources (objectDetector, semanticEncoder), the notifier, the tracker
-// factory, and the reference gallery (uc.ReferenceGallery — deliberately
+// factory, and the reference gallery (gallery.Repository — deliberately
 // shared, not one per session: a named reference should mean the same
 // thing everywhere, not be re-added per source).
 //
@@ -23,6 +23,7 @@ import (
 
 	"live-semantic/internal/application/dto"
 	"live-semantic/internal/application/uc"
+	"live-semantic/internal/infrastructure/gallery"
 	"live-semantic/internal/infrastructure/inference"
 	"live-semantic/internal/infrastructure/notifier"
 	"live-semantic/internal/infrastructure/streamer"
@@ -82,11 +83,11 @@ type entry struct {
 	running   bool
 	filter    string
 	lastError string
-	// done is closed when the most recently started RecognitionUseCase
+	// done is closed when the most recently started Recognize
 	// goroutine returns — created fresh, synchronously, right before that
 	// goroutine is spawned (StartRecognition), so RemoveSession/anything
-	// else can wait on it correctly. Deliberately NOT e.useCases.Wait():
-	// its sync.WaitGroup.Add(1) happens *inside* RecognitionUseCase itself
+	// else can wait on it correctly. Deliberately NOT e.useCases.WaitRecognition():
+	// its sync.WaitGroup.Add(1) happens *inside* Recognize itself
 	// (uc_recognition.go), i.e. on the spawned goroutine — no
 	// happens-before guarantee versus a concurrent Wait() call racing
 	// ahead of it from a different goroutine. go test -race caught this
@@ -114,14 +115,15 @@ type Manager struct {
 	objectDetector  inference.ObjectDetector
 	semanticEncoder inference.SemanticEncoder
 	trackerFactory  tracking.TrackerFactory
-	gallery         *uc.ReferenceGallery
+	gallery         gallery.Repository
 }
 
-// NewManager creates an empty Manager. gallery is shared across every
+// NewManager creates an empty Manager. galleryRepo is shared across every
 // session this Manager creates (and, per the caller's choice, can be the
 // same instance passed to a separate single-session uc.UseCase too — see
-// uc.NewUseCase's doc comment) — pass a fresh uc.NewReferenceGallery() if
-// no sharing with anything else is wanted.
+// uc.NewUseCase's doc comment) — pass a fresh
+// implementation/gallery/inmemory.New() if no sharing with anything else
+// is wanted.
 func NewManager(
 	inputFactory InputFactory,
 	outputFactory OutputFactory,
@@ -130,7 +132,7 @@ func NewManager(
 	objectDetector inference.ObjectDetector,
 	semanticEncoder inference.SemanticEncoder,
 	trackerFactory tracking.TrackerFactory,
-	gallery *uc.ReferenceGallery,
+	galleryRepo gallery.Repository,
 ) *Manager {
 	return &Manager{
 		sessions:        make(map[string]*entry),
@@ -141,7 +143,7 @@ func NewManager(
 		objectDetector:  objectDetector,
 		semanticEncoder: semanticEncoder,
 		trackerFactory:  trackerFactory,
-		gallery:         gallery,
+		gallery:         galleryRepo,
 	}
 }
 
@@ -163,7 +165,7 @@ func (m *Manager) CreateSession(ctx context.Context, src Source) (Info, error) {
 	// the single-session path's dto.RecognitionRequest.Source, which
 	// exists because *that* UseCase can be asked for either — see its
 	// own doc comment). Passed as both slots so the "local" default path
-	// in RecognitionUseCase (Source == "" -> localInput) always resolves
+	// in Recognize (Source == "" -> localInput) always resolves
 	// to the right thing regardless of what kind of source this actually
 	// is (camera, file/RTSP, or browser ingest).
 	useCases, err := uc.NewUseCase(ctx, m.logger, in, in, out, m.notifier, m.objectDetector, m.semanticEncoder, m.trackerFactory, m.gallery)
@@ -183,7 +185,7 @@ func (m *Manager) CreateSession(ctx context.Context, src Source) (Info, error) {
 	return Info{ID: id, Source: src}, nil
 }
 
-// StartRecognition runs uc.UseCases.RecognitionUseCase for the given
+// StartRecognition runs uc.UseCases.Recognize for the given
 // session in a goroutine and returns immediately — same "don't block the
 // HTTP response on a call that blocks until the stream stops" rationale
 // as the single-session recognitionController.start.
@@ -213,7 +215,7 @@ func (m *Manager) StartRecognition(ctx context.Context, id string, req dto.Recog
 			e.mu.Unlock()
 		}()
 
-		result, err := e.useCases.RecognitionUseCase(ctx, req)
+		result, err := e.useCases.Recognize(ctx, req)
 		if err != nil || !result.Success {
 			errMsg := result.Error
 			if errMsg == "" && err != nil {
@@ -235,14 +237,14 @@ func (m *Manager) StartRecognition(ctx context.Context, id string, req dto.Recog
 // halt — safe to call on an idle session (InputStream.Stop() already is,
 // same contract as every InputStream implementation).
 //
-// Calls e.input.Stop() directly rather than e.useCases.Stop() — found via
+// Calls e.input.Stop() directly rather than e.useCases.StopRecognition() — found via
 // a real race in this package's own tests (2026-08-12), not hypothetical:
-// uc.UseCase.Stop() reads uc.activeInput, which RecognitionUseCase only
+// uc.UseCase.StopRecognition() reads uc.activeInput, which Recognize only
 // assigns *inside* the goroutine StartRecognition spawns, asynchronously,
 // a moment after StartRecognition itself already returned and flipped
 // e.running to true. Calling StopRecognition fast enough after
 // StartRecognition (exactly what a tight test loop does, polling every
-// 5ms) can land before that assignment happens — uc.UseCase.Stop() then
+// 5ms) can land before that assignment happens — uc.UseCase.StopRecognition() then
 // finds activeInput still nil and does nothing, leaving the session
 // stuck running forever. Manager already holds e.input directly (unlike
 // the single-session recognitionController, which only has a uc.UseCases
@@ -265,7 +267,7 @@ func (m *Manager) StopRecognition(id string) error {
 // cleans up its input/output, and forgets the session. Errors if the
 // session doesn't exist; does NOT error if it was already idle. Uses
 // e.input.Stop() directly — see StopRecognition's doc comment for why —
-// and waits on e.done rather than e.useCases.Wait() — see entry.done's
+// and waits on e.done rather than e.useCases.WaitRecognition() — see entry.done's
 // doc comment (the sync.WaitGroup version raced for real under -race).
 func (m *Manager) RemoveSession(id string) error {
 	m.mu.Lock()

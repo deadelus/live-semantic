@@ -300,7 +300,7 @@ func newTrackManager(uc *UseCase, req dto.RecognitionRequest) (*trackManager, er
 		// against candidates (reanchor's pass 2, unchanged — it doesn't
 		// care whether Embedding came from EncodeText or a gallery
 		// lookup) instead of text↔image. Checked after isCOCOLabel
-		// (unconditional COCO priority, same reason ReferenceGallery.Add
+		// (unconditional COCO priority, same reason AddGalleryReference
 		// rejects a COCO-colliding name) but before EncodeText, so a
 		// registered reference never pays for/risks a text-encode error.
 		// No LabelHint/BaseEmbedding for a gallery term — there's no free

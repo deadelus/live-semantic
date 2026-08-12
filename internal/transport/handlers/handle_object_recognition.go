@@ -15,7 +15,7 @@ func (h *BaseHandler) HandleRecognitionUseCase(req envelopes.TransportRequest[dt
 	})
 
 	// Call the use case with the request data
-	result, err := h.useCases.RecognitionUseCase(req.Context, req.Data)
+	result, err := h.useCases.Recognize(req.Context, req.Data)
 
 	// Handle errors and convert to envelopes.TransportResponse
 	if err != nil {

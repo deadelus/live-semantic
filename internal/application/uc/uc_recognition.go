@@ -34,7 +34,7 @@ func boxDescription(tb trackedBox) string {
 	return fmt.Sprintf("%s (%.2f%%)", tb.FilterKey, percent)
 }
 
-// RecognitionUseCase starts the continuous analysis of the video stream, as
+// Recognize starts the continuous analysis of the video stream, as
 // two decoupled loops (TODO.md § C) sharing one trackManager:
 //
 //   - Video loop (this goroutine, driven by streamingInput.Start): per
@@ -56,9 +56,9 @@ func boxDescription(tb trackedBox) string {
 //
 // Alerts fire once per track lifecycle event (TrackEntered/TrackMatched,
 // TODO.md § D) rather than once per frame.
-func (uc *UseCase) RecognitionUseCase(ctx context.Context, req dto.RecognitionRequest) (dto.Result[dto.RecognitionResponse], error) {
+func (uc *UseCase) Recognize(ctx context.Context, req dto.RecognitionRequest) (dto.Result[dto.RecognitionResponse], error) {
 	// Tracked end-to-end (every return path, including the early-exit ones
-	// below) so UseCases.Wait() can block until this call has genuinely
+	// below) so WaitRecognition() can block until this call has genuinely
 	// finished — see its doc comment for the SIGSEGV this prevents.
 	uc.activeSessions.Add(1)
 	defer uc.activeSessions.Done()
@@ -117,10 +117,10 @@ func (uc *UseCase) RecognitionUseCase(ctx context.Context, req dto.RecognitionRe
 	// for the rest of the (potentially indefinite) blocking
 	// streamingInput.Start call below, making it purely decorative once a
 	// session was actually running. streamingInput.Stop() is the same
-	// mechanism Stop() (uc_control.go) already uses to unstick this exact
-	// call — converging both paths onto it rather than inventing a second
-	// one. watchDone stops the watcher when RecognitionUseCase returns on
-	// its own (Stop()/key event/stream end), so it doesn't leak for the
+	// mechanism StopRecognition() (uc_control.go) already uses to unstick
+	// this exact call — converging both paths onto it rather than inventing a second
+	// one. watchDone stops the watcher when Recognize returns on
+	// its own (StopRecognition()/key event/stream end), so it doesn't leak for the
 	// lifetime of a ctx that's never cancelled (e.g. context.Background(),
 	// what every caller passes today — TODO.md § H1: a per-session
 	// cancellable context is a natural follow-up once a caller actually

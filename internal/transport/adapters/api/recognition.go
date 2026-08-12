@@ -15,24 +15,26 @@ import (
 )
 
 // recognitionController wires REST start/stop/status around the single,
-// process-wide RecognitionUseCase run. H1 minimal scope (TODO.md § H1):
-// one webcam session, no session IDs yet — uc.UseCase's streamingInput/
+// process-wide Recognize run. H1 minimal scope (TODO.md § H1): one webcam
+// session, no session IDs yet — uc.UseCase's streamingInput/
 // streamingOutput are shared fields, not per-call (see TODO.md § H1
 // "Multi-flux" for the follow-up that replaces this with per-ID sessions).
 // The `running` guard here exists purely to reject a second concurrent
 // start with a clear error instead of two goroutines fighting over the
-// same InputStream.
+// same InputStream. Depends on uc.Recognition, not the wider uc.UseCases
+// (interface segregation, 2026-08-12) — this controller never touches
+// the gallery.
 type recognitionController struct {
 	handler  *handlers.BaseHandler
 	logger   logger.Logger
-	useCases uc.UseCases
+	useCases uc.Recognition
 
 	mu        sync.Mutex
 	running   bool
 	lastError string
 }
 
-func newRecognitionController(useCases uc.UseCases, logger logger.Logger) *recognitionController {
+func newRecognitionController(useCases uc.Recognition, logger logger.Logger) *recognitionController {
 	return &recognitionController{
 		handler:  handlers.NewBaseHandler(useCases, logger),
 		logger:   logger,
@@ -41,7 +43,7 @@ func newRecognitionController(useCases uc.UseCases, logger logger.Logger) *recog
 }
 
 // start validates the request body against dto.RecognitionRequest, then
-// runs RecognitionUseCase in a goroutine and returns immediately — it
+// runs Recognize in a goroutine and returns immediately — it
 // would otherwise block the HTTP response until the stream stops (webcam
 // runs indefinitely), which isn't what a "start" endpoint should do.
 func (rc *recognitionController) start(c *gin.Context) {
@@ -91,10 +93,11 @@ func (rc *recognitionController) start(c *gin.Context) {
 	})
 }
 
-// stop signals the running session to halt (uc.UseCases.Stop()) and
-// returns immediately — the session finishes shortly after (see
-// uc.UseCase.Stop's doc comment), the `running` flag flips back to false
-// on its own once the start goroutine's deferred cleanup runs.
+// stop signals the running session to halt (uc.Recognition.StopRecognition())
+// and returns immediately — the session finishes shortly after (see
+// uc.UseCase.StopRecognition's doc comment), the `running` flag flips
+// back to false on its own once the start goroutine's deferred cleanup
+// runs.
 func (rc *recognitionController) stop(c *gin.Context) {
 	rc.mu.Lock()
 	running := rc.running
@@ -105,7 +108,7 @@ func (rc *recognitionController) stop(c *gin.Context) {
 		return
 	}
 
-	rc.useCases.Stop()
+	rc.useCases.StopRecognition()
 	c.JSON(http.StatusAccepted, gin.H{"status": "stopping"})
 }
 

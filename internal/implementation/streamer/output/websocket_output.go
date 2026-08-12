@@ -125,8 +125,8 @@ func (w *WebSocketOutput) broadcast(messageType int, payload []byte) error {
 
 // HandleKeyEvent implements streamer.OutputStream. There's no keyboard
 // concept over WebSocket — stopping a session goes through the REST
-// POST /api/v1/recognition/stop endpoint (uc.UseCases.Stop()), never
-// through this. Always returns -1 (no key), so RecognitionUseCase's
+// POST /api/v1/recognition/stop endpoint (uc.Recognition.StopRecognition()),
+// never through this. Always returns -1 (no key), so Recognize's
 // "Escape to quit" check never fires here.
 func (w *WebSocketOutput) HandleKeyEvent() int {
 	return -1
