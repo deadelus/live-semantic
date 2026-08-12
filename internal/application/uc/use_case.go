@@ -6,9 +6,9 @@ import (
 	"image"
 	"live-semantic/internal/application/dto"
 	"live-semantic/internal/domain"
-	galleryport "live-semantic/internal/infrastructure/gallery"
 	"live-semantic/internal/infrastructure/inference"
 	"live-semantic/internal/infrastructure/notifier"
+	"live-semantic/internal/infrastructure/storage"
 	"live-semantic/internal/infrastructure/streamer"
 	"live-semantic/internal/infrastructure/tracking"
 	"sync"
@@ -67,7 +67,7 @@ type Recognition interface {
 // of text↔image) — split from Recognition above for the same interface-
 // segregation reason (transport/adapters/api's galleryController only
 // needs this, not recognition control). See uc_gallery.go for the
-// concrete implementation and infrastructure/gallery.Repository for the
+// concrete implementation and infrastructure/storage.GalleryStorage for the
 // storage port it delegates to (application/uc.UseCase no longer holds a
 // concrete gallery type directly — dependency inversion, same shape as
 // every other port in this application).
@@ -86,13 +86,13 @@ type GalleryReferences interface {
 	// method had none at all).
 	AddGalleryReference(ctx context.Context, name string, crop image.Image) error
 	// RemoveGalleryReference deletes a gallery entry — see
-	// gallery.Repository.Remove (idempotent, not an error if absent).
+	// storage.GalleryStorage.Remove (idempotent, not an error if absent).
 	RemoveGalleryReference(ctx context.Context, name string)
-	// RenameGalleryReference — see uc_gallery.go/gallery.Repository.Rename.
+	// RenameGalleryReference — see uc_gallery.go/storage.GalleryStorage.Rename.
 	RenameGalleryReference(ctx context.Context, oldName, newName string) error
-	// SetGalleryReferenceEnabled — see gallery.Repository.SetEnabled.
+	// SetGalleryReferenceEnabled — see storage.GalleryStorage.SetEnabled.
 	SetGalleryReferenceEnabled(ctx context.Context, name string, enabled bool) error
-	// ListGalleryReferences — see gallery.Repository.List.
+	// ListGalleryReferences — see storage.GalleryStorage.List.
 	ListGalleryReferences(ctx context.Context) []GalleryEntryInfo
 }
 
@@ -109,6 +109,19 @@ type UseCases interface {
 }
 
 // useCase implements the UseCases interface.
+//
+// STANDING RULE (noted here 2026-08-12 per explicit review feedback —
+// don't lose this): every field of UseCase that represents a dependency
+// MUST be an interface (a port from infrastructure/*), never a concrete
+// type from implementation/* or a hand-rolled concrete struct defined in
+// this package. This was violated once already (gallery used to be
+// *ReferenceGallery, a concrete struct living right here in
+// application/uc — fixed by extracting infrastructure/storage.
+// GalleryStorage + implementation/storage/inmemory). Check this rule
+// again *every time* a field is added to this struct — logger,
+// localInput/browserInput, streamingOutput, notifier, objectDetector,
+// semanticEncoder, trackerFactory, gallery are all interfaces today;
+// keep it that way.
 type UseCase struct {
 	logger logger.Logger
 	// localInput is the backend's own camera/file/RTSP source — always
@@ -140,14 +153,14 @@ type UseCase struct {
 	// gallery is the {name, embedding} storage port for reference-image
 	// filter terms (TODO.md § D/§ H1, docs/adr/clip-backend.md § 24) —
 	// see uc_gallery.go for the GalleryReferences methods around it.
-	// gallery.Repository, not a concrete type (dependency inversion,
+	// storage.GalleryStorage, not a concrete type (dependency inversion,
 	// 2026-08-12 — this used to be *ReferenceGallery, a concrete struct
 	// defined in this very package, holding both storage and its own
-	// validation logic; the port now lives in infrastructure/gallery, the
-	// only implementation in implementation/gallery/inmemory, business
+	// validation logic; the port now lives in infrastructure/storage, the
+	// only implementation in implementation/storage/inmemory, business
 	// validation moved to uc_gallery.go where the rest of this
 	// application's filter-grammar rules already live).
-	gallery galleryport.Repository
+	gallery storage.GalleryStorage
 }
 
 // NewUseCase initializes your use cases with all the necessary
@@ -160,13 +173,13 @@ type UseCase struct {
 // interface/repository split was meant to remove — this package must
 // not know inmemory.New() exists). The composition root
 // (cmd/livesemantic/main.go) constructs the concrete
-// implementation/gallery/inmemory.Gallery and passes it in — callers
+// implementation/storage/inmemory.Gallery and passes it in — callers
 // that want the reference gallery *shared* across multiple UseCase
 // instances (TODO.md § H1 "Multi-flux", internal/application/session:
 // every session should see the same named references, not one gallery
 // each) construct one such Repository and pass the same instance to
 // every NewUseCase call.
-func NewUseCase(ctx context.Context, logger logger.Logger, localInput streamer.InputStream, browserInput streamer.InputStream, streamingOutput streamer.OutputStream, notifier notifier.AlertSender, objectDetector inference.ObjectDetector, semanticEncoder inference.SemanticEncoder, trackerFactory tracking.TrackerFactory, galleryRepo galleryport.Repository) (UseCases, error) {
+func NewUseCase(ctx context.Context, logger logger.Logger, localInput streamer.InputStream, browserInput streamer.InputStream, streamingOutput streamer.OutputStream, notifier notifier.AlertSender, objectDetector inference.ObjectDetector, semanticEncoder inference.SemanticEncoder, trackerFactory tracking.TrackerFactory, galleryRepo storage.GalleryStorage) (UseCases, error) {
 
 	if ctx == nil {
 		return nil, domain.ErrNilContext

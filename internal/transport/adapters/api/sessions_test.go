@@ -12,8 +12,8 @@ import (
 
 	"live-semantic/internal/application/session"
 	"live-semantic/internal/domain/entities"
-	"live-semantic/internal/infrastructure/gallery"
 	"live-semantic/internal/infrastructure/inference"
+	"live-semantic/internal/infrastructure/storage"
 	"live-semantic/internal/infrastructure/streamer"
 	"live-semantic/internal/infrastructure/tracking"
 
@@ -102,26 +102,26 @@ func (sessionMockTracker) Update(*entities.Frame) (entities.BoundingBox, bool) {
 }
 func (sessionMockTracker) Cleanup() {}
 
-// sessionMockGalleryRepo is a minimal gallery.Repository test double —
-// not implementation/gallery/inmemory.Gallery, which this package's own
+// sessionMockGalleryRepo is a minimal storage.GalleryStorage test double —
+// not implementation/storage/inmemory.Gallery, which this package's own
 // tests must not import any more than production code may (dependency
 // inversion, same rationale as application/session's own copy of this
 // idea in session_test.go).
 type sessionMockGalleryRepo struct {
-	entries map[string]*gallery.Entry
+	entries map[string]*storage.Gallery
 }
 
 func newSessionMockGalleryRepo() *sessionMockGalleryRepo {
-	return &sessionMockGalleryRepo{entries: map[string]*gallery.Entry{}}
+	return &sessionMockGalleryRepo{entries: map[string]*storage.Gallery{}}
 }
 
-var _ gallery.Repository = (*sessionMockGalleryRepo)(nil)
+var _ storage.GalleryStorage = (*sessionMockGalleryRepo)(nil)
 
 func (g *sessionMockGalleryRepo) Add(name string, embedding entities.Embedding) error {
 	if _, exists := g.entries[name]; exists {
 		return fmt.Errorf("gallery entry %q already exists", name)
 	}
-	g.entries[name] = &gallery.Entry{Name: name, Embedding: embedding, Enabled: true}
+	g.entries[name] = &storage.Gallery{Name: name, Embedding: embedding, Enabled: true}
 	return nil
 }
 func (g *sessionMockGalleryRepo) Remove(name string) { delete(g.entries, name) }
@@ -150,8 +150,8 @@ func (g *sessionMockGalleryRepo) Get(name string) (entities.Embedding, bool) {
 	}
 	return e.Embedding, true
 }
-func (g *sessionMockGalleryRepo) List() []gallery.Entry {
-	out := make([]gallery.Entry, 0, len(g.entries))
+func (g *sessionMockGalleryRepo) List() []storage.Gallery {
+	out := make([]storage.Gallery, 0, len(g.entries))
 	for _, e := range g.entries {
 		out = append(out, *e)
 	}

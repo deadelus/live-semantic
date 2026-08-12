@@ -11,7 +11,7 @@ import (
 // GalleryEntryInfo is the read-only, embedding-free view of a gallery
 // entry returned to a REST caller — embedding vectors (512 floats for
 // CLIP ViT-B/32) have no use client-side and shouldn't cross that
-// boundary. Derived from gallery.Entry (infrastructure/gallery's own,
+// boundary. Derived from storage.Gallery (infrastructure/storage's own,
 // embedding-included view) by ListGalleryReferences below.
 type GalleryEntryInfo struct {
 	Name    string
@@ -24,9 +24,9 @@ type GalleryEntryInfo struct {
 // silently never be reachable as a filter term), then encodes crop once
 // (CLIP EncodeImage — the same call reanchor's semantic pass already
 // makes per candidate box, TODO.md § A) and stores the resulting
-// embedding under name via uc.gallery (the gallery.Repository port —
+// embedding under name via uc.gallery (the storage.GalleryStorage port —
 // pure storage, doesn't know what a COCO class is, see
-// infrastructure/gallery.Repository's doc comment for why that split
+// infrastructure/storage.GalleryStorage's doc comment for why that split
 // exists). ctx is checked before EncodeImage runs — fail fast on an
 // already-cancelled request rather than paying for a CGo/ONNX inference
 // call whose result nobody will read (same "check before I/O" rationale
@@ -54,7 +54,7 @@ func (uc *UseCase) AddGalleryReference(ctx context.Context, name string, crop im
 	return uc.gallery.Add(name, embedding)
 }
 
-// RemoveGalleryReference — see gallery.Repository.Remove. ctx accepted
+// RemoveGalleryReference — see storage.GalleryStorage.Remove. ctx accepted
 // for interface consistency (see AddGalleryReference's doc comment) —
 // the underlying delete is effectively instantaneous, nothing to
 // meaningfully cancel, so ctx isn't checked here.
@@ -77,14 +77,14 @@ func (uc *UseCase) RenameGalleryReference(_ context.Context, oldName, newName st
 	return uc.gallery.Rename(oldName, newName)
 }
 
-// SetGalleryReferenceEnabled — see gallery.Repository.SetEnabled. ctx:
+// SetGalleryReferenceEnabled — see storage.GalleryStorage.SetEnabled. ctx:
 // see RemoveGalleryReference's doc comment.
 func (uc *UseCase) SetGalleryReferenceEnabled(_ context.Context, name string, enabled bool) error {
 	return uc.gallery.SetEnabled(name, enabled)
 }
 
-// ListGalleryReferences — see gallery.Repository.List. Projects each
-// gallery.Entry down to the embedding-free GalleryEntryInfo (see its own
+// ListGalleryReferences — see storage.GalleryStorage.List. Projects each
+// storage.Gallery down to the embedding-free GalleryEntryInfo (see its own
 // doc comment for why). ctx: see RemoveGalleryReference's doc comment.
 func (uc *UseCase) ListGalleryReferences(_ context.Context) []GalleryEntryInfo {
 	entries := uc.gallery.List()

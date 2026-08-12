@@ -10,8 +10,8 @@ import (
 
 	"live-semantic/internal/application/dto"
 	"live-semantic/internal/domain/entities"
-	"live-semantic/internal/infrastructure/gallery"
 	"live-semantic/internal/infrastructure/inference"
+	"live-semantic/internal/infrastructure/storage"
 	"live-semantic/internal/infrastructure/tracking"
 
 	"github.com/deadelus/go-clean-app/v2/logger"
@@ -141,7 +141,7 @@ func (m *mockAlertSender) Notify(msg entities.Message) error {
 }
 func (m *mockAlertSender) Cleanup() {}
 
-// mockGalleryRepo is a package-local gallery.Repository test double — not
+// mockGalleryRepo is a package-local storage.GalleryStorage test double — not
 // implementation/gallery/inmemory.Gallery, which application/uc's own
 // test files must not import any more than production code may (the
 // exact dependency-inversion rule the 2026-08-12 port extraction exists
@@ -151,14 +151,14 @@ func (m *mockAlertSender) Cleanup() {}
 // real Add/Rename/SetEnabled/List/Get semantics rather than a stub that
 // always succeeds.
 type mockGalleryRepo struct {
-	entries map[string]*gallery.Entry
+	entries map[string]*storage.Gallery
 }
 
 func newMockGalleryRepo() *mockGalleryRepo {
-	return &mockGalleryRepo{entries: map[string]*gallery.Entry{}}
+	return &mockGalleryRepo{entries: map[string]*storage.Gallery{}}
 }
 
-var _ gallery.Repository = (*mockGalleryRepo)(nil)
+var _ storage.GalleryStorage = (*mockGalleryRepo)(nil)
 
 func (g *mockGalleryRepo) Add(name string, embedding entities.Embedding) error {
 	if name == "" {
@@ -170,7 +170,7 @@ func (g *mockGalleryRepo) Add(name string, embedding entities.Embedding) error {
 	if _, exists := g.entries[name]; exists {
 		return fmt.Errorf("gallery entry %q already exists", name)
 	}
-	g.entries[name] = &gallery.Entry{Name: name, Embedding: embedding, Enabled: true}
+	g.entries[name] = &storage.Gallery{Name: name, Embedding: embedding, Enabled: true}
 	return nil
 }
 
@@ -207,8 +207,8 @@ func (g *mockGalleryRepo) Get(name string) (entities.Embedding, bool) {
 	return e.Embedding, true
 }
 
-func (g *mockGalleryRepo) List() []gallery.Entry {
-	out := make([]gallery.Entry, 0, len(g.entries))
+func (g *mockGalleryRepo) List() []storage.Gallery {
+	out := make([]storage.Gallery, 0, len(g.entries))
 	for _, e := range g.entries {
 		out = append(out, *e)
 	}

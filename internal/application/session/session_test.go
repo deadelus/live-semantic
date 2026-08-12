@@ -11,8 +11,8 @@ import (
 
 	"live-semantic/internal/application/dto"
 	"live-semantic/internal/domain/entities"
-	"live-semantic/internal/infrastructure/gallery"
 	"live-semantic/internal/infrastructure/inference"
+	"live-semantic/internal/infrastructure/storage"
 	"live-semantic/internal/infrastructure/streamer"
 	"live-semantic/internal/infrastructure/tracking"
 
@@ -118,27 +118,27 @@ func (mockTracker) Update(*entities.Frame) (entities.BoundingBox, bool) {
 }
 func (mockTracker) Cleanup() {}
 
-// mockGalleryRepo is a minimal gallery.Repository test double — not
+// mockGalleryRepo is a minimal storage.GalleryStorage test double — not
 // implementation/gallery/inmemory.Gallery, which this package must not
 // import any more than session.go's own production code may (dependency
 // inversion). Package-local, not shared with application/uc's own copy
 // of the same idea (different package, same rationale — see that
 // package's mockGalleryRepo doc comment).
 type mockGalleryRepo struct {
-	entries map[string]*gallery.Entry
+	entries map[string]*storage.Gallery
 }
 
 func newMockGalleryRepo() *mockGalleryRepo {
-	return &mockGalleryRepo{entries: map[string]*gallery.Entry{}}
+	return &mockGalleryRepo{entries: map[string]*storage.Gallery{}}
 }
 
-var _ gallery.Repository = (*mockGalleryRepo)(nil)
+var _ storage.GalleryStorage = (*mockGalleryRepo)(nil)
 
 func (g *mockGalleryRepo) Add(name string, embedding entities.Embedding) error {
 	if _, exists := g.entries[name]; exists {
 		return fmt.Errorf("gallery entry %q already exists", name)
 	}
-	g.entries[name] = &gallery.Entry{Name: name, Embedding: embedding, Enabled: true}
+	g.entries[name] = &storage.Gallery{Name: name, Embedding: embedding, Enabled: true}
 	return nil
 }
 func (g *mockGalleryRepo) Remove(name string) { delete(g.entries, name) }
@@ -167,8 +167,8 @@ func (g *mockGalleryRepo) Get(name string) (entities.Embedding, bool) {
 	}
 	return e.Embedding, true
 }
-func (g *mockGalleryRepo) List() []gallery.Entry {
-	out := make([]gallery.Entry, 0, len(g.entries))
+func (g *mockGalleryRepo) List() []storage.Gallery {
+	out := make([]storage.Gallery, 0, len(g.entries))
 	for _, e := range g.entries {
 		out = append(out, *e)
 	}
@@ -435,7 +435,7 @@ func TestOutput_Input_UnknownSession(t *testing.T) {
 // expose gallery contents itself (uc.UseCases does, via
 // ListGalleryReferences — that's the real surface a REST caller would
 // use; this test just needs to prove sharing, not re-test
-// the gallery.Repository's own logic, already covered by
+// the storage.GalleryStorage's own logic, already covered by
 // implementation/gallery/inmemory's tests).
 func TestGallerySharedAcrossSessions(t *testing.T) {
 	galleryRepo := newMockGalleryRepo()
