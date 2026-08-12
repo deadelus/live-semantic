@@ -97,8 +97,13 @@ type UseCase struct {
 
 // NewUseCase initializes your use cases with all the necessary
 // dependencies. browserInput may be nil (CLI/interactive mode — see the
-// UseCase struct's doc comment); every other parameter is required.
-func NewUseCase(ctx context.Context, logger logger.Logger, localInput streamer.InputStream, browserInput streamer.InputStream, streamingOutput streamer.OutputStream, notifier notifier.AlertSender, objectDetector inference.ObjectDetector, semanticEncoder inference.SemanticEncoder, trackerFactory tracking.TrackerFactory) (UseCases, error) {
+// UseCase struct's doc comment). gallery may also be nil — a fresh empty
+// one is created internally — but callers that want the reference
+// gallery *shared* across multiple UseCase instances (TODO.md § H1
+// "Multi-flux", internal/application/session: every session should see
+// the same named references, not one gallery each) must pass the same
+// *ReferenceGallery explicitly. Every other parameter is required.
+func NewUseCase(ctx context.Context, logger logger.Logger, localInput streamer.InputStream, browserInput streamer.InputStream, streamingOutput streamer.OutputStream, notifier notifier.AlertSender, objectDetector inference.ObjectDetector, semanticEncoder inference.SemanticEncoder, trackerFactory tracking.TrackerFactory, gallery *ReferenceGallery) (UseCases, error) {
 
 	if ctx == nil {
 		return nil, domain.ErrNilContext
@@ -131,6 +136,10 @@ func NewUseCase(ctx context.Context, logger logger.Logger, localInput streamer.I
 		return nil, domain.ErrNilTrackerFactory
 	}
 
+	if gallery == nil {
+		gallery = NewReferenceGallery()
+	}
+
 	return &UseCase{
 		logger:          logger,
 		localInput:      localInput,
@@ -140,6 +149,6 @@ func NewUseCase(ctx context.Context, logger logger.Logger, localInput streamer.I
 		objectDetector:  objectDetector,
 		semanticEncoder: semanticEncoder,
 		trackerFactory:  trackerFactory,
-		gallery:         NewReferenceGallery(),
+		gallery:         gallery,
 	}, nil
 }

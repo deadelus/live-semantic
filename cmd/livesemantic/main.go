@@ -114,7 +114,13 @@ func main() {
 		return
 	}
 
-	useCases, err := uc.NewUseCase(engine.Context(), engine.Logger(), localInput, browserInput, streamingOutput, notifier, objectDetector, semanticEncoder, trackerFactory)
+	// Shared across the single-session UseCase above and (web mode only)
+	// every session.Manager-owned UseCase — TODO.md § H1 Multi-flux: a
+	// reference gallery entry added from one flux must be usable as a
+	// filter term on every other flux, not siloed per-session.
+	gallery := uc.NewReferenceGallery()
+
+	useCases, err := uc.NewUseCase(engine.Context(), engine.Logger(), localInput, browserInput, streamingOutput, notifier, objectDetector, semanticEncoder, trackerFactory, gallery)
 	if err != nil {
 		engine.Logger().Error("Failed to create use cases", err)
 		return
