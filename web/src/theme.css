@@ -55,6 +55,13 @@
   --radius-md: 6px;
   --radius-lg: 8px;
   --radius-xl: 10px;
+
+  /* Hatched placeholder background for a video area with no real frame
+     yet — matches the mockup's own placeholder treatment exactly
+     (screens 1a/1c: "Vidéo = placeholders hachurés", its own
+     "Hypothèses & parti pris" note). */
+  --video-hatch-1: #171b20;
+  --video-hatch-2: #13161b;
 }
 
 :root[data-theme='light'] {
@@ -94,6 +101,9 @@
 
   --shadow-panel: 0 2px 14px rgba(0, 0, 0, 0.35);
   --shadow-popover: 0 8px 24px rgba(0, 0, 0, 0.25);
+
+  --video-hatch-1: #20242a;
+  --video-hatch-2: #1b1f25;
 }
 
 @keyframes ls-pulse {

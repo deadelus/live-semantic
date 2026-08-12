@@ -1,0 +1,29 @@
+.ls-video {
+  position: relative;
+  flex: 1;
+  border-radius: var(--radius-lg);
+  overflow: hidden;
+  background: repeating-linear-gradient(
+    135deg,
+    var(--video-hatch-1) 0 12px,
+    var(--video-hatch-2) 12px 24px
+  );
+}
+
+.ls-video img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  display: block;
+}
+
+.ls-video__placeholder {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--text-faint);
+}

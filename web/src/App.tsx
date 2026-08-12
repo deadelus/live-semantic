@@ -2,35 +2,41 @@ import { useEffect, useRef, useState } from 'react'
 import { getStatus, startRecognition, stopRecognition, type Source } from './api'
 import { VideoStream } from './VideoStream'
 import { BrowserCamera } from './BrowserCamera'
+import { Button } from './components/Button'
+import { StatusBadge } from './components/StatusBadge'
+import { ThemeToggle } from './components/ThemeToggle'
+import { colorForID } from './components/VideoOverlayBox'
+import { useVideoStream } from './useVideoStream'
 import './App.css'
 
-// First real GUI screen (TODO.md § H2, vertical slice decided 2026-08-12):
-// single source, a filter text field, start/stop, live video — plus,
-// since 2026-08-12, a source toggle (local backend camera vs. this
-// device's own browser camera, TODO.md § H2 "capture caméra navigateur").
-// Deliberately not the full mockup (no sources list/mosaic, no reference
-// gallery, no multi-flux) — those depend on H1 work not done yet.
+// Live view screen (TODO.md § H2), restyled 2026-08-12 against
+// docs/gui/mockups/ screens 1c/1f — design tokens/components (theme.css,
+// components/) rather than the earlier minimal CSS. Deliberately still
+// not a pixel-for-pixel copy: the mockup's transport bar (pause/rewind)
+// and per-term threshold slider+sparkline need backend features not
+// built yet (ring buffer, TODO.md § C "V2"; per-term threshold,
+// docs/adr/clip-backend.md § 23's own open question) — building their
+// UI now would be non-functional set dressing, not a real feature
+// (TODO.md § H's own stated risk: "travail jetable"). What's here is
+// real: filter control, source toggle, live video with real overlay
+// boxes (§ 32), a genuine detected-objects list, and read-only backend
+// config already hardcoded server-side (§ 3.4 of docs/gui/spec.md).
 function App() {
   const [filter, setFilter] = useState('person')
   const [source, setSource] = useState<Source>('local')
   const [running, setRunning] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
+  const [advancedOpen, setAdvancedOpen] = useState(false)
 
   const browserCamera = useRef<BrowserCamera | null>(null)
+  const { frameURL, boxes, connected } = useVideoStream()
 
   useEffect(() => {
     const poll = () => {
       getStatus()
         .then((s) => {
           setRunning(s.running)
-          // Surfaces a session that failed server-side (e.g. an invalid
-          // filter) — backend fix 2026-08-12, previously only visible in
-          // server logs, silently doing nothing from this UI's point of
-          // view. Only overwrite the locally-set error with the
-          // server's when the server actually has one, so a
-          // client-side error (e.g. getUserMedia denied) shown by
-          // handleStart isn't immediately clobbered by the next poll.
           if (s.error) {
             setError(s.error)
           }
@@ -44,9 +50,6 @@ function App() {
     return () => clearInterval(id)
   }, [])
 
-  // If the recognition session ends on its own (server-side error, or the
-  // user clicking "stop") while a browser camera capture is active, stop
-  // it too rather than leaving getUserMedia running invisibly.
   useEffect(() => {
     if (!running) {
       browserCamera.current?.stop()
@@ -88,45 +91,96 @@ function App() {
   }
 
   return (
-    <div className="app">
-      <header className="app-header">
-        <h1>LiveSemantic</h1>
-        <span className={`status-badge ${running ? 'status-running' : 'status-stopped'}`}>
-          {running ? 'En cours' : 'Arrêté'}
-        </span>
+    <div className="ls-app">
+      <header className="ls-topbar">
+        <div className="ls-topbar__brand">
+          <span className="ls-topbar__dot" />
+          LiveSemantic
+        </div>
+        <div className="ls-topbar__spacer" />
+        {/* Reflects the /ws transport itself (frame stream alive or not)
+            — a separate concept from `running` (a recognition session
+            active), already communicated by the Démarrer/Arrêter button
+            below. Conflating the two would misrepresent a real state:
+            the WS upgrade succeeds and stays open with no session
+            running too (no frames/boxes arrive until one starts, but
+            the transport itself is still "connected"). */}
+        <StatusBadge status={connected ? 'connected' : 'disconnected'} />
+        <ThemeToggle />
       </header>
 
-      <main className="app-main">
-        <VideoStream />
+      <main className="ls-main">
+        <VideoStream frameURL={frameURL} boxes={boxes} connected={connected} />
 
-        <div className="controls">
-          <input
-            type="text"
-            value={filter}
-            onChange={(e) => setFilter(e.target.value)}
-            placeholder='ex: person*1, person%+%backpack'
-            disabled={running}
-          />
-          <select
-            value={source}
-            onChange={(e) => setSource(e.target.value as Source)}
-            disabled={running}
-          >
-            <option value="local">Caméra du serveur</option>
-            <option value="browser">Caméra du navigateur</option>
-          </select>
-          {running ? (
-            <button onClick={handleStop} disabled={busy}>
-              Arrêter
-            </button>
-          ) : (
-            <button onClick={handleStart} disabled={busy}>
-              Démarrer
-            </button>
-          )}
-        </div>
+        <aside className="ls-panel">
+          <section className="ls-panel__section">
+            <h2>Filtre</h2>
+            <input
+              className="ls-input"
+              type="text"
+              value={filter}
+              onChange={(e) => setFilter(e.target.value)}
+              placeholder='ex: person*1, person%+%backpack'
+              disabled={running}
+            />
+            <select
+              className="ls-input"
+              value={source}
+              onChange={(e) => setSource(e.target.value as Source)}
+              disabled={running}
+            >
+              <option value="local">Caméra du serveur</option>
+              <option value="browser">Caméra du navigateur</option>
+            </select>
+            {running ? (
+              <Button variant="neutral" onClick={handleStop} disabled={busy}>
+                Arrêter
+              </Button>
+            ) : (
+              <Button variant="primary" onClick={handleStart} disabled={busy}>
+                Démarrer
+              </Button>
+            )}
+            {error && <p className="ls-error">{error}</p>}
+          </section>
 
-        {error && <p className="error">{error}</p>}
+          <section className="ls-panel__section">
+            <h2>Objets détectés — {boxes.length}</h2>
+            {boxes.length === 0 ? (
+              <p className="ls-muted">Aucun objet suivi actuellement.</p>
+            ) : (
+              <ul className="ls-detections">
+                {boxes.map((b) => (
+                  <li key={b.trackId}>
+                    <span className="ls-detections__dot" style={{ background: colorForID(b.id) }} />
+                    <span className="ls-detections__label">{b.label}</span>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </section>
+
+          <section className="ls-panel__section ls-panel__section--advanced">
+            <button className="ls-panel__toggle" onClick={() => setAdvancedOpen((v) => !v)}>
+              <span>Avancés</span>
+              <span>{advancedOpen ? '▾' : '▸'}</span>
+            </button>
+            {advancedOpen && (
+              <dl className="ls-advanced">
+                <dt>Algorithme de tracking</dt>
+                <dd>KCF</dd>
+                <dt>IoU d'association</dt>
+                <dd>0.3</dd>
+                <dt>Frames avant perte</dt>
+                <dd>2</dd>
+                <dt>Matériel d'inférence</dt>
+                <dd>CPU</dd>
+                <dt>Variante de modèle</dt>
+                <dd>YOLO11s</dd>
+              </dl>
+            )}
+          </section>
+        </aside>
       </main>
     </div>
   )
