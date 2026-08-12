@@ -485,7 +485,20 @@ Troisième famille de terme de filtre, aux côtés des classes COCO exactes et d
 
 **Pas fait** : l'UI de sélection en direct (clic sur une box → nom → ajout, `docs/gui/spec.md` § 3.2) reste H2, pas commencée — cette passe couvre uniquement le backend + l'API REST.
 
-## 31. Références
+## 31. Pipeline de fine-tuning YOLO — scaffolding, PAS exécuté (2026-08-12, branche `feat/yolo-finetune-pipeline`)
+
+**Niveau de confiance différent de tout ce qui précède dans ce document** : ce qui suit n'a **pas** été testé en conditions réelles — contrairement à chaque autre section de cette ADR (webcam réelle, logs réels, revert/restore vérifié). Diagnostic matériel de cet environnement (2026-08-12) : Intel i7 6 cœurs + AMD Radeon Pro 560X (pas de GPU CUDA — le backend MPS de PyTorch ne supporte que Apple Silicon, pas cet AMD discret), 16 Go RAM, **~8 Go de disque libre seulement**. Un vrai entraînement (même limité à une classe) demande réalistement un GPU CUDA et des dizaines de Go de disque — ni l'un ni l'autre n'est disponible ici. Plutôt que de simuler un entraînement ou de prétendre l'avoir fait, le choix a été de construire le **pipeline réutilisable** (TODO.md § A le demandait explicitement : "versionné dans le repo") sans l'exécuter — à lancer sur une machine qui a le matériel.
+
+**`training/`** (nouveau dossier, hors du module Go — Python) :
+- `prepare_dataset.py` — télécharge un sous-ensemble de la classe "Hat" d'Open Images V7 via FiftyOne (déjà annotée avec des boîtes, pas de labellisation manuelle), export au format YOLO. Volontairement petit par défaut (quelques centaines d'images) pour rester traitable sur un ordinateur portable, pas dimensionné pour de la précision réelle.
+- `train.py` — fine-tune depuis le checkpoint `yolo11s.pt` COCO pré-entraîné d'Ultralytics, étend la liste de classes de 80 à 81. **Ordre des 80 classes COCO vérifié caractère pour caractère identique à `entities.Yolo11sClasses()`** (script de comparaison Python ad hoc, pas juste relu à l'œil) — un décalage d'index ici casserait silencieusement toute la classification côté Go.
+- `README.md` — prérequis, étapes, et surtout un vrai avertissement en tête de fichier ("Reality check").
+
+**Défaut connu, documenté dans `train.py` lui-même, pas contourné** : `prepare_dataset.py` ne télécharge que des images labellisées "Hat" — aucune des 80 classes COCO d'origine n'a ses propres boîtes dans ces images (les annotations Open Images pour les objets co-présents n'ont pas été récupérées). Entraîner une tête à 81 classes uniquement sur ces images risque un vrai **oubli catastrophique** des 80 classes existantes (le modèle voit des images où une personne/voiture est peut-être visible mais jamais étiquetée, et peut apprendre à ne plus les détecter). Mitigé (pas éliminé) par `freeze=10` (gèle la majorité du backbone), un taux d'apprentissage bas et peu d'époques — pratique standard pour l'ajout étroit d'une seule classe, mais pas équivalent à la vraie solution (mélanger un sous-ensemble réel de COCO avec ses annotations d'origine, non fait ici faute de place disque).
+
+**Ce qui reste à faire, sur une machine avec le matériel** : exécuter `prepare_dataset.py` puis `train.py`, exporter en ONNX (opset 19 pour rester compatible avec le runtime actuel — `yolo11s.go` documente déjà cette contrainte), évaluer sur un sous-ensemble de validation COCO avant de faire confiance au résultat au-delà de "hat", puis mettre à jour manuellement `entities/class.go`/`yolo11s.go` côté Go (`modelClasses = 81`) et remplacer `assets/models/yolo11s.onnx` — étape volontairement manuelle/relue, pas automatisée, vu l'importance de ce modèle dans tout le pipeline.
+
+## 32. Références
 
 - Modèle original : [openai/clip-vit-base-patch32](https://huggingface.co/openai/clip-vit-base-patch32) (licence MIT, [openai/CLIP](https://github.com/openai/CLIP))
 - Export ONNX retenu : [Xenova/clip-vit-base-patch32](https://huggingface.co/Xenova/clip-vit-base-patch32)
