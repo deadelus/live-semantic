@@ -13,6 +13,7 @@ package api
 
 import (
 	"fmt"
+	"live-semantic/internal/application/session"
 	"live-semantic/internal/application/uc"
 
 	"github.com/deadelus/go-clean-app/v2/logger"
@@ -29,6 +30,7 @@ type Server struct {
 	router        *gin.Engine
 	recognition   *recognitionController
 	gallery       *galleryController
+	sessions      *sessionController
 }
 
 // NewServer creates the unified server. broadcaster receives every
@@ -39,7 +41,11 @@ type Server struct {
 // frameReceiver is the reverse direction (TODO.md § H2 "capture caméra
 // navigateur") — in practice *implementation/streamer/input.BrowserInput,
 // the same instance passed as one of uc.NewUseCase's InputStream options.
-func NewServer(useCases uc.UseCases, broadcaster FrameBroadcaster, frameReceiver FrameReceiver, logger logger.Logger, port int) *Server {
+// sessionManager backs the parallel, per-ID multi-flux surface (TODO.md
+// § H1 "Multi-flux" — see sessions.go/session.go's package doc comment
+// for why it coexists with the single-session useCases/broadcaster/
+// frameReceiver above rather than replacing them).
+func NewServer(useCases uc.UseCases, broadcaster FrameBroadcaster, frameReceiver FrameReceiver, sessionManager *session.Manager, logger logger.Logger, port int) *Server {
 	gin.SetMode(gin.ReleaseMode)
 	router := gin.New()
 	router.Use(gin.Recovery())
@@ -53,6 +59,7 @@ func NewServer(useCases uc.UseCases, broadcaster FrameBroadcaster, frameReceiver
 		router:        router,
 		recognition:   newRecognitionController(useCases, logger),
 		gallery:       newGalleryController(useCases, logger),
+		sessions:      newSessionController(sessionManager, logger),
 	}
 
 	server.setupRoutes()

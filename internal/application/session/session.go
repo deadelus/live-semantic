@@ -43,9 +43,9 @@ type Source struct {
 	// transport/adapters/api), or "file" (local video file, RTSP, or
 	// HTTP — URI, all three resolved the same way by gocv, see
 	// implementation/streamer/input.FileInput's own doc comment).
-	Kind   string
-	Device int
-	URI    string
+	Kind   string `json:"kind"`
+	Device int    `json:"device,omitempty"`
+	URI    string `json:"uri,omitempty"`
 }
 
 // InputFactory builds a fresh streamer.InputStream for a session's

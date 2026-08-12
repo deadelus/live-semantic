@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"fmt"
+	"live-semantic/internal/application/session"
 	"live-semantic/internal/application/uc"
 	"live-semantic/internal/implementation/inference/onnx/clip"
 	"live-semantic/internal/implementation/inference/onnx/yolo11s"
@@ -179,7 +180,17 @@ func main() {
 			return
 		}
 		serverPort := determinePort(*port, defaultWebPort)
-		startWebServer(engine, useCases, wsOutput, browserInput, serverPort)
+		sessionManager := session.NewManager(
+			sessionInputFactory,
+			func() streamer.OutputStream { return output.NewWebSocketOutput() },
+			engine.Logger(),
+			notifier,
+			objectDetector,
+			semanticEncoder,
+			trackerFactory,
+			gallery,
+		)
+		startWebServer(engine, useCases, wsOutput, browserInput, sessionManager, serverPort)
 	case *interactive:
 		startInteractiveMode(engine, useCases)
 	default:
@@ -267,15 +278,37 @@ func startCLIMode(engine *application.Engine, useCases uc.UseCases) {
 	cmd.Execute(useCases, engine.Logger())
 }
 
+// sessionInputFactory builds the concrete streamer.InputStream for a
+// session.Manager session, one Source.Kind at a time — the only place
+// (besides initDependencies) allowed to know about the concrete
+// implementation/streamer/input adapters, per session.go's dependency-
+// inversion rule. Package-level rather than a closure literal so it's
+// reusable/testable in isolation if session.Manager ever needs more than
+// one Manager instance.
+func sessionInputFactory(src session.Source) (streamer.InputStream, error) {
+	switch src.Kind {
+	case "local", "":
+		return input.NewCameraInput(src.Device), nil
+	case "file":
+		return input.NewFileInput(src.URI), nil
+	case "browser":
+		return input.NewBrowserInput(), nil
+	default:
+		return nil, fmt.Errorf("unknown session source kind %q", src.Kind)
+	}
+}
+
 // startWebServer starts the unified REST + WebSocket backend (H1,
 // TODO.md § H1). wsOutput is registered as the server's FrameBroadcaster
 // so /ws clients receive the frames RecognitionUseCase renders to it.
-func startWebServer(engine *application.Engine, useCases uc.UseCases, wsOutput *output.WebSocketOutput, browserInput *input.BrowserInput, port int) {
+// sessionManager backs the parallel multi-flux REST/WS surface (§ H1
+// "Multi-flux") — see api.NewServer's doc comment.
+func startWebServer(engine *application.Engine, useCases uc.UseCases, wsOutput *output.WebSocketOutput, browserInput *input.BrowserInput, sessionManager *session.Manager, port int) {
 	engine.Logger().Info("🌐 Starting in Web mode (REST + WebSocket)", map[string]interface{}{
 		"port": port,
 	})
 
-	server := api.NewServer(useCases, wsOutput, browserInput, engine.Logger(), port)
+	server := api.NewServer(useCases, wsOutput, browserInput, sessionManager, engine.Logger(), port)
 
 	errCh := make(chan error, 1)
 	go func() {
