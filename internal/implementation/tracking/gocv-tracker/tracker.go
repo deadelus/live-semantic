@@ -13,6 +13,7 @@ import (
 	"sync"
 
 	"live-semantic/internal/domain/entities"
+	"live-semantic/internal/infrastructure/tracking"
 
 	"gocv.io/x/gocv"
 	"gocv.io/x/gocv/contrib"
@@ -271,4 +272,25 @@ func (t *Tracker) Cleanup() {
 		t.backend.Close()
 		t.backend = nil
 	}
+}
+
+// Factory implements tracking.TrackerFactory for a fixed Algorithm choice
+// — the composition root (cmd/livesemantic/main.go) builds one with the
+// algorithm it wants and injects it, so application/uc never imports
+// this package or knows an Algorithm value exists (dependency inversion
+// — see tracking.TrackerFactory's doc comment).
+type Factory struct {
+	algorithm Algorithm
+}
+
+// NewFactory creates a Factory that always builds trackers using algorithm.
+func NewFactory(algorithm Algorithm) *Factory {
+	return &Factory{algorithm: algorithm}
+}
+
+var _ tracking.TrackerFactory = (*Factory)(nil)
+
+// New implements tracking.TrackerFactory.
+func (f *Factory) New() (tracking.ObjectTracker, error) {
+	return New(f.algorithm)
 }

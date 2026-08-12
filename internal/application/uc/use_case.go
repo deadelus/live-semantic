@@ -124,6 +124,17 @@ type UseCases interface {
 // keep it that way.
 type UseCase struct {
 	logger logger.Logger
+	// mu guards activeInput — set by Recognize to whichever of
+	// localInput/browserInput this call picked, read by StopRecognition()
+	// (a different goroutine, e.g. the REST /recognition/stop handler) so
+	// it stops the *actual* running input rather than always localInput.
+	mu sync.Mutex
+
+	// activeSessions tracks in-flight Recognize calls — see
+	// WaitRecognition's doc comment. Incremented/decremented in Recognize
+	// itself (uc_recognition.go), not here.
+	activeSessions sync.WaitGroup
+
 	// localInput is the backend's own camera/file/RTSP source — always
 	// set. browserInput feeds frames pushed over /ws/ingest (TODO.md § H2
 	// "capture caméra navigateur") — nil in CLI/interactive mode, where
@@ -132,23 +143,13 @@ type UseCase struct {
 	// clearly (uc_recognition.go) rather than nil-panicking.
 	localInput      streamer.InputStream
 	browserInput    streamer.InputStream
+	activeInput     streamer.InputStream
 	streamingOutput streamer.OutputStream
+
 	notifier        notifier.AlertSender
 	objectDetector  inference.ObjectDetector
 	semanticEncoder inference.SemanticEncoder
 	trackerFactory  tracking.TrackerFactory
-
-	// activeSessions tracks in-flight Recognize calls — see
-	// WaitRecognition's doc comment. Incremented/decremented in Recognize
-	// itself (uc_recognition.go), not here.
-	activeSessions sync.WaitGroup
-
-	// mu guards activeInput — set by Recognize to whichever of
-	// localInput/browserInput this call picked, read by StopRecognition()
-	// (a different goroutine, e.g. the REST /recognition/stop handler) so
-	// it stops the *actual* running input rather than always localInput.
-	mu          sync.Mutex
-	activeInput streamer.InputStream
 
 	// gallery is the {name, embedding} storage port for reference-image
 	// filter terms (TODO.md § D/§ H1, docs/adr/clip-backend.md § 24) —
