@@ -1,26 +1,24 @@
-import { useEffect, useState } from 'react'
-import { getStatus, startRecognition, stopRecognition } from './api'
+import { useEffect, useRef, useState } from 'react'
+import { getStatus, startRecognition, stopRecognition, type Source } from './api'
 import { VideoStream } from './VideoStream'
+import { BrowserCamera } from './BrowserCamera'
 import './App.css'
 
 // First real GUI screen (TODO.md § H2, vertical slice decided 2026-08-12):
-// single source (the backend's own local camera, already wired), a filter
-// text field, start/stop, live video. Deliberately not the full mockup
-// (no sources list/mosaic, no reference gallery, no multi-flux) — those
-// depend on H1 work not done yet (Multi-flux, WebRTC, galerie de
-// références). This slice validates the transport (REST + WS) against a
-// real UI before building the rest on top of it.
+// single source, a filter text field, start/stop, live video — plus,
+// since 2026-08-12, a source toggle (local backend camera vs. this
+// device's own browser camera, TODO.md § H2 "capture caméra navigateur").
+// Deliberately not the full mockup (no sources list/mosaic, no reference
+// gallery, no multi-flux) — those depend on H1 work not done yet.
 function App() {
   const [filter, setFilter] = useState('person')
+  const [source, setSource] = useState<Source>('local')
   const [running, setRunning] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
 
-  // Polls status rather than trusting only the optimistic state set after
-  // start/stop: a session can end on its own (e.g. an invalid filter
-  // caught server-side after the 202 Accepted response, TODO.md § A's
-  // "l'API REST ne remonte pas au client un filtre invalide" — status
-  // polling is the only way this UI finds out, until that's fixed).
+  const browserCamera = useRef<BrowserCamera | null>(null)
+
   useEffect(() => {
     const poll = () => {
       getStatus()
@@ -34,13 +32,30 @@ function App() {
     return () => clearInterval(id)
   }, [])
 
+  // If the recognition session ends on its own (server-side error, or the
+  // user clicking "stop") while a browser camera capture is active, stop
+  // it too rather than leaving getUserMedia running invisibly.
+  useEffect(() => {
+    if (!running) {
+      browserCamera.current?.stop()
+      browserCamera.current = null
+    }
+  }, [running])
+
   const handleStart = async () => {
     setBusy(true)
     setError(null)
     try {
-      await startRecognition(filter)
+      if (source === 'browser') {
+        const cam = new BrowserCamera()
+        await cam.start()
+        browserCamera.current = cam
+      }
+      await startRecognition(filter, source)
       setRunning(true)
     } catch (e) {
+      browserCamera.current?.stop()
+      browserCamera.current = null
       setError(e instanceof Error ? e.message : String(e))
     } finally {
       setBusy(false)
@@ -80,6 +95,14 @@ function App() {
             placeholder='ex: person*1, person%+%backpack'
             disabled={running}
           />
+          <select
+            value={source}
+            onChange={(e) => setSource(e.target.value as Source)}
+            disabled={running}
+          >
+            <option value="local">Caméra du serveur</option>
+            <option value="browser">Caméra du navigateur</option>
+          </select>
           {running ? (
             <button onClick={handleStop} disabled={busy}>
               Arrêter

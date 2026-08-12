@@ -12,15 +12,23 @@ package uc
 // implementations only flip an internal flag, they don't panic or block
 // when called on an idle stream.
 //
-// H1 minimal scope (TODO.md § H1): uc.streamingInput is one shared field
-// set once at construction (NewUseCase), not scoped per call — so this
-// stops *the* session, there being only one. The caller (today,
-// transport/adapters/api's recognitionController) is responsible for not
-// starting a second RecognitionUseCase concurrently on the same UseCase.
+// H1 minimal scope (TODO.md § H1): still one session for the whole
+// process (the caller — today, transport/adapters/api's
+// recognitionController — is responsible for not starting a second
+// RecognitionUseCase concurrently). What that one session reads from can
+// now vary per call (TODO.md § H2 "capture caméra navigateur": localInput
+// or browserInput, dto.RecognitionRequest.Source) — Stop() reads
+// activeInput (set by RecognitionUseCase at the start of its call) rather
+// than assuming localInput, so it stops whichever is actually running.
 // Revisit once multi-flux gives each session its own UseCase/InputStream
 // pair, at which point Stop will need a session ID.
 func (uc *UseCase) Stop() {
-	uc.streamingInput.Stop()
+	uc.mu.Lock()
+	active := uc.activeInput
+	uc.mu.Unlock()
+	if active != nil {
+		active.Stop()
+	}
 }
 
 // Wait blocks until any in-flight RecognitionUseCase call has fully

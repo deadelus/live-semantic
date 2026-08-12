@@ -14,6 +14,10 @@ func (s *Server) setupRoutes() {
 	// Video stream: annotated JPEG frames, one binary WS message per
 	// rendered frame (H1 minimal scope — see websocket.go/websocket_output.go).
 	s.router.GET("/ws", s.handleWebSocket)
+	// Reverse direction (TODO.md § H2 "capture caméra navigateur"): a
+	// browser pushes its own camera feed here, one binary JPEG message per
+	// frame — see handleWebSocketIngest.
+	s.router.GET("/ws/ingest", s.handleWebSocketIngest)
 
 	v1 := s.router.Group("/api/v1")
 	{

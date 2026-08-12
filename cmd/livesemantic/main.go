@@ -106,13 +106,15 @@ func main() {
 	// Output adapter is mode-dependent: a GoCV window makes no sense
 	// headless (web mode), and a WebSocket broadcaster has no window to
 	// draw for CLI/interactive mode. See initDependencies's doc comment.
-	streamingInput, streamingOutput, notifier, objectDetector, semanticEncoder, trackerFactory, err := initDependencies(*web)
+	// browserInput is likewise mode-dependent (nil outside web mode — see
+	// its own doc comment).
+	localInput, browserInput, streamingOutput, notifier, objectDetector, semanticEncoder, trackerFactory, err := initDependencies(*web)
 	if err != nil {
 		engine.Logger().Error("Failed to initialize dependencies", err)
 		return
 	}
 
-	useCases, err := uc.NewUseCase(engine.Context(), engine.Logger(), streamingInput, streamingOutput, notifier, objectDetector, semanticEncoder, trackerFactory)
+	useCases, err := uc.NewUseCase(engine.Context(), engine.Logger(), localInput, browserInput, streamingOutput, notifier, objectDetector, semanticEncoder, trackerFactory)
 	if err != nil {
 		engine.Logger().Error("Failed to create use cases", err)
 		return
@@ -171,7 +173,7 @@ func main() {
 			return
 		}
 		serverPort := determinePort(*port, defaultWebPort)
-		startWebServer(engine, useCases, wsOutput, serverPort)
+		startWebServer(engine, useCases, wsOutput, browserInput, serverPort)
 	case *interactive:
 		startInteractiveMode(engine, useCases)
 	default:
@@ -182,30 +184,33 @@ func main() {
 // initDependencies wires the concrete adapters. webMode picks the output
 // adapter: a GoCV window (CLI/interactive, a local process with a display)
 // or a WebSocketOutput broadcaster (web, headless server — see
-// implementation/streamer/output/websocket_output.go). Everything else is
-// shared regardless of mode.
-func initDependencies(webMode bool) (streamer.InputStream, streamer.OutputStream, notifier.AlertSender, inference.ObjectDetector, inference.SemanticEncoder, tracking.TrackerFactory, error) {
+// implementation/streamer/output/websocket_output.go). It also decides
+// whether a *input.BrowserInput exists at all (TODO.md § H2 "capture
+// caméra navigateur") — only web mode has an /ws/ingest endpoint for one
+// to receive frames from, so it stays nil in CLI/interactive mode rather
+// than being built unused. Everything else is shared regardless of mode.
+func initDependencies(webMode bool) (localInput streamer.InputStream, browserInput *input.BrowserInput, streamingOutput streamer.OutputStream, alertSender notifier.AlertSender, objectDetector inference.ObjectDetector, semanticEncoder inference.SemanticEncoder, trackerFactory tracking.TrackerFactory, err error) {
 	// Device 0 hardcoded for now — configurable at the adapter level
 	// (TODO.md § H1), not yet exposed via CLI/REST (source selection is
 	// part of the GUI "Ajouter une source" flow, § H1 Multi-flux/H2).
-	cameraInput := input.NewCameraInput(0)
+	localInput = input.NewCameraInput(0)
 
-	var streamingOutput streamer.OutputStream
 	if webMode {
 		streamingOutput = output.NewWebSocketOutput()
+		browserInput = input.NewBrowserInput()
 	} else {
 		streamingOutput = output.NewWindowOutput()
 	}
 
-	logNotifier := lognotifier.NewLogNotifier()
-	objectDetector, err := yolo11s.New()
+	alertSender = lognotifier.NewLogNotifier()
+	objectDetector, err = yolo11s.New()
 	if err != nil {
-		return nil, nil, nil, nil, nil, nil, err
+		return nil, nil, nil, nil, nil, nil, nil, err
 	}
 
-	semanticEncoder, err := clip.New()
+	semanticEncoder, err = clip.New()
 	if err != nil {
-		return nil, nil, nil, nil, nil, nil, err
+		return nil, nil, nil, nil, nil, nil, nil, err
 	}
 
 	// KCF: reverted from CSRT on 2026-08-09 — CSRT's own drift-test numbers
@@ -218,11 +223,11 @@ func initDependencies(webMode bool) (streamer.InputStream, streamer.OutputStream
 	// honestly, which this project's loss-detection logic actually depends
 	// on more than raw IoU accuracy. Revisit per TODO.md § B/F if KCF's
 	// weaker accuracy at 320px becomes the bigger problem instead.
-	trackerFactory := func() (tracking.ObjectTracker, error) {
+	trackerFactory = func() (tracking.ObjectTracker, error) {
 		return gocvtracker.New(gocvtracker.KCF)
 	}
 
-	return cameraInput, streamingOutput, logNotifier, objectDetector, semanticEncoder, trackerFactory, nil
+	return localInput, browserInput, streamingOutput, alertSender, objectDetector, semanticEncoder, trackerFactory, nil
 }
 
 func determinePort(flagPort, defaultPort int) int {
@@ -259,12 +264,12 @@ func startCLIMode(engine *application.Engine, useCases uc.UseCases) {
 // startWebServer starts the unified REST + WebSocket backend (H1,
 // TODO.md § H1). wsOutput is registered as the server's FrameBroadcaster
 // so /ws clients receive the frames RecognitionUseCase renders to it.
-func startWebServer(engine *application.Engine, useCases uc.UseCases, wsOutput *output.WebSocketOutput, port int) {
+func startWebServer(engine *application.Engine, useCases uc.UseCases, wsOutput *output.WebSocketOutput, browserInput *input.BrowserInput, port int) {
 	engine.Logger().Info("🌐 Starting in Web mode (REST + WebSocket)", map[string]interface{}{
 		"port": port,
 	})
 
-	server := api.NewServer(useCases, wsOutput, engine.Logger(), port)
+	server := api.NewServer(useCases, wsOutput, browserInput, engine.Logger(), port)
 
 	errCh := make(chan error, 1)
 	go func() {
