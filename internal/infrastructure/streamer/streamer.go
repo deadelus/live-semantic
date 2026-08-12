@@ -29,3 +29,45 @@ type OutputStream interface {
 	// Cleanup performs any necessary cleanup before the processor is discarded.
 	Cleanup()
 }
+
+// BoxData is one detected/tracked box as structured data — label, score,
+// and coordinates normalized to [0,1] (fraction of frame width/height,
+// not pixels), so a client doesn't need to know the source frame's
+// resolution to position an overlay. TODO.md § H2, docs/gui/mockups/
+// (screens 1c/1d/1h — boxes drawn as separate, hoverable/clickable DOM
+// elements, colored by filter term, not baked into the video pixels).
+type BoxData struct {
+	// ID is the filter term/track identity (trackedBox.FilterKey in
+	// application/uc — e.g. "person" or "person with a hat"), used for
+	// color assignment client-side, same as drawer.BoxID server-side.
+	ID string
+	// Label is what to actually display — same string RecognitionUseCase
+	// already formats today ("person (89.97%)"), kept as one field rather
+	// than separate name/percent so the client doesn't need to duplicate
+	// that formatting logic (percent-vs-score-vs-confidence, docs/adr/
+	// clip-backend.md § 20-21).
+	Label string
+	// TrackID identifies the specific track — lets a client correlate a
+	// box across successive messages (e.g. to animate a transition)
+	// without depending on array order, which reanchor's map iteration
+	// doesn't guarantee is stable frame to frame.
+	TrackID        string
+	X1, Y1, X2, Y2 float32
+}
+
+// BoxAwareOutputStream is an optional capability an OutputStream may
+// implement alongside OutputStream itself — checked via a type assertion
+// in application/uc (not part of the base OutputStream contract, since
+// most implementations — the gocv window, a future log-only output —
+// have no separate channel for structured data and are fine with boxes
+// composited directly into the frame's pixels, drawer.BoxDrawer). An
+// OutputStream that DOES implement this receives the frame *undrawn*
+// (RecognitionUseCase skips drawer.BoxDrawer for it) and gets box data
+// through RenderBoxes instead — see websocket_output.go's implementation.
+type BoxAwareOutputStream interface {
+	// RenderBoxes delivers the current cycle's boxes as structured data,
+	// called once per rendered frame alongside Render (undrawn) — order
+	// between the two isn't contractually guaranteed, a client should be
+	// able to handle either arriving first.
+	RenderBoxes(boxes []BoxData) error
+}

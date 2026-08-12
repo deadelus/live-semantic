@@ -8,7 +8,31 @@ import (
 	"live-semantic/internal/application/dto"
 	"live-semantic/internal/domain/entities"
 	"live-semantic/internal/implementation/drawer"
+	"live-semantic/internal/infrastructure/streamer"
 )
+
+// boxDescription formats a track's label the same way regardless of
+// output mode (composited into pixels by drawer.BoxDrawer, or sent as
+// streamer.BoxData.Label to a boxAware client) — tb.Score (non-zero only
+// for a semantic-term match) is the CLIP cosine similarity that actually
+// decided this match, shown instead of tb.Box.Confidence (YOLO's own
+// detection confidence, unrelated to CLIP and typically much higher-
+// looking, e.g. ~85% regardless of whether the semantic condition is
+// really a close call at ~0.25-0.28). An exact term or no-filter track
+// has no CLIP score (Score == 0), so it keeps showing YOLO's confidence,
+// which *is* what decided that match. Found misleading in real use
+// (docs/adr/clip-backend.md § 20-21): a semantic match looked just as
+// "confident" on screen as an exact one — same format (a "%") both times
+// too, per the user's request, rather than mixing "0.XX" and "XX.XX%" —
+// still two very different-looking numbers (~25% vs ~85%), just
+// consistently formatted.
+func boxDescription(tb trackedBox) string {
+	percent := tb.Box.Confidence * 100
+	if tb.Score != 0 {
+		percent = tb.Score * 100
+	}
+	return fmt.Sprintf("%s (%.2f%%)", tb.FilterKey, percent)
+}
 
 // RecognitionUseCase starts the continuous analysis of the video stream, as
 // two decoupled loops (TODO.md § C) sharing one trackManager:
@@ -141,12 +165,42 @@ func (uc *UseCase) RecognitionUseCase(ctx context.Context, req dto.RecognitionRe
 
 		renderStart := time.Now()
 		outImage := frame.Image
-		if boxes := tracks.boxes(); len(boxes) > 0 {
+		boxes := tracks.boxes()
+
+		// boxAware outputs (TODO.md § H2, 2026-08-12 — streamer.
+		// BoxAwareOutputStream, in practice *output.WebSocketOutput)
+		// receive the frame undrawn plus box data as structured JSON —
+		// the client draws its own overlays (docs/gui/mockups/ 1c/1d/1h)
+		// instead of getting them pre-composited into pixels. Every
+		// other output (the gocv window, CLI) keeps the original
+		// server-side drawer.BoxDrawer path unchanged.
+		if boxAware, ok := uc.streamingOutput.(streamer.BoxAwareOutputStream); ok {
+			bounds := frame.Image.Bounds()
+			w, h := float32(bounds.Dx()), float32(bounds.Dy())
+			boxData := make([]streamer.BoxData, 0, len(boxes))
+			for _, tb := range boxes {
+				boxData = append(boxData, streamer.BoxData{
+					ID:      string(drawer.BoxID(tb.FilterKey)),
+					Label:   boxDescription(tb),
+					TrackID: tb.TrackID,
+					// Normalized to [0,1] — see BoxData's doc comment for
+					// why (client doesn't need the source resolution).
+					X1: tb.Box.X1 / w, Y1: tb.Box.Y1 / h,
+					X2: tb.Box.X2 / w, Y2: tb.Box.Y2 / h,
+				})
+			}
+			if err := boxAware.RenderBoxes(boxData); err != nil {
+				uc.logger.Info("RenderBoxes failed", map[string]interface{}{"error": err.Error()})
+			}
+		} else if len(boxes) > 0 {
 			// cascadeOffsets stacks boxes that share (near-)identical
 			// coordinates — e.g. an exact term + a "+overlap" semantic
 			// term both anchored to the same physical object — so both
 			// labels stay readable instead of one hiding the other
-			// (docs/adr/clip-backend.md § 18-19).
+			// (docs/adr/clip-backend.md § 18-19). Only meaningful for
+			// server-side drawing — a boxAware client can offset
+			// overlapping labels itself with real DOM layout instead of
+			// this pixel-shifting workaround.
 			offsets := cascadeOffsets(boxes)
 
 			drawBoxes := make([]drawer.Box, 0, len(boxes))
@@ -160,29 +214,9 @@ func (uc *UseCase) RecognitionUseCase(ctx context.Context, req dto.RecognitionRe
 				// § 18.
 				id := drawer.BoxID(tb.FilterKey)
 				off := offsets[i]
-				// tb.Score (non-zero only for a semantic-term match) is the
-				// CLIP cosine similarity that actually decided this match —
-				// shown instead of tb.Box.Confidence (YOLO's own detection
-				// confidence, unrelated to CLIP and typically much higher-
-				// looking, e.g. ~85% regardless of whether the semantic
-				// condition is really a close call at ~0.25-0.28). An exact
-				// term or no-filter track has no CLIP score (Score == 0),
-				// so it keeps showing YOLO's confidence, which *is* what
-				// decided that match. Found misleading in real use
-				// (docs/adr/clip-backend.md § 20-21): a semantic match
-				// looked just as "confident" on screen as an exact one —
-				// same format (a "%") both times too, per the user's
-				// request, rather than mixing "0.XX" and "XX.XX%" — still
-				// two very different-looking numbers (~25% vs ~85%), just
-				// consistently formatted.
-				percent := tb.Box.Confidence * 100
-				if tb.Score != 0 {
-					percent = tb.Score * 100
-				}
-				description := fmt.Sprintf("%s (%.2f%%)", tb.FilterKey, percent)
 				drawBoxes = append(drawBoxes, drawer.Box{
 					ID:          id,
-					Description: description,
+					Description: boxDescription(tb),
 					Color:       entities.BoxColor(id),
 					Thickness:   5,
 					X1:          tb.Box.X1 + off,
