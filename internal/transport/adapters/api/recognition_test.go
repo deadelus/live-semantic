@@ -50,7 +50,7 @@ type mockUseCases struct {
 	galleryEntries map[string]bool // name -> enabled
 }
 
-func (m *mockUseCases) AddGalleryReference(name string, _ image.Image) error {
+func (m *mockUseCases) AddGalleryReference(_ context.Context, name string, _ image.Image) error {
 	m.galleryMu.Lock()
 	defer m.galleryMu.Unlock()
 	if m.galleryEntries == nil {
@@ -63,13 +63,13 @@ func (m *mockUseCases) AddGalleryReference(name string, _ image.Image) error {
 	return nil
 }
 
-func (m *mockUseCases) RemoveGalleryReference(name string) {
+func (m *mockUseCases) RemoveGalleryReference(_ context.Context, name string) {
 	m.galleryMu.Lock()
 	defer m.galleryMu.Unlock()
 	delete(m.galleryEntries, name)
 }
 
-func (m *mockUseCases) RenameGalleryReference(oldName, newName string) error {
+func (m *mockUseCases) RenameGalleryReference(_ context.Context, oldName, newName string) error {
 	m.galleryMu.Lock()
 	defer m.galleryMu.Unlock()
 	enabled, ok := m.galleryEntries[oldName]
@@ -81,7 +81,7 @@ func (m *mockUseCases) RenameGalleryReference(oldName, newName string) error {
 	return nil
 }
 
-func (m *mockUseCases) SetGalleryReferenceEnabled(name string, enabled bool) error {
+func (m *mockUseCases) SetGalleryReferenceEnabled(_ context.Context, name string, enabled bool) error {
 	m.galleryMu.Lock()
 	defer m.galleryMu.Unlock()
 	if _, ok := m.galleryEntries[name]; !ok {
@@ -91,7 +91,7 @@ func (m *mockUseCases) SetGalleryReferenceEnabled(name string, enabled bool) err
 	return nil
 }
 
-func (m *mockUseCases) ListGalleryReferences() []uc.GalleryEntryInfo {
+func (m *mockUseCases) ListGalleryReferences(_ context.Context) []uc.GalleryEntryInfo {
 	m.galleryMu.Lock()
 	defer m.galleryMu.Unlock()
 	out := make([]uc.GalleryEntryInfo, 0, len(m.galleryEntries))

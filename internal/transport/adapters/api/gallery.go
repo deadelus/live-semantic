@@ -65,7 +65,7 @@ func (gc *galleryController) add(c *gin.Context) {
 		return
 	}
 
-	if err := gc.useCases.AddGalleryReference(name, img); err != nil {
+	if err := gc.useCases.AddGalleryReference(c.Request.Context(), name, img); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
@@ -74,13 +74,13 @@ func (gc *galleryController) add(c *gin.Context) {
 
 // list handles GET /api/v1/gallery.
 func (gc *galleryController) list(c *gin.Context) {
-	c.JSON(http.StatusOK, gin.H{"entries": gc.useCases.ListGalleryReferences()})
+	c.JSON(http.StatusOK, gin.H{"entries": gc.useCases.ListGalleryReferences(c.Request.Context())})
 }
 
 // remove handles DELETE /api/v1/gallery/:name. Idempotent (matches
 // ReferenceGallery.Remove) — always 200, even if the name never existed.
 func (gc *galleryController) remove(c *gin.Context) {
-	gc.useCases.RemoveGalleryReference(c.Param("name"))
+	gc.useCases.RemoveGalleryReference(c.Request.Context(), c.Param("name"))
 	c.JSON(http.StatusOK, gin.H{"status": "removed"})
 }
 
@@ -100,14 +100,14 @@ func (gc *galleryController) update(c *gin.Context) {
 
 	name := c.Param("name")
 	if body.NewName != nil {
-		if err := gc.useCases.RenameGalleryReference(name, *body.NewName); err != nil {
+		if err := gc.useCases.RenameGalleryReference(c.Request.Context(), name, *body.NewName); err != nil {
 			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 			return
 		}
 		name = *body.NewName
 	}
 	if body.Enabled != nil {
-		if err := gc.useCases.SetGalleryReferenceEnabled(name, *body.Enabled); err != nil {
+		if err := gc.useCases.SetGalleryReferenceEnabled(c.Request.Context(), name, *body.Enabled); err != nil {
 			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 			return
 		}

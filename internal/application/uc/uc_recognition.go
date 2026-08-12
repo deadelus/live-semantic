@@ -111,6 +111,30 @@ func (uc *UseCase) RecognitionUseCase(ctx context.Context, req dto.RecognitionRe
 	streamingInput.Initialize()
 	uc.streamingOutput.Initialize()
 
+	// ctx is watched for the *entire* call, not just checked once above —
+	// found 2026-08-12 while auditing ctx usage across every uc method: it
+	// used to be consulted only before I/O started, then silently ignored
+	// for the rest of the (potentially indefinite) blocking
+	// streamingInput.Start call below, making it purely decorative once a
+	// session was actually running. streamingInput.Stop() is the same
+	// mechanism Stop() (uc_control.go) already uses to unstick this exact
+	// call — converging both paths onto it rather than inventing a second
+	// one. watchDone stops the watcher when RecognitionUseCase returns on
+	// its own (Stop()/key event/stream end), so it doesn't leak for the
+	// lifetime of a ctx that's never cancelled (e.g. context.Background(),
+	// what every caller passes today — TODO.md § H1: a per-session
+	// cancellable context is a natural follow-up once a caller actually
+	// wants to tie a session's lifetime to one).
+	watchDone := make(chan struct{})
+	defer close(watchDone)
+	go func() {
+		select {
+		case <-ctx.Done():
+			streamingInput.Stop()
+		case <-watchDone:
+		}
+	}()
+
 	frameChan := make(chan *entities.Frame, 1)
 	detectionDone := make(chan struct{})
 
