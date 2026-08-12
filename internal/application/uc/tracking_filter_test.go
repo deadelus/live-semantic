@@ -709,6 +709,73 @@ func TestReanchor_RelationalTerm_GreedyOneToOne(t *testing.T) {
 	}
 }
 
+// TestReanchor_RelationalTerm_SharedAllowsSameAttachmentInMultiplePairs
+// is GreedyOneToOne's counterpart with "+shared": one backpack box fully
+// inside *two* overlapping person boxes (the classic "unattended bag near
+// several people" case, docs/adr/clip-backend.md § 24) — without +shared
+// only one (container, attachment) pair could be kept per cycle; with it,
+// both containers get their own track since the shared side here is the
+// *attachment*, and the container (the tracked entity) genuinely differs
+// between the two pairs.
+func TestReanchor_RelationalTerm_SharedAllowsSameAttachmentInMultiplePairs(t *testing.T) {
+	personA := entities.BoundingBox{Label: "person", X1: 0, Y1: 0, X2: 100, Y2: 100}
+	personB := entities.BoundingBox{Label: "person", X1: 50, Y1: 0, X2: 150, Y2: 100}   // overlaps personA
+	backpack := entities.BoundingBox{Label: "backpack", X1: 60, Y1: 10, X2: 90, Y2: 90} // fully inside both
+
+	detector := &mockObjectDetector{boxes: []entities.BoundingBox{personA, personB, backpack}}
+	uc := newTestUseCase(detector, &mockSemanticEncoder{}, &mockAlertSender{})
+
+	req := dto.RecognitionRequest{Filter: "person%+%backpack*2+shared"}
+	m, err := newTrackManager(uc, req)
+	if err != nil {
+		t.Fatalf("newTrackManager error = %v", err)
+	}
+	if err := m.reanchor(testFrame(), req); err != nil {
+		t.Fatalf("reanchor error = %v", err)
+	}
+
+	if got := m.count(); got != 2 {
+		t.Fatalf("active tracks = %d, want 2 (+shared lets the same backpack satisfy both person pairs)", got)
+	}
+	gotX1 := map[float32]bool{}
+	for _, obj := range m.active {
+		gotX1[obj.track.LastBox().X1] = true
+	}
+	for _, want := range []float32{personA.X1, personB.X1} {
+		if !gotX1[want] {
+			t.Fatalf("missing a track for the person at X1=%v among active tracks %v", want, gotX1)
+		}
+	}
+}
+
+// TestReanchor_RelationalTerm_SharedFalseByDefault re-runs the same scene
+// as the +shared test above but *without* the option — confirms the
+// default really is exclusive (this is GreedyOneToOne's scenario in
+// reverse: shared attachment instead of shared container, to make sure
+// the default guard catches both directions, not just the one
+// GreedyOneToOne already covers).
+func TestReanchor_RelationalTerm_SharedFalseByDefault(t *testing.T) {
+	personA := entities.BoundingBox{Label: "person", X1: 0, Y1: 0, X2: 100, Y2: 100}
+	personB := entities.BoundingBox{Label: "person", X1: 50, Y1: 0, X2: 150, Y2: 100}
+	backpack := entities.BoundingBox{Label: "backpack", X1: 60, Y1: 10, X2: 90, Y2: 90}
+
+	detector := &mockObjectDetector{boxes: []entities.BoundingBox{personA, personB, backpack}}
+	uc := newTestUseCase(detector, &mockSemanticEncoder{}, &mockAlertSender{})
+
+	req := dto.RecognitionRequest{Filter: "person%+%backpack*2"} // no +shared
+	m, err := newTrackManager(uc, req)
+	if err != nil {
+		t.Fatalf("newTrackManager error = %v", err)
+	}
+	if err := m.reanchor(testFrame(), req); err != nil {
+		t.Fatalf("reanchor error = %v", err)
+	}
+
+	if got := m.count(); got != 1 {
+		t.Fatalf("active tracks = %d, want 1 (without +shared, the backpack can only join one pair despite cap=2)", got)
+	}
+}
+
 func TestReanchor_RelationalTerm_NearMatchesWithinDistance(t *testing.T) {
 	person := entities.BoundingBox{Label: "person", X1: 0, Y1: 0, X2: 50, Y2: 100}
 	car := entities.BoundingBox{Label: "car", X1: 70, Y1: 0, X2: 150, Y2: 80} // 20px gap on the X axis

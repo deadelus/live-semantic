@@ -214,6 +214,10 @@ type termMatch struct {
 	RelationParam float32
 	Container     string
 	Attachment    string
+	// Shared mirrors filterTerm.Shared — see its doc comment. Consulted
+	// by reanchor's relational pass to switch the default greedy 1:1
+	// pairing to N:M.
+	Shared bool
 }
 
 // trackManager owns the set of active tracks, shared between the video loop
@@ -281,6 +285,7 @@ func newTrackManager(uc *UseCase, req dto.RecognitionRequest) (*trackManager, er
 				Cap: t.Cap, Overlap: t.Overlap,
 				Relation: t.Relation, RelationParam: t.RelationParam,
 				Container: t.Container, Attachment: t.Attachment,
+				Shared: t.Shared,
 			}
 			continue
 		}
@@ -554,14 +559,15 @@ func (m *trackManager) reanchor(frame *entities.Frame, req dto.RecognitionReques
 	// RelationParam; edge-to-edge rather than center-to-center, see
 	// boxGap's doc comment).
 	//
-	// Cardinality (docs/adr/clip-backend.md § 24, decided before any code
-	// existed here): every valid pair is its own match, greedy 1:1 per
-	// cycle (a box claimed by one pair can't join a second this cycle —
-	// "+shared" for N:M is deferred, not implemented), ranked best-first
-	// (highest containment ratio, or shortest gap for "near" — see the
-	// sort below), top Cap pairs kept. Both boxes in a kept pair are
-	// marked claimed — pass 1/2 never separately reclaim them (no
-	// "+overlap" equivalent for a relational term yet either).
+	// Cardinality (docs/adr/clip-backend.md § 24/29): every valid pair is
+	// its own match, greedy 1:1 by default per cycle (a box claimed by
+	// one pair can't join a second this cycle) — "+shared" (term.Shared)
+	// switches this to N:M, letting a box join multiple pairs. Ranked
+	// best-first either way (highest containment ratio, or shortest gap
+	// for "near" — see the sort below), top Cap pairs kept. Both boxes in
+	// a kept pair are marked claimed regardless of Shared — pass 1/2
+	// never separately reclaim them (no "+overlap" equivalent for a
+	// relational term yet either).
 	for key, term := range m.terms {
 		if term.Relation == "" {
 			continue
@@ -660,7 +666,17 @@ func (m *trackManager) reanchor(frame *entities.Frame, req dto.RecognitionReques
 			if kept >= term.Cap {
 				break
 			}
-			if usedContainer[p.containerIdx] || usedAttachment[p.attachmentIdx] {
+			// Default cardinality is greedy 1:1 — a box already spent on
+			// a kept pair this term can't join a second one.
+			// "+shared" (term.Shared) lifts that: the same container
+			// and/or attachment box may satisfy multiple pairs, e.g. one
+			// unattended bag near several people should surface a pair
+			// per person, not just the single closest/best one
+			// (docs/adr/clip-backend.md § 24). usedContainer/
+			// usedAttachment are still populated either way below —
+			// harmless bookkeeping when Shared, meaningful exclusion
+			// when not.
+			if !term.Shared && (usedContainer[p.containerIdx] || usedAttachment[p.attachmentIdx]) {
 				continue
 			}
 			usedContainer[p.containerIdx] = true
