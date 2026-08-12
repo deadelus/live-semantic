@@ -68,6 +68,20 @@ type filterTerm struct {
 	RelationParam float32
 	Container     string
 	Attachment    string
+	// Shared switches a relational term's cardinality from the default
+	// greedy 1:1 (a box joins at most one pair per cycle) to N:M (a box
+	// may join multiple pairs) — "+shared" (implicit true) or
+	// "+shared=false"/"+shared=true" (explicit), same grammar as Overlap.
+	// Deliberately a different name/option than Overlap rather than
+	// reusing it: Overlap governs coexistence *between two separate
+	// filter terms* on the same physical object; Shared governs
+	// cardinality *within one relational term* — docs/adr/clip-backend.md
+	// § 24 named them apart on purpose to avoid recreating the ambiguity
+	// already hit once with "+overlap"'s own naming. Only meaningful on a
+	// relational term (Relation != "") — rejected at parse time otherwise
+	// (filterTerm has no cardinality concept to switch for a plain
+	// exact/semantic term).
+	Shared bool
 }
 
 // cocoLabels is the set of valid YOLO11s/COCO class names, built once from
@@ -374,6 +388,19 @@ func parseFilterSpec(raw string) ([]filterTerm, error) {
 					value = v
 				}
 				term.Overlap = value
+			case "shared":
+				if !hasRelation {
+					return nil, fmt.Errorf("option %q in filter term %q only applies to a relational term (\"container%%relation%%attachment\")", name, part)
+				}
+				value := true // "+shared" alone means true
+				if hasValue {
+					v, err := strconv.ParseBool(strings.TrimSpace(valueStr))
+					if err != nil {
+						return nil, fmt.Errorf("invalid value %q for option %q in filter term %q: must be a boolean", valueStr, name, part)
+					}
+					value = v
+				}
+				term.Shared = value
 			default:
 				return nil, fmt.Errorf("unknown option %q in filter term %q", name, part)
 			}

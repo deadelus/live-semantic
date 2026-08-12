@@ -64,6 +64,20 @@ func TestParseFilterSpec(t *testing.T) {
 			{Key: "car%+%backpack", Cap: 1, Relation: "+", Container: "car", Attachment: "backpack"},
 		}, false},
 		{"duplicate relation term rejected", "person%+%backpack,person%+%backpack", nil, true},
+		{"bare +shared means true", "person%+%backpack+shared", []filterTerm{{
+			Key: "person%+%backpack", Cap: 1,
+			Relation: "+", Container: "person", Attachment: "backpack", Shared: true,
+		}}, false},
+		{"+shared=false explicit", "person%+%backpack+shared=false", []filterTerm{{
+			Key: "person%+%backpack", Cap: 1,
+			Relation: "+", Container: "person", Attachment: "backpack", Shared: false,
+		}}, false},
+		{"+shared combined with cap and overlap", "person%near=50%car*3+shared+overlap", []filterTerm{{
+			Key: "person%near=50%car", Cap: 3, Overlap: true, Shared: true,
+			Relation: "near", RelationParam: 50, Container: "person", Attachment: "car",
+		}}, false},
+		{"+shared on a non-relational term rejected", "person+shared", nil, true},
+		{"+shared with a non-bool value rejected", "person%+%backpack+shared=maybe", nil, true},
 	}
 
 	for _, tt := range tests {

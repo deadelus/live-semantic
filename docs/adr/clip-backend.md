@@ -455,7 +455,21 @@ Deuxième opérateur relationnel, suite directe de § 26 — même grammaire (`c
 
 **Testé en conditions réelles** : câblage confirmé réactif (`person%near=500%chair` sur webcam locale, logs `"Relational term has no candidates this cycle"` à chaque cycle) — pas de scène avec une vraie correspondance disponible pendant ce test automatisé (personne physiquement devant la caméra), donc le cas positif reste à valider visuellement par l'utilisateur. `go vet`/`gofmt`/`go test -race` propres.
 
-## 28. Références
+## 29. `+shared` (cardinalité N:M) implémenté (2026-08-12, branche `feat/shared-relation-option`)
+
+Dernière pièce de la grammaire relationnelle actée en § 24 : par défaut l'appariement conteneur/attachement reste glouton 1:1 (une boîte ne rejoint qu'une seule paire par cycle, § 26) — `+shared` (même grammaire que `+overlap` : `+shared` seul = `true`, `+shared=false/true` explicite) lève cette exclusivité, autorisant une même boîte à satisfaire plusieurs paires. Nom délibérément distinct de `+overlap` (rappel § 16/24) : `+overlap` gère la coexistence **entre deux termes de filtre séparés** sur un même objet physique, `+shared` gère la cardinalité **à l'intérieur d'un seul terme relationnel** — deux axes différents, pas à fusionner sous un même nom.
+
+**Validation** : `+shared` n'a de sens que sur un terme relationnel (`Relation != ""`) — rejeté avec une erreur claire sur un terme exact/sémantique (`person+shared`), plutôt qu'un no-op silencieux.
+
+**Implémentation** : la boucle de sélection de `reanchor` (Pass 0) ne consulte plus `usedContainer`/`usedAttachment` que si `!term.Shared` — reste renseignées dans les deux cas (bookkeeping neutre quand `Shared`, exclusion réelle sinon).
+
+**Piège de test identifié en écrivant les tests** : comme seule la boîte **conteneur** est effectivement suivie (§ 26, scope MVP), un test avec un conteneur partagé entre plusieurs attachements ne produit **aucune différence observable** (même track re-matché plusieurs fois, idempotent) — `+shared` n'a d'effet visible que quand c'est l'**attachement** qui est partagé entre plusieurs conteneurs différents (ex. un sac au sol près de deux personnes différentes → deux tracks "person" distincts avec `+shared`, un seul sans). Les tests utilisent ce cas précis (`TestReanchor_RelationalTerm_SharedAllowsSameAttachmentInMultiplePairs`) plutôt que l'inverse.
+
+**Tests** : 5 cas de grammaire (bool implicite/explicite, combiné à `*cap`+`+overlap`, rejeté sur terme non-relationnel, valeur non-bool) + 2 tests `reanchor` (avec/sans `+shared` sur la même scène — sac partagé entre deux personnes qui se chevauchent). **Vérifié détecter une régression réelle** : garde `!term.Shared` retirée temporairement, 3/3 échecs reproductibles sur le test positif (le test négatif restait vert, cohérent) ; restaurée, tout vert. Câblage confirmé réactif en conditions réelles (webcam locale, `person%+%backpack*2+shared`), pas de scène disponible pour un vrai match positif pendant ce test automatisé. `go vet`/`gofmt`/`go test -race` propres.
+
+**Grammaire relationnelle du § 24 désormais complète** : `%+%`, `%near=distance%`, `+shared` tous implémentés et testés. Reste ouvert (hors scope, pas commencé) : promotion de la galerie CLIP en termes nommables référençables dans le filtre, surlignage live type regex101, graphe interactif — tout ça reste H2/produit, séquencé après le backend.
+
+## 30. Références
 
 - Modèle original : [openai/clip-vit-base-patch32](https://huggingface.co/openai/clip-vit-base-patch32) (licence MIT, [openai/CLIP](https://github.com/openai/CLIP))
 - Export ONNX retenu : [Xenova/clip-vit-base-patch32](https://huggingface.co/Xenova/clip-vit-base-patch32)
