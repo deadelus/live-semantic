@@ -416,7 +416,21 @@ score: 0.244, base_score: 0.216, delta: 0.0284 -> above_threshold true
 
 **Point à noter, pas un bug** : le `delta` avec hat oscille dans une fourchette assez large (0.004 à 0.038 selon les cycles, cf. logs 11:52:45-47) — plusieurs cycles individuels retombent sous `0.02` même avec le hat porté (angle de vue, éclairage, mouvement), donnant `above_threshold: false` ponctuellement. `active_tracks` reste néanmoins à 2 en continu grâce à la tolérance de la machine à états du track (`StateCoasting`, `maxMissesBeforeLost=5`) — un miss ponctuel ne fait pas disparaître le track. Ça confirme que `0.02` est une marge **serrée** par rapport au signal réel mesuré ici (souvent proche de la limite plutôt que largement au-dessus) — fonctionne, mais pas avec une confortable, à garder en tête si un signal plus faible (angle différent, hat moins net) se présente. Pas recalibré pour l'instant, comportement jugé correct par l'utilisateur en l'état.
 
-## 26. Références
+## 26. `%+%` (containment géométrique) implémenté (2026-08-12, branche `feat/relational-operator`)
+
+Première réalisation concrète de la vision § 24 : décomposer "conteneur avec/portant attachement" en deux détections YOLO indépendantes reliées par une relation géométrique, plutôt qu'une phrase composée scorée par CLIP.
+
+**Grammaire** (`filter_spec.go`) : `container%relation[=param]%attachment`. Point technique notable — `splitRelation` doit tourner **avant** tout split sur `+`, parce que l'unique opérateur retenu s'appelle littéralement `+` (`%+%`) : découper d'abord sur `+` (comme le fait déjà le parsing des options `+overlap`) fragmenterait "%+%" lui-même. `relationOperators` est un registre fermé (un seul nom aujourd'hui : `+`) — un nom inconnu erreure clairement, cohérent avec la philosophie déjà en place pour les options.
+
+**v1 volontairement restreinte** : conteneur et attachement doivent tous les deux être des classes COCO exactes — pas de CLIP, pas de repli sur une sous-région heuristique pour l'instant (ces pistes restent en § 24, pour plus tard).
+
+**Matching** (`tracking.go`, nouvelle Pass 0 dans `reanchor`, avant les passes exact/sémantique existantes) : pour chaque terme relationnel, apparie les boîtes conteneur/attachement via `containmentRatio` — la fraction de la boîte **attachement** couverte par le conteneur, pas un IoU classique (un petit sac dans une grande personne aurait un IoU faible par construction — l'union est dominée par la personne — malgré un vrai confinement total ; `containmentRatio` capture précisément ce cas). Seuil `relationContainmentThreshold = 0.5`, valeur de départ non calibrée. Cardinalité conforme à § 24 : chaque paire valide est une instance, appariement glouton 1:1 par défaut (une boîte ne rejoint qu'une seule paire par cycle), classé par ratio décroissant, top-`Cap` gardées. La boîte **conteneur** devient l'entité suivie/dessinée (comme un terme exact) ; l'attachement sert uniquement à la décision, pas suivi séparément — scope MVP, une extension possible mais non retenue ici.
+
+**Tests** : 8 nouveaux (grammaire + matching), y compris un test d'exclusivité gloutonne vérifié par désinactivation temporaire de la garde correspondante (échec reproductible sans elle, vert avec). `go vet`/`gofmt`/`go test -race` propres.
+
+**Pas encore testé en conditions réelles** — `person%+%backpack` (ou toute autre paire COCO déjà existante) reste à valider en webcam avant de considérer le mécanisme éprouvé au-delà des tests unitaires.
+
+## 27. Références
 
 - Modèle original : [openai/clip-vit-base-patch32](https://huggingface.co/openai/clip-vit-base-patch32) (licence MIT, [openai/CLIP](https://github.com/openai/CLIP))
 - Export ONNX retenu : [Xenova/clip-vit-base-patch32](https://huggingface.co/Xenova/clip-vit-base-patch32)
