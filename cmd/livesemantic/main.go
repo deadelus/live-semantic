@@ -245,9 +245,10 @@ func initDependencies(webMode bool) (localInput streamer.InputStream, browserInp
 	// honestly, which this project's loss-detection logic actually depends
 	// on more than raw IoU accuracy. Revisit per TODO.md § B/F if KCF's
 	// weaker accuracy at 320px becomes the bigger problem instead.
-	trackerFactory = func() (tracking.ObjectTracker, error) {
-		return gocvtracker.New(gocvtracker.KCF)
-	}
+	// gocvtracker.Factory implements tracking.TrackerFactory (a real
+	// interface, 2026-08-12 — see its own doc comment) for the fixed KCF
+	// choice above.
+	trackerFactory = gocvtracker.NewFactory(gocvtracker.KCF)
 
 	return localInput, browserInput, streamingOutput, alertSender, objectDetector, semanticEncoder, trackerFactory, nil
 }

@@ -29,4 +29,21 @@ type ObjectTracker interface {
 // a track is lost, the underlying native tracker must be discarded and
 // recreated, not reused) — the re-anchoring loop (TODO.md § B) needs a
 // fresh instance per confirmed track, not a shared singleton.
-type TrackerFactory func() (ObjectTracker, error)
+//
+// A genuine interface (2026-08-12, was a bare `func() (ObjectTracker,
+// error)` type before — per explicit review feedback: application/uc.
+// UseCase's dependency fields must always be interfaces, see its own doc
+// comment). implementation/tracking/gocv-tracker.Factory is the concrete
+// adapter the composition root (main.go) wires in; TrackerFactoryFunc
+// below is a lighter-weight adapter for callers (mostly tests) that just
+// want to hand over a function literal without declaring a named type.
+type TrackerFactory interface {
+	New() (ObjectTracker, error)
+}
+
+// TrackerFactoryFunc adapts a plain function to TrackerFactory — same
+// pattern as net/http.HandlerFunc adapting a function to http.Handler.
+type TrackerFactoryFunc func() (ObjectTracker, error)
+
+// New implements TrackerFactory.
+func (f TrackerFactoryFunc) New() (ObjectTracker, error) { return f() }

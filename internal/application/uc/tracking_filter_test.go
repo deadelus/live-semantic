@@ -129,7 +129,13 @@ func (mockObjectTracker) Update(*entities.Frame) (entities.BoundingBox, bool) {
 }
 func (mockObjectTracker) Cleanup() {}
 
-func mockTrackerFactory() (tracking.ObjectTracker, error) { return mockObjectTracker{}, nil }
+// mockTrackerFactory is a tracking.TrackerFactoryFunc (not a bare func —
+// TrackerFactory is a real interface since 2026-08-12, see its own doc
+// comment) so it can be passed directly wherever a tracking.TrackerFactory
+// is expected.
+var mockTrackerFactory tracking.TrackerFactoryFunc = func() (tracking.ObjectTracker, error) {
+	return mockObjectTracker{}, nil
+}
 
 type mockAlertSender struct {
 	notifications []entities.Message

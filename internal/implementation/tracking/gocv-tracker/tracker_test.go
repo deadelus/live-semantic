@@ -55,3 +55,23 @@ func TestCleanupWithoutInitIsSafe(t *testing.T) {
 	trk.Cleanup()
 	trk.Cleanup()
 }
+
+// TestFactory_New confirms Factory (the tracking.TrackerFactory adapter,
+// 2026-08-12) builds a real Tracker for its configured Algorithm and
+// propagates New's own error for an unsupported one.
+func TestFactory_New(t *testing.T) {
+	f := NewFactory(KCF)
+	trk, err := f.New()
+	if err != nil {
+		t.Fatalf("Factory.New() error = %v", err)
+	}
+	if trk == nil {
+		t.Fatal("Factory.New() returned a nil tracker without error")
+	}
+	trk.Cleanup()
+
+	bad := NewFactory(Algorithm(99))
+	if _, err := bad.New(); err == nil {
+		t.Fatal("Factory.New() with an unsupported algorithm should error")
+	}
+}

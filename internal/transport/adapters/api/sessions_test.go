@@ -92,7 +92,13 @@ type sessionMockNotifier struct{}
 func (sessionMockNotifier) Notify(entities.Message) error { return nil }
 func (sessionMockNotifier) Cleanup()                      {}
 
-func sessionMockTrackerFactory() (tracking.ObjectTracker, error) { return sessionMockTracker{}, nil }
+// sessionMockTrackerFactory is a tracking.TrackerFactoryFunc (not a bare
+// func — TrackerFactory is a real interface since 2026-08-12, see its own
+// doc comment) so it can be passed directly wherever a
+// tracking.TrackerFactory is expected.
+var sessionMockTrackerFactory tracking.TrackerFactoryFunc = func() (tracking.ObjectTracker, error) {
+	return sessionMockTracker{}, nil
+}
 
 type sessionMockTracker struct{}
 

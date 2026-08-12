@@ -953,7 +953,7 @@ func (m *trackManager) countByFilterKey(key string) int {
 // if tracker creation/init failed, in which case no track exists to add to
 // matchedTrackIDs.
 func (m *trackManager) spawn(frame *entities.Frame, box entities.BoundingBox, filterKey string, score float32, now time.Time) (string, bool) {
-	trk, err := m.uc.trackerFactory()
+	trk, err := m.uc.trackerFactory.New()
 	if err != nil {
 		m.uc.logger.Info("Tracker creation failed", map[string]interface{}{"error": err.Error()})
 		return "", false
