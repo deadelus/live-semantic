@@ -5,10 +5,10 @@ import (
 	"fmt"
 	"live-semantic/internal/application/session"
 	"live-semantic/internal/application/uc"
-	"live-semantic/internal/implementation/gallery/inmemory"
 	"live-semantic/internal/implementation/inference/onnx/clip"
 	"live-semantic/internal/implementation/inference/onnx/yolo11s"
 	lognotifier "live-semantic/internal/implementation/notifier/log-notifier"
+	"live-semantic/internal/implementation/storage/inmemory"
 	"live-semantic/internal/implementation/streamer/input"
 	"live-semantic/internal/implementation/streamer/output"
 	gocvtracker "live-semantic/internal/implementation/tracking/gocv-tracker"
@@ -120,9 +120,9 @@ func main() {
 	// every session.Manager-owned UseCase — TODO.md § H1 Multi-flux: a
 	// reference gallery entry added from one flux must be usable as a
 	// filter term on every other flux, not siloed per-session. Concrete
-	// implementation/gallery/inmemory.Gallery constructed here, the
+	// implementation/storage/inmemory.Gallery constructed here, the
 	// composition root — application/uc only ever sees it through the
-	// gallery.Repository port (dependency inversion, 2026-08-12).
+	// storage.GalleryStorage port (dependency inversion, 2026-08-12).
 	galleryRepo := inmemory.New()
 
 	useCases, err := uc.NewUseCase(engine.Context(), engine.Logger(), localInput, browserInput, streamingOutput, notifier, objectDetector, semanticEncoder, trackerFactory, galleryRepo)

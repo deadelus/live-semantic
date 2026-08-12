@@ -23,7 +23,7 @@ func TestUseCase_AddGalleryReference_EncodesAndStores(t *testing.T) {
 
 // TestUseCase_AddGalleryReference_CocoCollisionRejected moved here from
 // the old application/uc/gallery_test.go (2026-08-12 port extraction,
-// see infrastructure/gallery.Repository's doc comment): COCO-collision
+// see infrastructure/storage.GalleryStorage's doc comment): COCO-collision
 // is a business rule the use case validates before ever reaching the
 // Repository, which no longer knows what a COCO class is.
 func TestUseCase_AddGalleryReference_CocoCollisionRejected(t *testing.T) {

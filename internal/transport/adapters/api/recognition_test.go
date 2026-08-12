@@ -42,10 +42,10 @@ type mockUseCases struct {
 
 	// gallery is a minimal real in-memory store (name -> enabled), enough
 	// to exercise galleryController's REST handlers without depending on
-	// implementation/gallery/inmemory (a different package's internals) —
+	// implementation/storage/inmemory (a different package's internals) —
 	// this mock only needs to prove the HTTP layer wires calls through
-	// correctly, not re-verify gallery.Repository's own logic (already
-	// covered by implementation/gallery/inmemory's tests).
+	// correctly, not re-verify storage.GalleryStorage's own logic (already
+	// covered by implementation/storage/inmemory's tests).
 	galleryMu      sync.Mutex
 	galleryEntries map[string]bool // name -> enabled
 }

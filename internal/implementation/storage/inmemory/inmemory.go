@@ -1,4 +1,4 @@
-// Package inmemory is the only implementation/gallery.Repository adapter
+// Package inmemory is the only storage.GalleryStorage adapter
 // today — a thread-safe in-memory map. No vectorial database at this
 // scale (TODO.md § D's own note) — a handful to a few dozen entries,
 // linear scan on List/Get is plenty. Process-wide, not per-session (H1
@@ -14,10 +14,10 @@ import (
 	"sync"
 
 	"live-semantic/internal/domain/entities"
-	"live-semantic/internal/infrastructure/gallery"
+	"live-semantic/internal/infrastructure/storage"
 )
 
-// Gallery implements gallery.Repository.
+// Gallery implements storage.GalleryStorage.
 type Gallery struct {
 	mu      sync.RWMutex
 	entries map[string]*entry
@@ -29,7 +29,7 @@ type entry struct {
 	enabled   bool
 }
 
-var _ gallery.Repository = (*Gallery)(nil)
+var _ storage.GalleryStorage = (*Gallery)(nil)
 
 // New creates an empty Gallery.
 func New() *Gallery {
@@ -48,7 +48,7 @@ func normalize(name string) string {
 	return strings.ToLower(strings.TrimSpace(name))
 }
 
-// Add — see gallery.Repository.
+// Add — see storage.GalleryStorage.
 func (g *Gallery) Add(name string, embedding entities.Embedding) error {
 	name = normalize(name)
 	if name == "" {
@@ -67,7 +67,7 @@ func (g *Gallery) Add(name string, embedding entities.Embedding) error {
 	return nil
 }
 
-// Remove — see gallery.Repository.
+// Remove — see storage.GalleryStorage.
 func (g *Gallery) Remove(name string) {
 	name = normalize(name)
 	g.mu.Lock()
@@ -75,7 +75,7 @@ func (g *Gallery) Remove(name string) {
 	delete(g.entries, name)
 }
 
-// Rename — see gallery.Repository.
+// Rename — see storage.GalleryStorage.
 func (g *Gallery) Rename(oldName, newName string) error {
 	oldName = normalize(oldName)
 	newName = normalize(newName)
@@ -98,7 +98,7 @@ func (g *Gallery) Rename(oldName, newName string) error {
 	return nil
 }
 
-// SetEnabled — see gallery.Repository.
+// SetEnabled — see storage.GalleryStorage.
 func (g *Gallery) SetEnabled(name string, enabled bool) error {
 	name = normalize(name)
 	g.mu.Lock()
@@ -111,7 +111,7 @@ func (g *Gallery) SetEnabled(name string, enabled bool) error {
 	return nil
 }
 
-// Get — see gallery.Repository. Nil-receiver-safe (a nil *Gallery
+// Get — see storage.GalleryStorage. Nil-receiver-safe (a nil *Gallery
 // behaves as empty) — application/uc.NewUseCase's gallery parameter used
 // to allow a nil *ReferenceGallery pre-refactor; kept for callers that
 // might still hold a nil Repository value structurally, cheap to
@@ -130,13 +130,13 @@ func (g *Gallery) Get(name string) (entities.Embedding, bool) {
 	return e.embedding, true
 }
 
-// List — see gallery.Repository.
-func (g *Gallery) List() []gallery.Entry {
+// List — see storage.GalleryStorage.
+func (g *Gallery) List() []storage.Gallery {
 	g.mu.RLock()
 	defer g.mu.RUnlock()
-	out := make([]gallery.Entry, 0, len(g.entries))
+	out := make([]storage.Gallery, 0, len(g.entries))
 	for _, e := range g.entries {
-		out = append(out, gallery.Entry{Name: e.name, Embedding: e.embedding, Enabled: e.enabled})
+		out = append(out, storage.Gallery{Name: e.name, Embedding: e.embedding, Enabled: e.enabled})
 	}
 	sort.Slice(out, func(i, j int) bool { return out[i].Name < out[j].Name })
 	return out

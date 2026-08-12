@@ -20,7 +20,7 @@ import (
 // image" filter term family, alongside COCO labels and free text. H1
 // minimal scope, same as recognitionController: no auth, no per-session
 // scoping (the gallery is process-wide, TODO.md § H1 "Multi-flux" doesn't
-// change that — see infrastructure/gallery.Repository's doc comment for
+// change that — see infrastructure/storage.GalleryStorage's doc comment for
 // why sharing across sessions is the point, not a limitation). Depends
 // on uc.GalleryReferences, not the wider uc.UseCases (interface
 // segregation, 2026-08-12) — this controller never touches recognition
@@ -81,7 +81,7 @@ func (gc *galleryController) list(c *gin.Context) {
 }
 
 // remove handles DELETE /api/v1/gallery/:name. Idempotent (matches
-// gallery.Repository.Remove) — always 200, even if the name never existed.
+// storage.GalleryStorage.Remove) — always 200, even if the name never existed.
 func (gc *galleryController) remove(c *gin.Context) {
 	gc.useCases.RemoveGalleryReference(c.Request.Context(), c.Param("name"))
 	c.JSON(http.StatusOK, gin.H{"status": "removed"})

@@ -5,7 +5,7 @@
 // own InputStream/OutputStream, own trackManager per call — unchanged
 // from the single-session path) while sharing the expensive ONNX
 // resources (objectDetector, semanticEncoder), the notifier, the tracker
-// factory, and the reference gallery (gallery.Repository — deliberately
+// factory, and the reference gallery (storage.GalleryStorage — deliberately
 // shared, not one per session: a named reference should mean the same
 // thing everywhere, not be re-added per source).
 //
@@ -23,9 +23,9 @@ import (
 
 	"live-semantic/internal/application/dto"
 	"live-semantic/internal/application/uc"
-	"live-semantic/internal/infrastructure/gallery"
 	"live-semantic/internal/infrastructure/inference"
 	"live-semantic/internal/infrastructure/notifier"
+	"live-semantic/internal/infrastructure/storage"
 	"live-semantic/internal/infrastructure/streamer"
 	"live-semantic/internal/infrastructure/tracking"
 
@@ -115,14 +115,14 @@ type Manager struct {
 	objectDetector  inference.ObjectDetector
 	semanticEncoder inference.SemanticEncoder
 	trackerFactory  tracking.TrackerFactory
-	gallery         gallery.Repository
+	gallery         storage.GalleryStorage
 }
 
 // NewManager creates an empty Manager. galleryRepo is shared across every
 // session this Manager creates (and, per the caller's choice, can be the
 // same instance passed to a separate single-session uc.UseCase too — see
 // uc.NewUseCase's doc comment) — pass a fresh
-// implementation/gallery/inmemory.New() if no sharing with anything else
+// implementation/storage/inmemory.New() if no sharing with anything else
 // is wanted.
 func NewManager(
 	inputFactory InputFactory,
@@ -132,7 +132,7 @@ func NewManager(
 	objectDetector inference.ObjectDetector,
 	semanticEncoder inference.SemanticEncoder,
 	trackerFactory tracking.TrackerFactory,
-	galleryRepo gallery.Repository,
+	galleryRepo storage.GalleryStorage,
 ) *Manager {
 	return &Manager{
 		sessions:        make(map[string]*entry),
