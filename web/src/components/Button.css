@@ -1,0 +1,40 @@
+.ls-button {
+  font-family: var(--font-sans);
+  font-size: 12.5px;
+  padding: 6px 14px;
+  border-radius: var(--radius-md);
+  border: 1px solid transparent;
+  background: transparent;
+  cursor: pointer;
+  line-height: 1.4;
+}
+
+.ls-button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.ls-button--primary {
+  background: var(--color-accent);
+  color: var(--on-accent);
+  font-weight: 600;
+}
+
+.ls-button--secondary {
+  border-color: color-mix(in srgb, var(--color-accent) 50%, transparent);
+  color: var(--color-accent-text);
+}
+
+.ls-button--neutral {
+  border-color: var(--border-strong);
+  color: var(--text-secondary);
+}
+
+.ls-button--discrete {
+  color: var(--text-tertiary);
+}
+
+.ls-button--danger {
+  border-color: color-mix(in srgb, var(--color-danger) 50%, transparent);
+  color: var(--color-danger-text);
+}

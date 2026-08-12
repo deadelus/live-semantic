@@ -1,0 +1,24 @@
+.ls-overlay-box {
+  position: absolute;
+  border: 2px solid;
+  border-radius: 3px;
+  box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.4);
+  box-sizing: border-box;
+}
+
+.ls-overlay-box[role='button'] {
+  cursor: pointer;
+}
+
+.ls-overlay-box__label {
+  position: absolute;
+  top: -22px;
+  left: -2px;
+  font-family: var(--font-mono);
+  font-weight: 700;
+  font-size: 10.5px;
+  color: #0b0d10;
+  padding: 2px 7px;
+  border-radius: 4px;
+  white-space: nowrap;
+}

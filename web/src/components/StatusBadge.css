@@ -1,0 +1,49 @@
+.ls-status-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 11px;
+  border-radius: 11px;
+  font-size: 11.5px;
+  font-family: var(--font-sans);
+}
+
+.ls-status-badge__dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  display: inline-block;
+}
+
+.ls-status-badge--connected {
+  background: color-mix(in srgb, var(--color-success) 13%, transparent);
+  color: var(--color-success-text);
+}
+.ls-status-badge--connected .ls-status-badge__dot {
+  background: var(--color-success);
+}
+
+.ls-status-badge--reconnecting {
+  background: color-mix(in srgb, var(--color-warning) 13%, transparent);
+  color: var(--color-warning-text);
+}
+.ls-status-badge--reconnecting .ls-status-badge__dot {
+  background: var(--color-warning);
+  animation: ls-pulse 1.4s infinite;
+}
+
+.ls-status-badge--error {
+  background: color-mix(in srgb, var(--color-danger) 13%, transparent);
+  color: var(--color-danger-text);
+}
+.ls-status-badge--error .ls-status-badge__dot {
+  background: var(--color-danger);
+}
+
+.ls-status-badge--disconnected {
+  background: color-mix(in srgb, var(--text-primary) 7%, transparent);
+  color: var(--text-tertiary);
+}
+.ls-status-badge--disconnected .ls-status-badge__dot {
+  background: var(--text-faint);
+}
