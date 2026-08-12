@@ -428,7 +428,20 @@ Première réalisation concrète de la vision § 24 : décomposer "conteneur ave
 
 **Tests** : 8 nouveaux (grammaire + matching), y compris un test d'exclusivité gloutonne vérifié par désinactivation temporaire de la garde correspondante (échec reproductible sans elle, vert avec). `go vet`/`gofmt`/`go test -race` propres.
 
-**Pas encore testé en conditions réelles** — `person%+%backpack` (ou toute autre paire COCO déjà existante) reste à valider en webcam avant de considérer le mécanisme éprouvé au-delà des tests unitaires.
+**Testé en conditions réelles le 2026-08-12** — trois étapes de diagnostic en direct :
+
+1. **Premier essai `person%+%backpack` : aucune box.** Diagnostiqué grâce au logging ajouté juste après coup (branche `fix/relational-pass-visibility`, mergée séparément) : `"Relational term has no candidates this cycle"`, `attachment_candidates: 0` en continu sur des dizaines de cycles — YOLO ne détectait jamais "backpack" du tout, indépendamment de la logique de containment.
+2. **Isolé avec un filtre `backpack` seul** : `active_tracks` clignote entre `0` et `1` — détection intermittente/instable confirmée (pas "jamais détecté", juste peu fiable à cet angle/cette distance).
+3. **Retest de `person%+%backpack`, pose plus stable — plusieurs vrais matchs** :
+```
+ratio: 1.0       -> above_threshold: true
+ratio: 1.0       -> above_threshold: true
+ratio: 0.976     -> above_threshold: true
+ratio: 0.812     -> above_threshold: true
+```
+La logique de containment est donc validée avec de vrais chiffres, pas seulement en tests unitaires synthétiques.
+
+**Pourquoi l'utilisateur n'a rien vu à l'écran malgré ces matchs confirmés en logs** : `maxMissesBeforeLost = 2` (`entities/track.go`, réglé lors d'une investigation perf antérieure, § F — sans rapport avec ce chantier) tue un track après 2 ratés **consécutifs**. Avec une détection "backpack" aussi instable (match, puis 2-4 cycles sans candidat, répété), le track créé à chaque match meurt quasiment aussitôt — durée de vie réelle de l'ordre d'un cycle (~200ms), largement sous le seuil de perception visuelle. **Pas un bug de `%+%`** — la même limitation de stabilité de détection YOLO déjà documentée (§ 9/§ 10), simplement rendue visible différemment ici. Non retouché : `maxMissesBeforeLost` est une constante globale, la changer affecterait tous les tracks (exact/sémantique/relationnel), pas seulement ce cas d'usage précis — pas une décision à prendre à la légère sans plus de recul.
 
 ## 27. Références
 
