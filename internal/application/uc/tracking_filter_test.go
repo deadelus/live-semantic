@@ -709,6 +709,85 @@ func TestReanchor_RelationalTerm_GreedyOneToOne(t *testing.T) {
 	}
 }
 
+func TestReanchor_RelationalTerm_NearMatchesWithinDistance(t *testing.T) {
+	person := entities.BoundingBox{Label: "person", X1: 0, Y1: 0, X2: 50, Y2: 100}
+	car := entities.BoundingBox{Label: "car", X1: 70, Y1: 0, X2: 150, Y2: 80} // 20px gap on the X axis
+
+	detector := &mockObjectDetector{boxes: []entities.BoundingBox{person, car}}
+	uc := newTestUseCase(detector, &mockSemanticEncoder{}, &mockAlertSender{})
+
+	req := dto.RecognitionRequest{Filter: "person%near=30%car"}
+	m, err := newTrackManager(uc, req)
+	if err != nil {
+		t.Fatalf("newTrackManager error = %v", err)
+	}
+	if err := m.reanchor(testFrame(), req); err != nil {
+		t.Fatalf("reanchor error = %v", err)
+	}
+
+	if got := m.count(); got != 1 {
+		t.Fatalf("active tracks = %d, want 1 (20px gap is within the 30px near threshold)", got)
+	}
+}
+
+func TestReanchor_RelationalTerm_NearRejectsBeyondDistance(t *testing.T) {
+	person := entities.BoundingBox{Label: "person", X1: 0, Y1: 0, X2: 50, Y2: 100}
+	car := entities.BoundingBox{Label: "car", X1: 200, Y1: 0, X2: 280, Y2: 80} // 150px gap
+
+	detector := &mockObjectDetector{boxes: []entities.BoundingBox{person, car}}
+	uc := newTestUseCase(detector, &mockSemanticEncoder{}, &mockAlertSender{})
+
+	req := dto.RecognitionRequest{Filter: "person%near=30%car"}
+	m, err := newTrackManager(uc, req)
+	if err != nil {
+		t.Fatalf("newTrackManager error = %v", err)
+	}
+	if err := m.reanchor(testFrame(), req); err != nil {
+		t.Fatalf("reanchor error = %v", err)
+	}
+
+	if got := m.count(); got != 0 {
+		t.Fatalf("active tracks = %d, want 0 (150px gap exceeds the 30px near threshold)", got)
+	}
+}
+
+// TestReanchor_RelationalTerm_NearRanksClosestFirst uses two independent
+// (person, car) pairs — a container's own box is what's tracked (see
+// TestReanchor_RelationalTerm_ContainmentMatches), so verifying ranking
+// specifically requires an observable difference *between pairs*, not
+// just within one: personA/carA are 5px apart, personB/carB 20px apart,
+// both under the 30px threshold, but cap=1 can only keep one pair — it
+// must be the closer one, not whichever happened to be scored first.
+func TestReanchor_RelationalTerm_NearRanksClosestFirst(t *testing.T) {
+	personA := entities.BoundingBox{Label: "person", X1: 0, Y1: 0, X2: 50, Y2: 100}
+	carA := entities.BoundingBox{Label: "car", X1: 55, Y1: 0, X2: 120, Y2: 80} // 5px gap
+
+	personB := entities.BoundingBox{Label: "person", X1: 1000, Y1: 0, X2: 1050, Y2: 100}
+	carB := entities.BoundingBox{Label: "car", X1: 1070, Y1: 0, X2: 1140, Y2: 80} // 20px gap
+
+	// Deliberately not sorted — ranking must not depend on detection order.
+	detector := &mockObjectDetector{boxes: []entities.BoundingBox{carB, personB, carA, personA}}
+	uc := newTestUseCase(detector, &mockSemanticEncoder{}, &mockAlertSender{})
+
+	req := dto.RecognitionRequest{Filter: "person%near=30%car*1"}
+	m, err := newTrackManager(uc, req)
+	if err != nil {
+		t.Fatalf("newTrackManager error = %v", err)
+	}
+	if err := m.reanchor(testFrame(), req); err != nil {
+		t.Fatalf("reanchor error = %v", err)
+	}
+
+	if got := m.count(); got != 1 {
+		t.Fatalf("active tracks = %d, want 1 (cap=1)", got)
+	}
+	for _, obj := range m.active {
+		if obj.track.LastBox().X1 != personA.X1 {
+			t.Fatalf("kept track's box = %+v, want personA's box (the closer pair, 5px vs 20px gap)", obj.track.LastBox())
+		}
+	}
+}
+
 func TestReanchor_SpawnedTrackConfirmsInExactlyMinHitsCycles(t *testing.T) {
 	target := box("person", 0)
 	detector := &mockObjectDetector{boxes: []entities.BoundingBox{target}}

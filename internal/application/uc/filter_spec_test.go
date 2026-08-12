@@ -44,7 +44,14 @@ func TestParseFilterSpec(t *testing.T) {
 			Key: "person%+%backpack", Cap: 2, Overlap: true,
 			Relation: "+", Container: "person", Attachment: "backpack",
 		}}, false},
-		{"relation with a parametrized operator name", "person%near=50%backpack", nil, true}, // "near" not in relationOperators yet (§ 24: deferred)
+		{"near relation, requires a parameter", "person%near=50%car", []filterTerm{{
+			Key: "person%near=50%car", Cap: 1,
+			Relation: "near", RelationParam: 50, Container: "person", Attachment: "car",
+		}}, false},
+		{"near relation without a parameter rejected", "person%near%car", nil, true},
+		{"near relation with a non-numeric parameter rejected", "person%near=close%car", nil, true},
+		{"near relation with a non-positive parameter rejected", "person%near=0%car", nil, true},
+		{"+ relation with an unexpected parameter rejected", "person%+=5%backpack", nil, true},
 		{"relation container must be a COCO label", "unicorn%+%backpack", nil, true},
 		{"relation attachment must be a COCO label", "person%+%unicorn", nil, true},
 		{"relation container and attachment can't be the same", "person%+%person", nil, true},
