@@ -1,1 +1,23 @@
-/* Intentionally minimal — App.css carries this slice's styling. */
+@import './theme.css';
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  margin: 0;
+  padding: 0;
+}
+
+body {
+  background: var(--bg-page);
+  color: var(--text-primary);
+  font-family: var(--font-sans);
+  font-size: 13px;
+}
+
+a {
+  color: var(--color-accent-text);
+  text-decoration: none;
+}

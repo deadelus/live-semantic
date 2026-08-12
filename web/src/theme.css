@@ -1,0 +1,107 @@
+/* Design tokens extracted from docs/gui/mockups/LiveSemantic Mockups.dc.html
+   (screens 1a-1h) — colors/fonts read directly from the mockup's inline
+   styles, not approximated. Dark is the default theme (mockup's own
+   default active state, screen 1a's theme toggle shows "Sombre"
+   selected) — light applied via [data-theme="light"] on <html>. */
+
+@import url('https://fonts.googleapis.com/css2?family=Archivo:wght@400;500;600;700&family=Space+Mono:wght@400;700&display=swap');
+
+:root {
+  --font-sans: 'Archivo', system-ui, sans-serif;
+  --font-mono: 'Space Mono', ui-monospace, monospace;
+
+  /* Accent (blue) — filters/actions/primary. The mockup's core rule:
+     box color comes from the filter, not the object category
+     (docs/gui/mockups/ § 1a's own "Hypothèses & parti pris" note). */
+  --color-accent: #4d9ef8;
+  --color-accent-text: #8fc1fa;
+  /* Text color *on top of* a filled accent button — dark, near-black
+     text on dark theme's lighter blue, white text on light theme's
+     deeper blue. Mockup confirms both explicitly (1a's primary button
+     vs 1e's), not derived/assumed. */
+  --on-accent: #0b0d10;
+
+  --color-success: #2ec27e;
+  --color-success-text: #5fd79f;
+  --color-warning: #e8a13c;
+  --color-warning-text: #eab566;
+  --color-danger: #e4574f;
+  --color-danger-text: #f08a84;
+  --color-purple: #c77dff;
+
+  /* Backgrounds, darkest to lightest surface. */
+  --bg-page: #0b0d10;
+  --bg-panel: #14171b;
+  --bg-topbar: #0e1114;
+  --bg-side: #161a1f;
+  --bg-card: #1b1f24;
+  --bg-input: #12151a;
+  --bg-drawer: #10141a;
+
+  --border-subtle: rgba(255, 255, 255, 0.06);
+  --border: rgba(255, 255, 255, 0.08);
+  --border-strong: rgba(255, 255, 255, 0.14);
+
+  --text-primary: #e7eaee;
+  --text-secondary: #c8cdd4;
+  --text-tertiary: #9aa3ad;
+  --text-quaternary: #7d8791;
+  --text-faint: #5b636d;
+
+  --shadow-panel: 0 2px 14px rgba(0, 0, 0, 0.5);
+  --shadow-popover: 0 8px 28px rgba(0, 0, 0, 0.6);
+
+  --radius-sm: 4px;
+  --radius-md: 6px;
+  --radius-lg: 8px;
+  --radius-xl: 10px;
+}
+
+:root[data-theme='light'] {
+  --color-accent: #2b7de0;
+  --color-accent-text: #2b6cc0;
+  --on-accent: #ffffff;
+
+  --color-success: #1fa568;
+  --color-success-text: #177a4e;
+  /* Mockup's light variant (1e/1f) doesn't show warning/danger
+     explicitly — kept visually consistent with the dark palette's hue
+     rather than invented from scratch, adjusted only as far as the
+     accent/success shift already shown was adjusted. */
+  --color-warning: #c07f1f;
+  --color-warning-text: #96650f;
+  --color-danger: #cc4038;
+  --color-danger-text: #a8332c;
+  --color-purple: #8a3fd1;
+
+  --bg-page: #eef0f2;
+  --bg-panel: #eef0f2;
+  --bg-topbar: #ffffff;
+  --bg-side: #ffffff;
+  --bg-card: #ffffff;
+  --bg-input: #f5f6f8;
+  --bg-drawer: #ffffff;
+
+  --border-subtle: rgba(0, 0, 0, 0.07);
+  --border: rgba(0, 0, 0, 0.1);
+  --border-strong: rgba(0, 0, 0, 0.16);
+
+  --text-primary: #1c2126;
+  --text-secondary: #3c454f;
+  --text-tertiary: #5f6a75;
+  --text-quaternary: #5f6a75;
+  --text-faint: #98a1ab;
+
+  --shadow-panel: 0 2px 14px rgba(0, 0, 0, 0.35);
+  --shadow-popover: 0 8px 24px rgba(0, 0, 0, 0.25);
+}
+
+@keyframes ls-pulse {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.35;
+  }
+}
