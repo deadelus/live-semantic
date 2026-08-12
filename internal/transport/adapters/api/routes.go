@@ -19,6 +19,11 @@ func (s *Server) setupRoutes() {
 	// frame — see handleWebSocketIngest.
 	s.router.GET("/ws/ingest", s.handleWebSocketIngest)
 
+	// Multi-flux (TODO.md § H1) — same two message shapes as /ws and
+	// /ws/ingest above, scoped to one session.Manager-owned session.
+	s.router.GET("/ws/sessions/:id", s.handleSessionWebSocket)
+	s.router.GET("/ws/sessions/:id/ingest", s.handleSessionWebSocketIngest)
+
 	v1 := s.router.Group("/api/v1")
 	{
 		v1.POST("/recognition/start", s.recognition.start)
@@ -31,6 +36,14 @@ func (s *Server) setupRoutes() {
 		v1.GET("/gallery", s.gallery.list)
 		v1.DELETE("/gallery/:name", s.gallery.remove)
 		v1.PATCH("/gallery/:name", s.gallery.update)
+
+		// Multi-flux session CRUD (TODO.md § H1) — see sessions.go.
+		v1.POST("/sessions", s.sessions.create)
+		v1.GET("/sessions", s.sessions.list)
+		v1.GET("/sessions/:id", s.sessions.get)
+		v1.DELETE("/sessions/:id", s.sessions.remove)
+		v1.POST("/sessions/:id/recognition/start", s.sessions.startRecognition)
+		v1.POST("/sessions/:id/recognition/stop", s.sessions.stopRecognition)
 	}
 }
 

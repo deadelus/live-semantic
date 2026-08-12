@@ -114,3 +114,91 @@ func (s *Server) handleWebSocketIngest(c *gin.Context) {
 		s.frameReceiver.PushFrame(&entities.Frame{Image: img, Timestamp: time.Now()})
 	}
 }
+
+// handleSessionWebSocket is handleWebSocket's per-session counterpart
+// (TODO.md § H1 Multi-flux) — same binary-JPEG-frames contract, but
+// against session.Manager.Output(id) instead of the single process-wide
+// broadcaster. The type assertion to FrameBroadcaster always succeeds in
+// practice: session.Manager's OutputFactory (wired in main.go) only ever
+// builds *implementation/streamer/output.WebSocketOutput instances, same
+// as the single-session path.
+func (s *Server) handleSessionWebSocket(c *gin.Context) {
+	id := c.Param("id")
+	out, ok := s.sessions.manager.Output(id)
+	if !ok {
+		c.JSON(http.StatusNotFound, gin.H{"error": "session not found"})
+		return
+	}
+	broadcaster, ok := out.(FrameBroadcaster)
+	if !ok {
+		s.logger.Error("Session OutputStream doesn't implement FrameBroadcaster", map[string]interface{}{"session": id})
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "session output doesn't support streaming"})
+		return
+	}
+
+	conn, err := wsUpgrader.Upgrade(c.Writer, c.Request, nil)
+	if err != nil {
+		s.logger.Error("Failed to upgrade session WebSocket", map[string]interface{}{"session": id, "error": err.Error()})
+		return
+	}
+
+	broadcaster.AddClient(conn)
+	defer broadcaster.RemoveClient(conn)
+
+	s.logger.Info("Session WebSocket client connected", map[string]interface{}{"session": id})
+
+	for {
+		if _, _, err := conn.NextReader(); err != nil {
+			s.logger.Info("Session WebSocket client disconnected", map[string]interface{}{"session": id, "reason": err.Error()})
+			return
+		}
+	}
+}
+
+// handleSessionWebSocketIngest is handleWebSocketIngest's per-session
+// counterpart — a browser pushes its own camera feed for the "browser"-
+// kind session with this ID. Type asserts Manager.Input(id) to
+// FrameReceiver, which only holds for a session created with
+// Source.Kind == "browser" (an *implementation/streamer/input.BrowserInput) —
+// any other kind is rejected with a clear error rather than silently
+// discarding pushed frames nobody reads.
+func (s *Server) handleSessionWebSocketIngest(c *gin.Context) {
+	id := c.Param("id")
+	in, ok := s.sessions.manager.Input(id)
+	if !ok {
+		c.JSON(http.StatusNotFound, gin.H{"error": "session not found"})
+		return
+	}
+	receiver, ok := in.(FrameReceiver)
+	if !ok {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "session isn't a browser-fed source, nothing to ingest into"})
+		return
+	}
+
+	conn, err := wsUpgrader.Upgrade(c.Writer, c.Request, nil)
+	if err != nil {
+		s.logger.Error("Failed to upgrade session ingest WebSocket", map[string]interface{}{"session": id, "error": err.Error()})
+		return
+	}
+	defer conn.Close()
+
+	s.logger.Info("Session browser camera ingest client connected", map[string]interface{}{"session": id})
+
+	for {
+		msgType, data, err := conn.ReadMessage()
+		if err != nil {
+			s.logger.Info("Session browser camera ingest client disconnected", map[string]interface{}{"session": id, "reason": err.Error()})
+			return
+		}
+		if msgType != websocket.BinaryMessage {
+			continue
+		}
+
+		img, err := jpeg.Decode(bytes.NewReader(data))
+		if err != nil {
+			s.logger.Info("Failed to decode ingested frame, dropping it", map[string]interface{}{"session": id, "error": err.Error()})
+			continue
+		}
+		receiver.PushFrame(&entities.Frame{Image: img, Timestamp: time.Now()})
+	}
+}
