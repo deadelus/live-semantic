@@ -45,17 +45,25 @@ type UseCases interface {
 	// name becomes usable directly as a filter term, matched by
 	// image↔image similarity instead of text↔image). See
 	// ReferenceGallery.Add for the validation rules (name can't be empty
-	// or collide with a COCO class/an existing entry).
-	AddGalleryReference(name string, crop image.Image) error
+	// or collide with a COCO class/an existing entry). ctx is checked
+	// before the CLIP EncodeImage call (a real CGo/ONNX inference, not
+	// free) — every UseCases method takes ctx even where the underlying
+	// work is normally fast/in-memory (Remove/Rename/SetEnabled/List
+	// below), so a caller's cancellation (e.g. an HTTP client
+	// disconnecting mid-request) is always honorable at this layer
+	// instead of being silently ignored by some methods and not others
+	// (found 2026-08-12 — RecognitionUseCase's ctx parameter existed but
+	// every gallery method had none at all).
+	AddGalleryReference(ctx context.Context, name string, crop image.Image) error
 	// RemoveGalleryReference deletes a gallery entry — see
 	// ReferenceGallery.Remove (idempotent, not an error if absent).
-	RemoveGalleryReference(name string)
+	RemoveGalleryReference(ctx context.Context, name string)
 	// RenameGalleryReference — see ReferenceGallery.Rename.
-	RenameGalleryReference(oldName, newName string) error
+	RenameGalleryReference(ctx context.Context, oldName, newName string) error
 	// SetGalleryReferenceEnabled — see ReferenceGallery.SetEnabled.
-	SetGalleryReferenceEnabled(name string, enabled bool) error
+	SetGalleryReferenceEnabled(ctx context.Context, name string, enabled bool) error
 	// ListGalleryReferences — see ReferenceGallery.List.
-	ListGalleryReferences() []GalleryEntryInfo
+	ListGalleryReferences(ctx context.Context) []GalleryEntryInfo
 }
 
 // useCase implements the UseCases interface.

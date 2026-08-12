@@ -395,11 +395,11 @@ func TestGallerySharedAcrossSessions(t *testing.T) {
 			t.Fatalf("session %q not found", id)
 		}
 		names := map[string]bool{}
-		for _, entry := range e.useCases.ListGalleryReferences() {
+		for _, entry := range e.useCases.ListGalleryReferences(context.Background()) {
 			names[entry.Name] = true
 		}
 		if !names["mon_sac"] {
-			t.Fatalf("session %q doesn't see the shared gallery entry — got %+v", id, e.useCases.ListGalleryReferences())
+			t.Fatalf("session %q doesn't see the shared gallery entry — got %+v", id, e.useCases.ListGalleryReferences(context.Background()))
 		}
 	}
 }
