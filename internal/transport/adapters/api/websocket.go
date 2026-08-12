@@ -1,7 +1,12 @@
 package api
 
 import (
+	"bytes"
+	"image/jpeg"
 	"net/http"
+	"time"
+
+	"live-semantic/internal/domain/entities"
 
 	"github.com/gin-gonic/gin"
 	"github.com/gorilla/websocket"
@@ -16,6 +21,15 @@ import (
 type FrameBroadcaster interface {
 	AddClient(conn *websocket.Conn)
 	RemoveClient(conn *websocket.Conn)
+}
+
+// FrameReceiver accepts frames decoded from a browser's own camera feed
+// (TODO.md § H2 "capture caméra navigateur") — narrow interface, same
+// rationale as FrameBroadcaster: main.go wires in the concrete
+// *implementation/streamer/input.BrowserInput, this package only depends
+// on the method it needs.
+type FrameReceiver interface {
+	PushFrame(frame *entities.Frame)
 }
 
 var wsUpgrader = websocket.Upgrader{
@@ -53,5 +67,50 @@ func (s *Server) handleWebSocket(c *gin.Context) {
 			})
 			return
 		}
+	}
+}
+
+// handleWebSocketIngest is the reverse direction of handleWebSocket: a
+// browser pushes its own camera feed (TODO.md § H2 "capture caméra
+// navigateur") as one binary JPEG message per frame, decoded here and
+// handed to frameReceiver (in practice input.BrowserInput.PushFrame) for
+// RecognitionUseCase to consume like any other InputStream. Non-binary
+// messages (text/ping) are ignored rather than erroring — a client
+// shouldn't be disconnected over a stray control frame. A frame that
+// fails to decode as JPEG is dropped with a log line, not fatal to the
+// connection either (a single corrupted frame from a lossy capture loop
+// shouldn't kill the whole session).
+func (s *Server) handleWebSocketIngest(c *gin.Context) {
+	conn, err := wsUpgrader.Upgrade(c.Writer, c.Request, nil)
+	if err != nil {
+		s.logger.Error("Failed to upgrade ingest connection to WebSocket", map[string]interface{}{
+			"error": err.Error(),
+		})
+		return
+	}
+	defer conn.Close()
+
+	s.logger.Info("Browser camera ingest client connected", nil)
+
+	for {
+		msgType, data, err := conn.ReadMessage()
+		if err != nil {
+			s.logger.Info("Browser camera ingest client disconnected", map[string]interface{}{
+				"reason": err.Error(),
+			})
+			return
+		}
+		if msgType != websocket.BinaryMessage {
+			continue
+		}
+
+		img, err := jpeg.Decode(bytes.NewReader(data))
+		if err != nil {
+			s.logger.Info("Failed to decode ingested frame, dropping it", map[string]interface{}{
+				"error": err.Error(),
+			})
+			continue
+		}
+		s.frameReceiver.PushFrame(&entities.Frame{Image: img, Timestamp: time.Now()})
 	}
 }

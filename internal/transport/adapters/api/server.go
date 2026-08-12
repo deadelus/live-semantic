@@ -21,12 +21,13 @@ import (
 
 // Server is the unified REST + WebSocket server.
 type Server struct {
-	useCases    uc.UseCases
-	broadcaster FrameBroadcaster
-	logger      logger.Logger
-	port        int
-	router      *gin.Engine
-	recognition *recognitionController
+	useCases      uc.UseCases
+	broadcaster   FrameBroadcaster
+	frameReceiver FrameReceiver
+	logger        logger.Logger
+	port          int
+	router        *gin.Engine
+	recognition   *recognitionController
 }
 
 // NewServer creates the unified server. broadcaster receives every
@@ -34,18 +35,22 @@ type Server struct {
 // *implementation/streamer/output.WebSocketOutput, the same instance
 // passed as uc.NewUseCase's streamingOutput, so frames rendered by the
 // running RecognitionUseCase reach whoever is connected to /ws.
-func NewServer(useCases uc.UseCases, broadcaster FrameBroadcaster, logger logger.Logger, port int) *Server {
+// frameReceiver is the reverse direction (TODO.md § H2 "capture caméra
+// navigateur") — in practice *implementation/streamer/input.BrowserInput,
+// the same instance passed as one of uc.NewUseCase's InputStream options.
+func NewServer(useCases uc.UseCases, broadcaster FrameBroadcaster, frameReceiver FrameReceiver, logger logger.Logger, port int) *Server {
 	gin.SetMode(gin.ReleaseMode)
 	router := gin.New()
 	router.Use(gin.Recovery())
 
 	server := &Server{
-		useCases:    useCases,
-		broadcaster: broadcaster,
-		logger:      logger,
-		port:        port,
-		router:      router,
-		recognition: newRecognitionController(useCases, logger),
+		useCases:      useCases,
+		broadcaster:   broadcaster,
+		frameReceiver: frameReceiver,
+		logger:        logger,
+		port:          port,
+		router:        router,
+		recognition:   newRecognitionController(useCases, logger),
 	}
 
 	server.setupRoutes()

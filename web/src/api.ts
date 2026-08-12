@@ -21,11 +21,16 @@ async function parseJSONOrThrow<T>(res: Response): Promise<T> {
   return body as T
 }
 
-export function startRecognition(filter: string): Promise<{ status: string; filter: string }> {
+export type Source = 'local' | 'browser'
+
+export function startRecognition(
+  filter: string,
+  source: Source,
+): Promise<{ status: string; filter: string }> {
   return fetch('/api/v1/recognition/start', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ filter }),
+    body: JSON.stringify({ filter, source }),
   }).then((res) => parseJSONOrThrow<{ status: string; filter: string }>(res))
 }
 

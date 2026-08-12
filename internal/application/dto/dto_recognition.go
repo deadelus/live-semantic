@@ -25,6 +25,17 @@ package dto
 // have named without building the whole feature yet).
 type RecognitionRequest struct {
 	Filter string `json:"filter"`
+	// Source picks which InputStream feeds this session — "local" (the
+	// backend's own camera, uc.UseCase.localInput) or "browser" (frames
+	// pushed over /ws/ingest by the GUI's own getUserMedia capture,
+	// uc.UseCase.browserInput — TODO.md § H2 "capture caméra navigateur").
+	// Empty defaults to "local" (see newTrackManager's caller,
+	// uc_recognition.go) — every existing CLI/API caller that predates
+	// this field keeps working unchanged. H1/H2 minimal scope: still one
+	// session for the whole process (TODO.md § H1 "Multi-flux" is the
+	// follow-up), Source doesn't add a second concurrent session, just
+	// picks which single input that one session reads from.
+	Source string `json:"source,omitempty"`
 }
 
 // RecognitionResponse DTO pour la réponse de reconnaissance

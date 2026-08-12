@@ -62,7 +62,29 @@ func (uc *UseCase) RecognitionUseCase(ctx context.Context, req dto.RecognitionRe
 	}
 	defer tracks.cleanup()
 
-	uc.streamingInput.Initialize()
+	// Source picks which InputStream this session reads from (TODO.md
+	// § H2 "capture caméra navigateur") — "local" (default, empty string
+	// included) is the backend's own camera, unchanged behavior for every
+	// pre-existing CLI/API caller; "browser" is frames pushed over
+	// /ws/ingest. Resolved and validated before touching any I/O, same
+	// fail-fast rationale as the filter parse right above.
+	streamingInput := uc.localInput
+	if req.Source == "browser" {
+		if uc.browserInput == nil {
+			return dto.Failure[dto.RecognitionResponse]("browser source requested but not available (web mode only)"), fmt.Errorf("browser input not configured")
+		}
+		streamingInput = uc.browserInput
+	}
+	uc.mu.Lock()
+	uc.activeInput = streamingInput
+	uc.mu.Unlock()
+	defer func() {
+		uc.mu.Lock()
+		uc.activeInput = nil
+		uc.mu.Unlock()
+	}()
+
+	streamingInput.Initialize()
 	uc.streamingOutput.Initialize()
 
 	frameChan := make(chan *entities.Frame, 1)
@@ -89,7 +111,7 @@ func (uc *UseCase) RecognitionUseCase(ctx context.Context, req dto.RecognitionRe
 	frameCount := 0
 	lastFrameAt := time.Now()
 
-	uc.streamingInput.Start(func(frame *entities.Frame) (*entities.Frame, error) {
+	streamingInput.Start(func(frame *entities.Frame) (*entities.Frame, error) {
 		frameStart := time.Now()
 		// Proxy for real achieved FPS: includes camera capture wait, which
 		// happens in the input stream's loop before this callback runs and
@@ -208,7 +230,7 @@ func (uc *UseCase) RecognitionUseCase(ctx context.Context, req dto.RecognitionRe
 	})
 
 	// Stop all processing before cleanup
-	uc.streamingInput.Stop()
+	streamingInput.Stop()
 	uc.streamingOutput.Stop()
 	close(frameChan)
 	<-detectionDone

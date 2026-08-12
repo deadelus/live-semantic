@@ -40,8 +40,15 @@ type UseCases interface {
 
 // useCase implements the UseCases interface.
 type UseCase struct {
-	logger          logger.Logger
-	streamingInput  streamer.InputStream
+	logger logger.Logger
+	// localInput is the backend's own camera/file/RTSP source — always
+	// set. browserInput feeds frames pushed over /ws/ingest (TODO.md § H2
+	// "capture caméra navigateur") — nil in CLI/interactive mode, where
+	// there's no web server to receive an ingest connection at all; a
+	// request with Source: "browser" against a nil browserInput fails
+	// clearly (uc_recognition.go) rather than nil-panicking.
+	localInput      streamer.InputStream
+	browserInput    streamer.InputStream
 	streamingOutput streamer.OutputStream
 	notifier        notifier.AlertSender
 	objectDetector  inference.ObjectDetector
@@ -52,10 +59,19 @@ type UseCase struct {
 	// Wait's doc comment. Incremented/decremented in RecognitionUseCase
 	// itself (uc_recognition.go), not here.
 	activeSessions sync.WaitGroup
+
+	// mu guards activeInput — set by RecognitionUseCase to whichever of
+	// localInput/browserInput this call picked, read by Stop() (a
+	// different goroutine, e.g. the REST /recognition/stop handler) so it
+	// stops the *actual* running input rather than always localInput.
+	mu          sync.Mutex
+	activeInput streamer.InputStream
 }
 
-// NewUseCase initializes your use cases with all the necessary dependencies
-func NewUseCase(ctx context.Context, logger logger.Logger, streamingInput streamer.InputStream, streamingOutput streamer.OutputStream, notifier notifier.AlertSender, objectDetector inference.ObjectDetector, semanticEncoder inference.SemanticEncoder, trackerFactory tracking.TrackerFactory) (UseCases, error) {
+// NewUseCase initializes your use cases with all the necessary
+// dependencies. browserInput may be nil (CLI/interactive mode — see the
+// UseCase struct's doc comment); every other parameter is required.
+func NewUseCase(ctx context.Context, logger logger.Logger, localInput streamer.InputStream, browserInput streamer.InputStream, streamingOutput streamer.OutputStream, notifier notifier.AlertSender, objectDetector inference.ObjectDetector, semanticEncoder inference.SemanticEncoder, trackerFactory tracking.TrackerFactory) (UseCases, error) {
 
 	if ctx == nil {
 		return nil, domain.ErrNilContext
@@ -65,7 +81,7 @@ func NewUseCase(ctx context.Context, logger logger.Logger, streamingInput stream
 		return nil, domain.ErrNilLogger
 	}
 
-	if streamingInput == nil {
+	if localInput == nil {
 		return nil, domain.ErrNilStreamingProcessor
 	}
 	if streamingOutput == nil {
@@ -90,7 +106,8 @@ func NewUseCase(ctx context.Context, logger logger.Logger, streamingInput stream
 
 	return &UseCase{
 		logger:          logger,
-		streamingInput:  streamingInput,
+		localInput:      localInput,
+		browserInput:    browserInput,
 		streamingOutput: streamingOutput,
 		notifier:        notifier,
 		objectDetector:  objectDetector,
