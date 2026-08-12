@@ -53,26 +53,51 @@ func (m *mockObjectDetector) AnalyzeFrame(frame *entities.Frame) (*inference.Det
 }
 func (m *mockObjectDetector) Cleanup() {}
 
-// mockSemanticEncoder: EncodeText always returns a fixed reference
-// direction ({1,0}); EncodeImage looks up the crop's "WxH" (derived from
-// the cropped frame's own Bounds(), which frame.Crop zeroes to box's
-// width/height) in scoreByCropSize to decide which cosine similarity it
-// should produce against that reference — lets tests pick an exact score
-// per candidate box without reimplementing real CLIP math. A crop size not
-// present in the map scores 0 (orthogonal — "no match") by default.
+// mockSemanticEncoder: EncodeText returns a fixed reference direction per
+// text — {1,0,0} by default (a term's own compound text, e.g. "person with
+// a red hat"), or {0,1,0} for any text listed in baseAxisTexts (a term's
+// LabelHint/base noun, e.g. "person" — needed for differential scoring,
+// defaultDifferentialMargin, docs/adr/clip-backend.md § 23-24). EncodeImage
+// looks up the crop's "WxH" (derived from the cropped frame's own Bounds(),
+// which frame.Crop zeroes to box's width/height) in scoreByCropSize /
+// baseScoreByCropSize to decide the cosine similarity it should produce
+// against each of those two reference axes independently — lets tests pick
+// an exact compound score AND an exact base-noun score per candidate box
+// without reimplementing real CLIP math. A crop size not present in
+// scoreByCropSize scores 0 against both axes (orthogonal — "no match") by
+// default.
+//
+// IMPORTANT for any filter whose semantic term has a LabelHint (i.e. its
+// free text mentions a COCO word, e.g. "person" in "person with a red
+// hat"): that word MUST be listed in baseAxisTexts. Without it, EncodeText
+// returns the *same* {1,0,0} for both the compound term and its base noun
+// (they're indistinguishable strings otherwise) — term.BaseEmbedding then
+// equals term.Embedding, baseScore always equals score, delta is always 0,
+// and the differential gate (defaultDifferentialMargin) rejects every
+// candidate regardless of scoreByCropSize. Listing the word in
+// baseAxisTexts moves the base noun onto its own axis, so baseScore falls
+// back to baseScoreByCropSize's default of 0 — reproducing pre-differential
+// behavior (score >= defaultSimilarityThreshold alone decides, since 0.20 >
+// 0.02 makes the margin check trivially true whenever the threshold check
+// already passed) unless the test explicitly sets baseScoreByCropSize too.
 type mockSemanticEncoder struct {
-	scoreByCropSize map[string]float32
-	encodeTextErr   error
-	encodeImageErr  error
-	encodeTextCalls int
+	scoreByCropSize     map[string]float32
+	baseScoreByCropSize map[string]float32
+	baseAxisTexts       map[string]bool
+	encodeTextErr       error
+	encodeImageErr      error
+	encodeTextCalls     int
 }
 
-func (m *mockSemanticEncoder) EncodeText(string) (entities.Embedding, error) {
+func (m *mockSemanticEncoder) EncodeText(text string) (entities.Embedding, error) {
 	m.encodeTextCalls++
 	if m.encodeTextErr != nil {
 		return nil, m.encodeTextErr
 	}
-	return entities.Embedding{1, 0}, nil
+	if m.baseAxisTexts[text] {
+		return entities.Embedding{0, 1, 0}, nil
+	}
+	return entities.Embedding{1, 0, 0}, nil
 }
 
 func (m *mockSemanticEncoder) EncodeImage(frame *entities.Frame) (entities.Embedding, error) {
@@ -81,11 +106,16 @@ func (m *mockSemanticEncoder) EncodeImage(frame *entities.Frame) (entities.Embed
 	}
 	b := frame.Image.Bounds()
 	key := fmt.Sprintf("%dx%d", b.Dx(), b.Dy())
-	score, ok := m.scoreByCropSize[key]
+	compound, ok := m.scoreByCropSize[key]
 	if !ok {
-		return entities.Embedding{0, 1}, nil
+		return entities.Embedding{0, 0, 1}, nil
 	}
-	return entities.Embedding{score, float32(math.Sqrt(float64(1 - score*score)))}, nil
+	base := m.baseScoreByCropSize[key]
+	remainderSq := 1 - compound*compound - base*base
+	if remainderSq < 0 {
+		remainderSq = 0
+	}
+	return entities.Embedding{compound, base, float32(math.Sqrt(float64(remainderSq)))}, nil
 }
 
 func (m *mockSemanticEncoder) Cleanup() {}
@@ -209,8 +239,15 @@ func TestNewTrackManager_SemanticTermGetsEmbedding(t *testing.T) {
 	if got.Embedding == nil {
 		t.Fatal("semantic term should have a non-nil Embedding")
 	}
-	if encoder.encodeTextCalls != 1 {
-		t.Fatalf("EncodeText called %d times, want exactly 1 (once at newTrackManager, not per frame)", encoder.encodeTextCalls)
+	// 2, not 1: "person with a red hat" mentions "person" (a COCO word) ->
+	// semanticLabelHint finds it -> newTrackManager also encodes "person"
+	// alone for BaseEmbedding (differential scoring, § 23-24) — both calls
+	// happen once here, still not per frame.
+	if encoder.encodeTextCalls != 2 {
+		t.Fatalf("EncodeText called %d times, want exactly 2 (compound term + base noun, both once at newTrackManager, not per frame)", encoder.encodeTextCalls)
+	}
+	if got.BaseEmbedding == nil {
+		t.Fatal("semantic term with a LabelHint should have a non-nil BaseEmbedding")
 	}
 }
 
@@ -266,11 +303,21 @@ func TestReanchor_SemanticTerm_RanksAndCaps(t *testing.T) {
 	middle := boxSized("person", 1, 60, 60)
 	belowThreshold := boxSized("person", 2, 70, 70)
 
-	encoder := &mockSemanticEncoder{scoreByCropSize: map[string]float32{
-		cropSizeKey(best):           0.5,
-		cropSizeKey(middle):         0.4,
-		cropSizeKey(belowThreshold): 0.1,
-	}}
+	encoder := &mockSemanticEncoder{
+		scoreByCropSize: map[string]float32{
+			cropSizeKey(best):           0.5,
+			cropSizeKey(middle):         0.4,
+			cropSizeKey(belowThreshold): 0.1,
+		},
+		// "person with a red hat" mentions "person" -> LabelHint -> a
+		// BaseEmbedding is encoded too (differential scoring, § 23-24).
+		// Mapping it onto its own axis (rather than the default, which
+		// mirrors the compound term's own axis) keeps baseScore at 0 here
+		// (baseScoreByCropSize unset) — same effective behavior as before
+		// differential scoring existed, see mockSemanticEncoder's doc
+		// comment.
+		baseAxisTexts: map[string]bool{"person": true},
+	}
 	detector := &mockObjectDetector{boxes: []entities.BoundingBox{middle, best, belowThreshold}} // deliberately not sorted
 	uc := newTestUseCase(detector, encoder, &mockAlertSender{})
 
@@ -306,9 +353,13 @@ func TestReanchor_MixedExactAndSemanticTerms(t *testing.T) {
 	car := box("car", 0)                       // claimed by the exact "car" term
 	hatPerson := boxSized("person", 1, 40, 40) // "person" isn't requested as an exact term here, so pass 1 never touches it — scored by the semantic term in pass 2
 
-	encoder := &mockSemanticEncoder{scoreByCropSize: map[string]float32{
-		cropSizeKey(hatPerson): 0.9,
-	}}
+	encoder := &mockSemanticEncoder{
+		scoreByCropSize: map[string]float32{cropSizeKey(hatPerson): 0.9},
+		// "person with sunglasses" mentions "person" -> LabelHint -> see
+		// TestReanchor_SemanticTerm_RanksAndCaps' comment on the same
+		// pattern.
+		baseAxisTexts: map[string]bool{"person": true},
+	}
 	detector := &mockObjectDetector{boxes: []entities.BoundingBox{car, hatPerson}}
 	uc := newTestUseCase(detector, encoder, &mockAlertSender{})
 
@@ -365,6 +416,72 @@ func TestReanchor_SemanticTerm_BelowThresholdNeverSpawns(t *testing.T) {
 	}
 }
 
+// TestReanchor_SemanticTerm_DifferentialMarginRejectsBareBaseNoun
+// reproduces the real bug reported live (docs/adr/clip-backend.md § 23):
+// "person*1,person with a hat*1+overlap" drew two boxes whether or not the
+// person actually wore a hat, because a bare "person" already scores above
+// defaultSimilarityThreshold on its own (~0.235-0.238, § 10) — an absolute
+// threshold alone can't tell the compound term's score apart from the base
+// noun's own score. Here the crop scores 0.27 for "person with a hat"
+// (clears defaultSimilarityThreshold) but *also* 0.26 for "person" alone
+// (LabelHint's BaseEmbedding) — delta 0.01, under defaultDifferentialMargin
+// (0.02) — the differential gate must reject it despite the absolute
+// threshold passing.
+func TestReanchor_SemanticTerm_DifferentialMarginRejectsBareBaseNoun(t *testing.T) {
+	noHat := boxSized("person", 0, 40, 80)
+	encoder := &mockSemanticEncoder{
+		scoreByCropSize:     map[string]float32{cropSizeKey(noHat): 0.27},
+		baseScoreByCropSize: map[string]float32{cropSizeKey(noHat): 0.26},
+		baseAxisTexts:       map[string]bool{"person": true},
+	}
+	detector := &mockObjectDetector{boxes: []entities.BoundingBox{noHat}}
+	uc := newTestUseCase(detector, encoder, &mockAlertSender{})
+
+	req := dto.RecognitionRequest{Filter: "person with a hat*1"}
+	m, err := newTrackManager(uc, req)
+	if err != nil {
+		t.Fatalf("newTrackManager error = %v", err)
+	}
+
+	if err := m.reanchor(testFrame(), req); err != nil {
+		t.Fatalf("reanchor error = %v", err)
+	}
+
+	if got := m.count(); got != 0 {
+		t.Fatalf("active tracks = %d, want 0 (score clears the absolute threshold but the delta over the bare \"person\" score is under defaultDifferentialMargin — no real signal that a hat is actually present)", got)
+	}
+}
+
+// TestReanchor_SemanticTerm_DifferentialMarginAcceptsRealSignal is the
+// positive counterpart: same absolute score (0.27) but a distinctly lower
+// base-noun score (0.20, delta 0.07 >= defaultDifferentialMargin) — a real
+// hat should still match normally, the differential gate isn't a blanket
+// rejection of every compound term.
+func TestReanchor_SemanticTerm_DifferentialMarginAcceptsRealSignal(t *testing.T) {
+	withHat := boxSized("person", 0, 40, 80)
+	encoder := &mockSemanticEncoder{
+		scoreByCropSize:     map[string]float32{cropSizeKey(withHat): 0.27},
+		baseScoreByCropSize: map[string]float32{cropSizeKey(withHat): 0.20},
+		baseAxisTexts:       map[string]bool{"person": true},
+	}
+	detector := &mockObjectDetector{boxes: []entities.BoundingBox{withHat}}
+	uc := newTestUseCase(detector, encoder, &mockAlertSender{})
+
+	req := dto.RecognitionRequest{Filter: "person with a hat*1"}
+	m, err := newTrackManager(uc, req)
+	if err != nil {
+		t.Fatalf("newTrackManager error = %v", err)
+	}
+
+	if err := m.reanchor(testFrame(), req); err != nil {
+		t.Fatalf("reanchor error = %v", err)
+	}
+
+	if got := m.count(); got != 1 {
+		t.Fatalf("active tracks = %d, want 1 (real margin over the base noun's own score should still match)", got)
+	}
+}
+
 func TestReanchor_ExactAndSemanticSameLabel_DefaultNoOverlap_OnlyExactMatches(t *testing.T) {
 	target := boxSized("person", 0, 40, 40)
 	encoder := &mockSemanticEncoder{scoreByCropSize: map[string]float32{
@@ -399,9 +516,10 @@ func TestReanchor_ExactAndSemanticSameLabel_DefaultNoOverlap_OnlyExactMatches(t 
 
 func TestReanchor_ExactAndSemanticSameLabel_WithOverlap_BothMatch(t *testing.T) {
 	target := boxSized("person", 0, 40, 40)
-	encoder := &mockSemanticEncoder{scoreByCropSize: map[string]float32{
-		cropSizeKey(target): 0.9,
-	}}
+	encoder := &mockSemanticEncoder{
+		scoreByCropSize: map[string]float32{cropSizeKey(target): 0.9},
+		baseAxisTexts:   map[string]bool{"person": true},
+	}
 	detector := &mockObjectDetector{boxes: []entities.BoundingBox{target}}
 	uc := newTestUseCase(detector, encoder, &mockAlertSender{})
 
@@ -439,10 +557,13 @@ func TestReanchor_SemanticTerm_LabelHintIgnoresMismatchedHighScorer(t *testing.T
 	person := boxSized("person", 0, 40, 40)
 	couch := boxSized("couch", 1, 90, 90)
 
-	encoder := &mockSemanticEncoder{scoreByCropSize: map[string]float32{
-		cropSizeKey(person): 0.25,
-		cropSizeKey(couch):  0.90,
-	}}
+	encoder := &mockSemanticEncoder{
+		scoreByCropSize: map[string]float32{
+			cropSizeKey(person): 0.25,
+			cropSizeKey(couch):  0.90,
+		},
+		baseAxisTexts: map[string]bool{"person": true},
+	}
 	detector := &mockObjectDetector{boxes: []entities.BoundingBox{couch, person}}
 	uc := newTestUseCase(detector, encoder, &mockAlertSender{})
 
@@ -516,9 +637,10 @@ func TestReanchor_SpawnedTrackConfirmsInExactlyMinHitsCycles(t *testing.T) {
 // actually return it.
 func TestBoxes_DistinguishesTracksSharingTheSamePhysicalBox(t *testing.T) {
 	target := boxSized("person", 0, 40, 40)
-	encoder := &mockSemanticEncoder{scoreByCropSize: map[string]float32{
-		cropSizeKey(target): 0.9,
-	}}
+	encoder := &mockSemanticEncoder{
+		scoreByCropSize: map[string]float32{cropSizeKey(target): 0.9},
+		baseAxisTexts:   map[string]bool{"person": true},
+	}
 	detector := &mockObjectDetector{boxes: []entities.BoundingBox{target}}
 	uc := newTestUseCase(detector, encoder, &mockAlertSender{})
 
@@ -636,9 +758,10 @@ func TestBoxes_ScoreReflectsWhatDecidedTheMatch(t *testing.T) {
 	exactTarget := box("car", 0)
 	semanticTarget := boxSized("person", 1, 40, 40)
 
-	encoder := &mockSemanticEncoder{scoreByCropSize: map[string]float32{
-		cropSizeKey(semanticTarget): 0.27,
-	}}
+	encoder := &mockSemanticEncoder{
+		scoreByCropSize: map[string]float32{cropSizeKey(semanticTarget): 0.27},
+		baseAxisTexts:   map[string]bool{"person": true},
+	}
 	detector := &mockObjectDetector{boxes: []entities.BoundingBox{exactTarget, semanticTarget}}
 	uc := newTestUseCase(detector, encoder, &mockAlertSender{})
 
@@ -680,9 +803,10 @@ func TestReanchor_OverlapTracks_ScoreStaysWithCorrectTrackAcrossCycles(t *testin
 	target := boxSized("person", 0, 40, 40)
 	const semanticScore = float32(0.21)
 
-	encoder := &mockSemanticEncoder{scoreByCropSize: map[string]float32{
-		cropSizeKey(target): semanticScore,
-	}}
+	encoder := &mockSemanticEncoder{
+		scoreByCropSize: map[string]float32{cropSizeKey(target): semanticScore},
+		baseAxisTexts:   map[string]bool{"person": true},
+	}
 	detector := &mockObjectDetector{boxes: []entities.BoundingBox{target}}
 	uc := newTestUseCase(detector, encoder, &mockAlertSender{})
 

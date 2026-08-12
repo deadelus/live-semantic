@@ -285,7 +285,138 @@ Suite de § 14 (hypothèse posée, pas testée) et § 20-21 (bugs d'affichage/as
 - Un modèle spécialisé attribut/couleur en aval du crop YOLO (ex. classification de couleur dominante sur la région, indépendant de CLIP) pour les requêtes qui mentionnent explicitement une couleur — changerait l'architecture, pas juste un réglage.
 - Ne rien faire de plus pour l'instant, prioriser le reste du backlog (§ H, multi-flux, etc.) — la limite est désormais documentée et confirmée, pas juste supposée.
 
-## 23. Références
+## 23. Généralisation de § 22 : CLIP discrimine mal la présence même d'un accessoire, pas seulement sa couleur (2026-08-12)
+
+### Schéma du pipeline (discuté avec l'utilisateur, formalisé ici)
+
+```
+Boucle vidéo (chaque frame, rapide — jamais YOLO/CLIP)
+  frame → tracker KCF/CSRT.Update() par track actif → dessin (boxes()+cascadeOffsets()) → render
+
+Boucle détection (async, ~2-5 fps, reanchor())
+  frame → YOLO.AnalyzeFrame()  [toujours, sans filtre — propose TOUTES les boîtes des 80 classes COCO]
+        │
+        ├─ Passe 1 (exact) : box.Label == term.Key → capture directe, 0 appel CLIP
+        │
+        ├─ Passe 2 (sémantique) : pour chaque box non capturée par la passe 1 (sauf +overlap),
+        │     restreinte par LabelHint si le texte libre mentionne une classe COCO
+        │     → crop → CLIP.EncodeImage → cosinus vs CLIP.EncodeText(terme)*
+        │     → seuil (0.20) → classement → top-N (cap du terme)
+        │
+        └─ matchOrSpawn/bestMatch (IoU + filterKey) → cycle de vie du track
+
+  * EncodeText calculé une fois par terme sémantique (newTrackManager), pas par frame.
+```
+
+**Conséquence structurelle déjà établie (discussion 2026-08-12, pas testée avant)** : CLIP ne voit jamais une frame entière, seulement un crop qu'YOLO a déjà proposé — si YOLO ne détecte rien sur une frame (candidats vides), la passe 2 n'a rien à scorer, CLIP ne tourne pas ce cycle. Le rappel global du pipeline est donc plafonné par le rappel de YOLO ; CLIP ne peut jamais rattraper un objet que YOLO n'a pas proposé comme candidat, seulement affiner un candidat déjà proposé.
+
+### Constat en direct
+
+Filtre `person*1,person with a hat*1+overlap` (webcam réelle, l'utilisateur seul dans le cadre) : **2 boîtes en continu, avec ou sans casquette**. Contrairement à § 22 (qui isolait l'attribut couleur), ici c'est la présence même de l'accessoire ("a hat") qui ne fait pas varier le résultat.
+
+**Root-cause, avec les chiffres déjà mesurés (§ 7/§ 10)** : `defaultSimilarityThreshold = 0.20`, mais un "person" nu (sans clause) score déjà `~0.235-0.238` en conditions réelles — au-dessus du seuil avant même de considérer la clause ajoutée. Plages mesurées : vrais matches `~0.225-0.29`, confondants `~0.20-0.2476` (chevauchement large, § 10). Le score d'une phrase composée reste dominé par le nom de base ("person", toujours présent puisque `LabelHint` restreint les candidats aux boîtes déjà étiquetées "person" par YOLO — **même boîte que le terme exact**) ; la clause "with a hat" ne fait pas suffisamment redescendre le score en son absence pour repasser sous 0.20. § 14 prédisait exactement ça ("une requête composée a vraisemblablement moins de pouvoir discriminant qu'un nom simple") — confirmé ici pour la présence d'un accessoire, pas seulement sa couleur (§ 22).
+
+**Conséquence pratique** : dans cette configuration, le terme sémantique est quasi redondant avec le terme exact — même boîte, score presque systématiquement au-dessus du seuil, coût CLIP réel payé (~46ms/boîte, § 8) sans gain d'information réel.
+
+### CLIP est-il "overkill" ici ? Sous quelles conditions serait-il réellement utile ?
+
+**Dans cette configuration précise (attribut/accessoire composé avec seuil absolu + LabelHint sur le même objet) : oui, overkill confirmé** — pas seulement pour la couleur (§ 22), généralisé à la présence d'un petit accessoire attaché.
+
+**Pistes d'amélioration, aucune implémentée** :
+1. **Scoring différentiel/relatif plutôt qu'un seuil absolu** (piste déjà ouverte en § 7, jamais suivie) : au lieu de `sim(crop, "person with a hat") ≥ 0.20`, comparer contre le nom de base seul — `Δ = sim(crop, "person with a hat") − sim(crop, "person")`, n'accepter que si `Δ` dépasse une marge positive. Isole la contribution marginale de la clause ajoutée plutôt qu'un score absolu dominé par le nom de base — cible directement le mode d'échec observé ici. Coût : un `EncodeText` de plus par terme composé (négligeable, une fois par filtre), aucun `EncodeImage` supplémentaire (déjà calculé). Non implémenté, non testé.
+2. **Fine-tuning YOLO (§ A, décision 2026-08-11)** pour les accessoires anticipables (hat, backpack...) — sort ce cas de CLIP entièrement, passe en passe 1 (exact, coût quasi nul).
+3. **Histogramme couleur** (déjà décidé) pour l'attribut couleur — sort aussi ce cas de CLIP.
+4. **Logique géométrique de tracking** (proximité de boîtes, ex. "sac sans surveillance" — discuté le 2026-08-11) pour les concepts relationnels — pas un problème CLIP du tout.
+
+**Ce qui resterait alors, honnêtement, comme vrai usage de CLIP** :
+- Concepts de scène/gestalt non réductibles à objet+attribut+géométrie (ex. "quelque chose de suspect"), **et seulement avec un scoring différentiel/relatif**, jamais validé empiriquement ici — hypothèse, pas un acquis.
+- Recherche par **image de référence** (§ D, `EncodeImage` seul, pas de texte composé) — hors du problème de binding texte/image entièrement, régime différent, probablement fiable.
+- Filet de repli pour tout concept pas encore fine-tuné (longue traîne), en acceptant une imprécision réelle et documentée, pas silencieuse.
+
+**Bilan honnête (pas d'enjolivement)** : à mesure que couleur (§ 22) et présence d'accessoire (ici) se confirment mal gérées par CLIP tel qu'utilisé actuellement (crop serré + seuil absolu + `LabelHint` sur le même objet que le terme exact), le périmètre où CLIP apporte une vraie valeur ajoutée pour ce produit se réduit à mesure que les cas se testent — pas une remise en cause de CLIP en général, mais de cette configuration précise (seuil absolu, requête composée sur un même objet déjà capturé). Le scoring différentiel (piste 1) est la seule piste non testée qui pourrait changer ce constat sans changer d'architecture ; à date, rien ne prouve qu'il fonctionnerait mieux, juste que c'est la prochaine chose à essayer avant de conclure plus largement.
+
+## 24. Vision cible : CLIP borné à YOLO, décomposition géométrique, grammaire relationnelle extensible (discussion 2026-08-12, rien codé)
+
+Synthèse d'une longue discussion de conception (2026-08-12), consolidée ici avant de se perdre. Rien de cette section n'est implémenté — c'est le cadre cible pour la suite de § A, en remplacement/complément des pistes CLIP pures (scoring différentiel, image↔image, § 23) qui restent possibles mais secondaires désormais.
+
+### CLIP est structurellement dépendant d'une localisation préalable
+
+Établi par élimination successive dans la discussion : CLIP ne dispose d'aucune tête de détection (§ précédent sur "CLIP sans YOLO") — il ne peut **jamais** proposer une région candidate lui-même, seulement juger une région déjà proposée par autre chose (YOLO, une sélection humaine, ou en théorie un autre localisateur). Conséquence stricte : **sans YOLO (ou équivalent) en amont, CLIP n'a rigoureusement rien à faire dans ce pipeline** — y compris pour la galerie de références (§ D) : une sélection humaine unique ne fait que fournir *une cible de comparaison*, elle ne fait pas apparaître de nouveaux candidats sur un autre flux ou aux frames suivantes si la classe concernée n'est pas localisée par ailleurs. Le mode "CLIP sur la frame entière sans YOLO" existe techniquement mais ne produit ni box ni track — dégénéré pour ce produit, pas une vraie alternative.
+
+Implication pour la priorité du backlog : les pistes purement CLIP (scoring différentiel § 23, image↔image) n'ont de valeur que **dans le sous-ensemble déjà localisé par YOLO** — elles ne réduisent jamais la dépendance à YOLO, seulement le taux d'erreur une fois qu'une box existe déjà. Le fine-tuning YOLO (§ A, décision précédente) et la décomposition géométrique ci-dessous n'ont pas cette dépendance : ils étendent ce que YOLO peut localiser lui-même, plus fondamental.
+
+### Décomposition géométrique plutôt que phrase composée CLIP
+
+Pour une requête du type "person with a hat" (ou plus généralement "X avec/portant Y", "X près de Y"), plutôt que de scorer la phrase entière via CLIP (échoue, § 22/23 — le binding attribut/objet et même la présence d'un accessoire composé sont mal discriminés), la décomposer en deux termes **atomiques** (chacun plus fiable seul qu'en phrase composée, § 14/23) reliés par une **relation géométrique** évaluée sur les boîtes déjà localisées :
+
+- **Cas "hat" fine-tuné en classe YOLO** (§ A, décision retenue) : deux boîtes YOLO indépendantes ("person", "hat"), relation vérifiée avec les primitives déjà existantes du domaine (`entities.BoundingBox.IoU`/`Intersection`/`Union`) — **zéro appel CLIP** pour toute la requête composée.
+- **Cas "hat" pas encore fine-tuné** : repli sur une sous-région heuristique du conteneur (ex. tiers supérieur de la box "person" pour "hat") + CLIP scoré sur le terme **simple** "hat" (pas la phrase composée) dans cette sous-région — moins précis que le cas fine-tuné, mais strictement meilleur que scorer "person with a hat" sur tout le crop person (déjà testé, § 22/23).
+
+### Vision produit (H2, pas backend) — non retenue comme scope immédiat, notée pour cohérence future
+
+- Champ texte multi-termes avec surlignage live façon regex101, trois familles de termes distinguées visuellement : classe YOLO (exacte/fine-tunée), terme custom (entrée nommée de la galerie de références § D, comparaison image↔image), texte libre CLIP (repli, le moins fiable).
+- Par flux, vue graphe interactif des modèles/termes connectés, paramétrable nœud par nœud — matérialise la philosophie ports/adapters déjà en place (chaque terme résolu = un nœud inspectable : lookup YOLO / score CLIP texte / score CLIP image / relation géométrique / futur classifieur dédié). Scope large (type éditeur de nœuds), à séquencer **après** que les briques réelles existent, pas avant (sinon graphe vide).
+- Ordre de séquencement proposé : (1) fine-tuning YOLO + relations géométriques (valeur sans dépendance UI) → (2) galerie CLIP promue en termes custom nommables → (3) grammaire relationnelle v2 (ci-dessous) → (4) surlignage live (H2) → (5) éditeur de graphe (H2/H3).
+
+### Grammaire relationnelle — extensible, un seul opérateur tranché pour l'instant
+
+Motif général retenu, pour accueillir de futurs opérateurs paramétrés sans nouvelle refonte de grammaire :
+```
+term := key ['%' operateur ['=' valeur] '%' key] ['*' cap] ('+' option ['=' valeur])*
+```
+**Règle de non-ambiguïté (tranchée)** : les suffixes `*cap`/`+option` s'appliquent toujours à la relation **entière** une fois consommée, jamais à l'opérande de droite seul — évite toute ambiguïté positionnelle avec le `+` déjà utilisé pour les options par terme (§ 16), sans avoir besoin de le désambiguïser au cas par cas. Le nom de l'opérateur n'est pas une liste fermée au niveau du tokenizer — seule sa résolution (registre interne nom→fonction d'évaluation géométrique) peut rejeter un nom inconnu, à la manière des options aujourd'hui.
+
+**Un seul opérateur explicitement retenu pour l'instant : `%+%`** (containment — attachement dans une sous-région du conteneur). Les autres (`%near=distance%`, etc.) sont **volontairement différés** — chacun a ses propres paramètres (une distance pour `near`, potentiellement autre chose pour d'autres relations), pas de valeur à les concevoir avant d'avoir un vrai besoin. Ne pas confondre avec `+overlap` (§ 16/17, axe différent — coexistence entre deux **termes de filtre séparés** sur le même objet physique) : la question de cardinalité **à l'intérieur** d'un terme relationnel (ci-dessous) est un axe distinct, volontairement nommé différemment pour ne pas recréer l'ambiguïté déjà rencontrée une fois.
+
+### Décisions de cardinalité (exemple tranché : "personnes près d'un sac", plusieurs sacs, 2026-08-12)
+
+1. **Chaque paire valide (conteneur, attachement) qui satisfait la relation est sa propre instance/match** — pas d'agrégation implicite. 3 sacs proches d'1 personne = 3 paires, pas 1.
+2. **`*cap` borne le nombre de paires retenues**, pas le nombre d'instances de chaque côté indépendamment — classées par la métrique propre de la relation quand elle existe (distance croissante pour une future relation `near`), sinon par ordre déterministe (TrackID, même précaution que `cascadeOffsets`, § 19, pour éviter l'ordre randomisé des maps Go).
+3. **Appariement 1:1 glouton par défaut** (type assignment biparti) : par cycle, un conteneur et un attachement ne comptent chacun que dans **une seule** paire (la meilleure), cohérent avec le principe déjà acté "pas de chevauchement par défaut" (§ 16, `+overlap`). Une nouvelle option distincte, **`+shared`** (nom volontairement différent de `+overlap` pour ne pas superposer deux sens, cf. ci-dessus), désactivée par défaut, autoriserait un même conteneur/attachement à compter dans plusieurs paires simultanément (N:M) si explicitement demandé.
+
+Rien de tout ça n'est implémenté — grammaire, registre d'opérateurs, `parseFilterSpec`/`reanchor` restent inchangés à ce stade. Prochaine étape suggérée : spécifier `%+%` (containment) seul, bout en bout, avant d'ajouter `%near%` ou `+shared`.
+
+## 25. Scoring différentiel implémenté — le bug "2 boîtes avec ou sans hat" corrigé (2026-08-12)
+
+Suite directe de § 23 : au lieu de continuer la conception de la vision cible (§ 24, rien codé), l'utilisateur a demandé de résoudre d'abord le bug réel déjà diagnostiqué (seuil absolu incapable de discriminer "with a hat" de l'absence de hat, la clause composée ne faisant pas assez redescendre le score sous le seuil).
+
+**Implémentation** : `termMatch.BaseEmbedding` (`internal/application/uc/tracking.go`) — pour tout terme sémantique dont `LabelHint` est non vide, `newTrackManager` encode désormais **aussi** le nom de base seul (ex. "person") en plus du terme composé (ex. "person with a hat"), un appel `EncodeText` de plus, une seule fois par filtre (pas par frame). `reanchor` pass 2 :
+```go
+accepted := score >= defaultSimilarityThreshold
+if term.BaseEmbedding != nil {
+    baseScore := cosineSimilarity(embedding, term.BaseEmbedding)
+    delta := score - baseScore
+    accepted = accepted && delta >= defaultDifferentialMargin
+}
+```
+`defaultDifferentialMargin = 0.02` (nouvelle constante) — **ET** avec le seuil absolu existant, pas un remplacement : un score absolu déjà faible reste rejeté même si l'écart relatif au nom de base paraît important (évite qu'un delta trompeur sur du bruit pur passe le gate). Un terme sans `LabelHint` (concept ouvert, aucun mot COCO mentionné, pas de nom de base à qui se comparer) garde l'ancien comportement au seuil absolu seul — inchangé, pas concerné par ce bug. Log `"Semantic candidate scored"` étendu (`base_score`, `delta`) pour garder la même visibilité de debug que l'existant.
+
+**Mock de test — changement non trivial, à connaître si on retouche ces tests plus tard.** `mockSemanticEncoder.EncodeText` retournait auparavant un vecteur 2D fixe `{1,0}` pour n'importe quel texte — donc, sans changement, le nom de base et le terme composé auraient reçu le **même** embedding, rendant `delta` nul par construction pour **tous** les termes composés existants (quasiment tous les tests, "person with a red/yellow hat" mentionne toujours "person"), rejetant à tort tout ce qui matchait avant. Corrigé en étendant les embeddings à 3D : axe 1 = terme composé (défaut), axe 2 = nom de base (opt-in via le nouveau champ `baseAxisTexts`, requis pour tout terme avec `LabelHint`), axe 3 = composante de normalisation. `scoreByCropSize`/nouveau `baseScoreByCropSize` contrôlent chaque axe indépendamment. **7 tests existants mis à jour** (ajout de `baseAxisTexts: map[string]bool{"person": true}`) — sans ça, `baseScoreByCropSize` non configuré défaut à 0, ce qui à lui seul suffit à préserver la compatibilité (`defaultSimilarityThreshold` 0.20 > `defaultDifferentialMargin` 0.02, donc score ≥ 0.20 implique toujours delta ≥ 0.02 quand la base est à 0) — mais uniquement si le nom de base est bien sur son propre axe, d'où le besoin réel de `baseAxisTexts`.
+
+**Vérification** : 2 nouveaux tests, `TestReanchor_SemanticTerm_DifferentialMarginRejectsBareBaseNoun` (reproduit le bug : score composé 0.27 qui clarifie le seuil absolu, mais score de base 0.26 pour "person" seul — delta 0.01 < 0.02 — doit être rejeté) et `...AcceptsRealSignal` (même score composé 0.27, mais base 0.20 — delta 0.07 — doit matcher normalement, le gate n'est pas un rejet en bloc). **Vérifié que le premier détecte réellement le bug** : condition temporairement neutralisée (`if false && term.BaseEmbedding != nil`), 5/5 runs en échec ; restaurée, tout repasse au vert. `go vet`/`gofmt`/`go test -race` propres sur tout le paquet.
+
+**Confirmé en conditions réelles le 2026-08-12** (webcam, `logs/livesemantic.log`, filtre `person*1,person with a hat*1+overlap`, utilisateur sans hat). Échantillon représentatif (~20 cycles consécutifs, 11:45:36-11:45:41) :
+```
+score: 0.238, base_score: 0.227, delta: 0.0116  -> above_threshold: false
+score: 0.244, base_score: 0.235, delta: 0.0086  -> above_threshold: false
+score: 0.241, base_score: 0.227, delta: 0.0142  -> above_threshold: false
+score: 0.226, base_score: 0.225, delta: 0.0005  -> above_threshold: false
+score: 0.220, base_score: 0.225, delta: -0.0044 -> above_threshold: false
+```
+`delta` oscille entre -0.005 et +0.014 sur tout l'échantillon, **jamais ≥ `defaultDifferentialMargin` (0.02)** — alors que les scores absolus (0.22-0.24) auraient clairé l'ancien seuil seul (0.20) à chaque fois, exactement le mode d'échec diagnostiqué. `active_tracks` reste à **1** en continu sur toute la fenêtre (`Frame timing`, `kind: reanchor`) — seul le terme exact "person" est actif, la 2e box fantôme a disparu.
+
+**Cas positif confirmé juste après (2026-08-12, 11:52, même session), utilisateur avec un vrai hat cette fois** :
+```
+score: 0.238, base_score: 0.216, delta: 0.0206 -> above_threshold: true
+score: 0.230, base_score: 0.209, delta: 0.0212 -> above_threshold: true
+score: 0.252, base_score: 0.214, delta: 0.0382 -> above_threshold: true
+score: 0.244, base_score: 0.216, delta: 0.0284 -> above_threshold true
+```
+`active_tracks: 2` sur la majorité des cycles de cette fenêtre — les deux boîtes ("person" exact + "person with a hat" sémantique) coexistent bien, `+overlap` fonctionne toujours en combinaison avec le nouveau gate. Le mécanisme fait donc bien la différence dans les deux sens (sans hat → rejeté, avec hat → accepté) sur ce test.
+
+**Point à noter, pas un bug** : le `delta` avec hat oscille dans une fourchette assez large (0.004 à 0.038 selon les cycles, cf. logs 11:52:45-47) — plusieurs cycles individuels retombent sous `0.02` même avec le hat porté (angle de vue, éclairage, mouvement), donnant `above_threshold: false` ponctuellement. `active_tracks` reste néanmoins à 2 en continu grâce à la tolérance de la machine à états du track (`StateCoasting`, `maxMissesBeforeLost=5`) — un miss ponctuel ne fait pas disparaître le track. Ça confirme que `0.02` est une marge **serrée** par rapport au signal réel mesuré ici (souvent proche de la limite plutôt que largement au-dessus) — fonctionne, mais pas avec une confortable, à garder en tête si un signal plus faible (angle différent, hat moins net) se présente. Pas recalibré pour l'instant, comportement jugé correct par l'utilisateur en l'état.
+
+## 26. Références
 
 - Modèle original : [openai/clip-vit-base-patch32](https://huggingface.co/openai/clip-vit-base-patch32) (licence MIT, [openai/CLIP](https://github.com/openai/CLIP))
 - Export ONNX retenu : [Xenova/clip-vit-base-patch32](https://huggingface.co/Xenova/clip-vit-base-patch32)

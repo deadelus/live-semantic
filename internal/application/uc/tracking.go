@@ -48,6 +48,27 @@ const iouAssociationThreshold = 0.3
 // isn't exposed as a knob right now.
 const defaultSimilarityThreshold float32 = 0.20
 
+// defaultDifferentialMargin gates a compound semantic term (one with a
+// LabelHint, e.g. "person with a hat" -> LabelHint "person") on top of
+// defaultSimilarityThreshold: the term's score must exceed its own base
+// noun's score (term.BaseEmbedding, CLIP-encoded from LabelHint alone) by
+// at least this margin. Added 2026-08-12 after a real bug (docs/adr/
+// clip-backend.md § 23-24): a bare "person" already scores ~0.235-0.238 in
+// real conditions (§ 10) — above defaultSimilarityThreshold on its own — so
+// an absolute threshold alone can't tell "with a hat" apart from no hat at
+// all, since the score stays dominated by the base noun regardless (tested
+// live: two boxes drawn with or without an actual hat). Requiring a margin
+// over the base noun's own score targets that specifically. Applied as an
+// AND with defaultSimilarityThreshold, not a replacement — a low absolute
+// score is still rejected outright even if the delta over an even-lower
+// base score looks large, keeping every existing single-noun semantic term
+// (no LabelHint, BaseEmbedding nil) and every prior real-webcam-validated
+// scenario unaffected. Starting value NOT validated against real webcam
+// data yet — same calibration risk as defaultSimilarityThreshold's own
+// history (§ 7/§ 10), to be adjusted from real testing, not assumed
+// correct as-is.
+const defaultDifferentialMargin float32 = 0.02
+
 // Note on reanchor cadence: there used to be an explicit
 // defaultReanchorInterval (frame-count-based gate, plus a
 // LIVESEMANTIC_REANCHOR_INTERVAL env var for A/B testing during the perf
@@ -120,6 +141,12 @@ type termMatch struct {
 	// means no restriction, every box is a candidate. Only ever set for a
 	// semantic term (Embedding != nil); a nil Embedding never has a hint.
 	LabelHint string
+	// BaseEmbedding is the CLIP text embedding of LabelHint alone (e.g.
+	// "person" for the term "person with a hat") — nil unless LabelHint is
+	// set. Used by reanchor's pass 2 for differential scoring
+	// (defaultDifferentialMargin) instead of/on top of an absolute
+	// threshold — see that constant's doc comment for why.
+	BaseEmbedding entities.Embedding
 }
 
 // trackManager owns the set of active tracks, shared between the video loop
@@ -185,7 +212,15 @@ func newTrackManager(uc *UseCase, req dto.RecognitionRequest) (*trackManager, er
 			return nil, fmt.Errorf("encode semantic filter term %q: %w", t.Key, err)
 		}
 		labelHint, _ := semanticLabelHint(t.Key)
-		m.terms[t.Key] = termMatch{Cap: t.Cap, Embedding: emb, Overlap: t.Overlap, LabelHint: labelHint}
+		match := termMatch{Cap: t.Cap, Embedding: emb, Overlap: t.Overlap, LabelHint: labelHint}
+		if labelHint != "" {
+			baseEmb, err := uc.semanticEncoder.EncodeText(labelHint)
+			if err != nil {
+				return nil, fmt.Errorf("encode base term %q for filter term %q: %w", labelHint, t.Key, err)
+			}
+			match.BaseEmbedding = baseEmb
+		}
+		m.terms[t.Key] = match
 	}
 
 	return m, nil
@@ -478,17 +513,33 @@ func (m *trackManager) reanchor(frame *entities.Frame, req dto.RecognitionReques
 				continue
 			}
 			score := cosineSimilarity(embedding, term.Embedding)
-			// Logged regardless of whether it clears the threshold — the
-			// only visibility into *why* a semantic term matched (or
-			// didn't) something surprising, e.g. TODO.md § A's "potted
-			// plant" case. Cheap relative to the EncodeImage call above.
-			m.uc.logger.Info("Semantic candidate scored", map[string]interface{}{
-				"term":            key,
-				"yolo_label":      box.Label,
-				"score":           score,
-				"above_threshold": score >= defaultSimilarityThreshold,
-			})
-			if score < defaultSimilarityThreshold {
+			accepted := score >= defaultSimilarityThreshold
+			logFields := map[string]interface{}{
+				"term":       key,
+				"yolo_label": box.Label,
+				"score":      score,
+			}
+			// Differential gate (defaultDifferentialMargin, see its doc
+			// comment) on top of the absolute threshold — only for a
+			// compound term that has a base noun to compare against
+			// (BaseEmbedding, set whenever LabelHint is). A term without a
+			// LabelHint (e.g. a genuinely open-ended concept, no COCO word
+			// mentioned) has no base to diff against — falls back to the
+			// absolute threshold alone, unchanged.
+			if term.BaseEmbedding != nil {
+				baseScore := cosineSimilarity(embedding, term.BaseEmbedding)
+				delta := score - baseScore
+				logFields["base_score"] = baseScore
+				logFields["delta"] = delta
+				accepted = accepted && delta >= defaultDifferentialMargin
+			}
+			logFields["above_threshold"] = accepted
+			// Logged regardless of whether it's accepted — the only
+			// visibility into *why* a semantic term matched (or didn't)
+			// something surprising, e.g. TODO.md § A's "potted plant" case.
+			// Cheap relative to the EncodeImage call above.
+			m.uc.logger.Info("Semantic candidate scored", logFields)
+			if !accepted {
 				continue
 			}
 			candidates = append(candidates, scoredCandidate{index: i, box: box, score: score})
