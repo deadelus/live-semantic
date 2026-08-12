@@ -67,7 +67,7 @@ func TestRecognitionUseCase_ContextCancellation_StopsTheStream(t *testing.T) {
 	done := make(chan struct{})
 	go func() {
 		defer close(done)
-		_, _ = u.RecognitionUseCase(ctx, dto.RecognitionRequest{})
+		_, _ = u.Recognize(ctx, dto.RecognitionRequest{})
 	}()
 
 	// Give RecognitionUseCase a moment to actually reach the blocking
@@ -98,15 +98,15 @@ func TestRecognitionUseCase_NeverCancelled_ReturnsNormallyOnStop(t *testing.T) {
 	done := make(chan struct{})
 	go func() {
 		defer close(done)
-		_, _ = u.RecognitionUseCase(context.Background(), dto.RecognitionRequest{})
+		_, _ = u.Recognize(context.Background(), dto.RecognitionRequest{})
 	}()
 
 	time.Sleep(20 * time.Millisecond)
-	u.Stop()
+	u.StopRecognition()
 
 	select {
 	case <-done:
 	case <-time.After(2 * time.Second):
-		t.Fatal("RecognitionUseCase did not return after Stop()")
+		t.Fatal("RecognitionUseCase did not return after StopRecognition()")
 	}
 }

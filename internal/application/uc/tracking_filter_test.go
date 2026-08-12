@@ -10,6 +10,7 @@ import (
 
 	"live-semantic/internal/application/dto"
 	"live-semantic/internal/domain/entities"
+	"live-semantic/internal/infrastructure/gallery"
 	"live-semantic/internal/infrastructure/inference"
 	"live-semantic/internal/infrastructure/tracking"
 
@@ -140,6 +141,80 @@ func (m *mockAlertSender) Notify(msg entities.Message) error {
 }
 func (m *mockAlertSender) Cleanup() {}
 
+// mockGalleryRepo is a package-local gallery.Repository test double — not
+// implementation/gallery/inmemory.Gallery, which application/uc's own
+// test files must not import any more than production code may (the
+// exact dependency-inversion rule the 2026-08-12 port extraction exists
+// to enforce, see use_case.go's doc comments) — mirrors its map/mutex
+// logic closely enough for AddGalleryReference/RenameGalleryReference's
+// own COCO/empty-name validation (uc_gallery.go) to be exercised against
+// real Add/Rename/SetEnabled/List/Get semantics rather than a stub that
+// always succeeds.
+type mockGalleryRepo struct {
+	entries map[string]*gallery.Entry
+}
+
+func newMockGalleryRepo() *mockGalleryRepo {
+	return &mockGalleryRepo{entries: map[string]*gallery.Entry{}}
+}
+
+var _ gallery.Repository = (*mockGalleryRepo)(nil)
+
+func (g *mockGalleryRepo) Add(name string, embedding entities.Embedding) error {
+	if name == "" {
+		return fmt.Errorf("gallery entry name cannot be empty")
+	}
+	if len(embedding) == 0 {
+		return fmt.Errorf("gallery entry %q: embedding cannot be empty", name)
+	}
+	if _, exists := g.entries[name]; exists {
+		return fmt.Errorf("gallery entry %q already exists", name)
+	}
+	g.entries[name] = &gallery.Entry{Name: name, Embedding: embedding, Enabled: true}
+	return nil
+}
+
+func (g *mockGalleryRepo) Remove(name string) { delete(g.entries, name) }
+
+func (g *mockGalleryRepo) Rename(oldName, newName string) error {
+	e, ok := g.entries[oldName]
+	if !ok {
+		return fmt.Errorf("gallery entry %q not found", oldName)
+	}
+	if _, exists := g.entries[newName]; exists {
+		return fmt.Errorf("gallery entry %q already exists", newName)
+	}
+	delete(g.entries, oldName)
+	e.Name = newName
+	g.entries[newName] = e
+	return nil
+}
+
+func (g *mockGalleryRepo) SetEnabled(name string, enabled bool) error {
+	e, ok := g.entries[name]
+	if !ok {
+		return fmt.Errorf("gallery entry %q not found", name)
+	}
+	e.Enabled = enabled
+	return nil
+}
+
+func (g *mockGalleryRepo) Get(name string) (entities.Embedding, bool) {
+	e, ok := g.entries[name]
+	if !ok || !e.Enabled {
+		return nil, false
+	}
+	return e.Embedding, true
+}
+
+func (g *mockGalleryRepo) List() []gallery.Entry {
+	out := make([]gallery.Entry, 0, len(g.entries))
+	for _, e := range g.entries {
+		out = append(out, *e)
+	}
+	return out
+}
+
 func newTestUseCase(detector *mockObjectDetector, encoder *mockSemanticEncoder, notifier *mockAlertSender) *UseCase {
 	return &UseCase{
 		logger:          noopLogger{},
@@ -147,7 +222,7 @@ func newTestUseCase(detector *mockObjectDetector, encoder *mockSemanticEncoder, 
 		semanticEncoder: encoder,
 		notifier:        notifier,
 		trackerFactory:  mockTrackerFactory,
-		gallery:         NewReferenceGallery(),
+		gallery:         newMockGalleryRepo(),
 	}
 }
 

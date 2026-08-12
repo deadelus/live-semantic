@@ -3,14 +3,15 @@ package session
 import (
 	"context"
 	"errors"
+	"fmt"
 	"image"
 	"sync"
 	"testing"
 	"time"
 
 	"live-semantic/internal/application/dto"
-	"live-semantic/internal/application/uc"
 	"live-semantic/internal/domain/entities"
+	"live-semantic/internal/infrastructure/gallery"
 	"live-semantic/internal/infrastructure/inference"
 	"live-semantic/internal/infrastructure/streamer"
 	"live-semantic/internal/infrastructure/tracking"
@@ -117,6 +118,63 @@ func (mockTracker) Update(*entities.Frame) (entities.BoundingBox, bool) {
 }
 func (mockTracker) Cleanup() {}
 
+// mockGalleryRepo is a minimal gallery.Repository test double — not
+// implementation/gallery/inmemory.Gallery, which this package must not
+// import any more than session.go's own production code may (dependency
+// inversion). Package-local, not shared with application/uc's own copy
+// of the same idea (different package, same rationale — see that
+// package's mockGalleryRepo doc comment).
+type mockGalleryRepo struct {
+	entries map[string]*gallery.Entry
+}
+
+func newMockGalleryRepo() *mockGalleryRepo {
+	return &mockGalleryRepo{entries: map[string]*gallery.Entry{}}
+}
+
+var _ gallery.Repository = (*mockGalleryRepo)(nil)
+
+func (g *mockGalleryRepo) Add(name string, embedding entities.Embedding) error {
+	if _, exists := g.entries[name]; exists {
+		return fmt.Errorf("gallery entry %q already exists", name)
+	}
+	g.entries[name] = &gallery.Entry{Name: name, Embedding: embedding, Enabled: true}
+	return nil
+}
+func (g *mockGalleryRepo) Remove(name string) { delete(g.entries, name) }
+func (g *mockGalleryRepo) Rename(oldName, newName string) error {
+	e, ok := g.entries[oldName]
+	if !ok {
+		return fmt.Errorf("gallery entry %q not found", oldName)
+	}
+	delete(g.entries, oldName)
+	e.Name = newName
+	g.entries[newName] = e
+	return nil
+}
+func (g *mockGalleryRepo) SetEnabled(name string, enabled bool) error {
+	e, ok := g.entries[name]
+	if !ok {
+		return fmt.Errorf("gallery entry %q not found", name)
+	}
+	e.Enabled = enabled
+	return nil
+}
+func (g *mockGalleryRepo) Get(name string) (entities.Embedding, bool) {
+	e, ok := g.entries[name]
+	if !ok || !e.Enabled {
+		return nil, false
+	}
+	return e.Embedding, true
+}
+func (g *mockGalleryRepo) List() []gallery.Entry {
+	out := make([]gallery.Entry, 0, len(g.entries))
+	for _, e := range g.entries {
+		out = append(out, *e)
+	}
+	return out
+}
+
 // newTestManager wires a Manager whose InputFactory always returns the
 // given *mockInput (single-session tests) or a fresh one each call
 // (multi-session tests use newTestManagerFreshInputs instead).
@@ -129,7 +187,11 @@ func newTestManager(mi *mockInput) *Manager {
 		mockDetector{},
 		mockEncoder{},
 		mockTrackerFactory,
-		nil, // gallery — nil is fine, uc.NewUseCase creates one per call in that case; TestGallerySharedAcrossSessions passes an explicit one instead
+		// gallery — NewUseCase requires a non-nil Repository since the
+		// 2026-08-12 port extraction (no more internal fallback, see its
+		// doc comment); a fresh one per test is fine here, TestGallery
+		// SharedAcrossSessions passes an explicit shared one instead.
+		newMockGalleryRepo(),
 	)
 }
 
@@ -373,17 +435,18 @@ func TestOutput_Input_UnknownSession(t *testing.T) {
 // expose gallery contents itself (uc.UseCases does, via
 // ListGalleryReferences — that's the real surface a REST caller would
 // use; this test just needs to prove sharing, not re-test
-// ReferenceGallery's own logic, already covered in application/uc).
+// the gallery.Repository's own logic, already covered by
+// implementation/gallery/inmemory's tests).
 func TestGallerySharedAcrossSessions(t *testing.T) {
-	gallery := uc.NewReferenceGallery()
-	if err := gallery.Add("mon_sac", entities.Embedding{1, 0}); err != nil {
-		t.Fatalf("gallery.Add() error = %v", err)
+	galleryRepo := newMockGalleryRepo()
+	if err := galleryRepo.Add("mon_sac", entities.Embedding{1, 0}); err != nil {
+		t.Fatalf("galleryRepo.Add() error = %v", err)
 	}
 
 	m := NewManager(
 		func(Source) (streamer.InputStream, error) { return newMockInput(), nil },
 		func() streamer.OutputStream { return mockOutput{} },
-		noopLogger{}, mockNotifier{}, mockDetector{}, mockEncoder{}, mockTrackerFactory, gallery,
+		noopLogger{}, mockNotifier{}, mockDetector{}, mockEncoder{}, mockTrackerFactory, galleryRepo,
 	)
 
 	infoA, _ := m.CreateSession(context.Background(), Source{Kind: "local"})
