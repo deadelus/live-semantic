@@ -1,10 +1,10 @@
 // Package inmemory is the only storage.GalleryStorage adapter
 // today — a thread-safe in-memory map. No vectorial database at this
-// scale (TODO.md § D's own note) — a handful to a few dozen entries,
-// linear scan on List/Get is plenty. Process-wide, not per-session (H1
-// "Multi-flux": a *Gallery is shared across every application/uc.UseCase
-// a session.Manager creates — see session.go's doc comment — reusing
-// named references across sessions is the whole point of naming them).
+// scale — a handful to a few dozen entries, linear scan on List/Get is
+// plenty. Process-wide, not per-session (multi-flux: a *Gallery is shared
+// across every application/uc.UseCase a session.Manager creates — see
+// session.go's doc comment — reusing named references across sessions is
+// the whole point of naming them).
 package inmemory
 
 import (

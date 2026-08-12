@@ -1,6 +1,3 @@
-// Package clip will implement infrastructure/inference.SemanticEncoder on
-// top of CLIP (ViT-B/32), see docs/adr/clip-backend.md.
-//
 // This file implements CLIP's tokenizer: byte-level BPE (identical
 // algorithm to GPT-2's, plus a "</w>" end-of-word marker), from scratch —
 // no third-party Go dependency. Rationale in docs/adr/clip-backend.md § 4:
@@ -239,6 +236,8 @@ func (t *tokenizer) bpe(token string) string {
 	return result
 }
 
+// indexOfFrom returns the index of the first occurrence of s in word at
+// or after from, or -1 if not found.
 func indexOfFrom(word []string, s string, from int) int {
 	for i := from; i < len(word); i++ {
 		if word[i] == s {

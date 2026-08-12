@@ -15,11 +15,11 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
-// galleryController wires REST CRUD around uc.GalleryReferences (TODO.md
-// § D/§ H1, docs/adr/clip-backend.md § 24) — a "recognize by reference
-// image" filter term family, alongside COCO labels and free text. H1
-// minimal scope, same as recognitionController: no auth, no per-session
-// scoping (the gallery is process-wide, TODO.md § H1 "Multi-flux" doesn't
+// galleryController wires REST CRUD around uc.GalleryReferences
+// (docs/adr/clip-backend.md § 24) — a "recognize by reference
+// image" filter term family, alongside COCO labels and free text. Same
+// minimal scope as recognitionController: no auth, no per-session
+// scoping (the gallery is process-wide, multi-flux doesn't
 // change that — see infrastructure/storage.GalleryStorage's doc comment for
 // why sharing across sessions is the point, not a limitation). Depends
 // on uc.GalleryReferences, not the wider uc.UseCases (interface

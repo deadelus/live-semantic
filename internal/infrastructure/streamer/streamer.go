@@ -1,11 +1,14 @@
-// Package camera defines the interface for camera processing.
+// Package streamer defines the ports for video frame I/O — InputStream
+// (camera/file/browser-ingest sources) and OutputStream (window/WebSocket
+// sinks) — implemented by implementation/streamer/{input,output}.
 package streamer
 
 import "live-semantic/internal/domain/entities"
 
-// StreamingProcessor defines the interface for streaming processing.
-// It includes methods for initializing the stream, starting the frame processing,
-// stopping the processing, and cleaning up resources.
+// InputStream is the port for a source of video frames (camera, file,
+// browser ingest). Initialize sets up the stream, Start reads frames in
+// a blocking loop until Stop is called, Cleanup releases resources once
+// the stream is discarded.
 type InputStream interface {
 	// Initialize sets up the input stream (camera, file, cctv, etc.).
 	Initialize() error
@@ -17,6 +20,8 @@ type InputStream interface {
 	Cleanup()
 }
 
+// OutputStream is the port for a destination that renders/forwards
+// analyzed frames (the gocv window, a WebSocket sink...).
 type OutputStream interface {
 	// Initialize sets up the output stream (websocket, stream server, window, etc.).
 	Initialize() error
@@ -33,7 +38,7 @@ type OutputStream interface {
 // BoxData is one detected/tracked box as structured data — label, score,
 // and coordinates normalized to [0,1] (fraction of frame width/height,
 // not pixels), so a client doesn't need to know the source frame's
-// resolution to position an overlay. TODO.md § H2, docs/gui/mockups/
+// resolution to position an overlay. docs/gui/mockups/
 // (screens 1c/1d/1h — boxes drawn as separate, hoverable/clickable DOM
 // elements, colored by filter term, not baked into the video pixels).
 type BoxData struct {

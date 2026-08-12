@@ -1,5 +1,3 @@
-// Code generated: Fixed color map for known classes, generator for unknown words.
-
 package entities
 
 import (
@@ -7,6 +5,9 @@ import (
 	"live-semantic/internal/implementation/drawer"
 )
 
+// BoxID values for the 80 COCO/YOLO11s classes, duplicating the Class_*
+// string constants from class.go as drawer.BoxID so they can key
+// BoxIDColors below.
 const (
 	Person        drawer.BoxID = "person"
 	Bicycle       drawer.BoxID = "bicycle"
@@ -90,7 +91,8 @@ const (
 	Toothbrush    drawer.BoxID = "toothbrush"
 )
 
-// Fixed color map for known classes.
+// BoxIDColors is a fixed, hand-picked color per known class, used by the
+// drawer to give each class a stable, distinguishable box color.
 var BoxIDColors = map[drawer.BoxID]color.RGBA{
 	Person:        {255, 0, 0, 255},
 	Bicycle:       {0, 128, 255, 255},
@@ -174,11 +176,11 @@ var BoxIDColors = map[drawer.BoxID]color.RGBA{
 	Toothbrush:    {128, 255, 0, 255},
 }
 
-// BoxColor returns the color for a given BoxID.
+// BoxColor returns the fixed color for a known BoxID, or gray as a
+// fallback for anything not in BoxIDColors (e.g. a future non-COCO class).
 func BoxColor(ID drawer.BoxID) color.RGBA {
 	if col, exists := BoxIDColors[ID]; exists {
 		return col
 	}
-	// Default color for unknown IDs
-	return color.RGBA{128, 128, 128, 255} // Gray color for unknown classes
+	return color.RGBA{128, 128, 128, 255}
 }

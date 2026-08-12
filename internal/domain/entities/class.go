@@ -1,5 +1,8 @@
 package entities
 
+// Class_* are the 80 COCO class label strings YOLO11s was trained on —
+// the closed vocabulary this detector is limited to today (no open-set
+// semantic matching yet).
 const (
 	Class_Person        string = "person"
 	Class_Bicycle       string = "bicycle"
@@ -83,6 +86,8 @@ const (
 	Class_Toothbrush    string = "toothbrush"
 )
 
+// Yolo11sClasses returns all 80 COCO class labels, in the model's own
+// output-index order.
 func Yolo11sClasses() []string {
 	return []string{
 		Class_Person, Class_Bicycle, Class_Car, Class_Motorcycle, Class_Airplane,

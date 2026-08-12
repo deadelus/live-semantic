@@ -1,6 +1,6 @@
 package dto
 
-// RecognitionRequest DTO pour créer une tâche de reconnaissance.
+// RecognitionRequest is the input DTO for starting a recognition session.
 //
 // Filter is a comma-separated spec of terms: "key[*cap][+option[=value]]...".
 // "person" (cap 1, implicit), "person*2" (cap 2), "person*2,car" (two
@@ -9,13 +9,13 @@ package dto
 // matches exactly (no score involved); a key that isn't matches
 // semantically via CLIP against a fixed default threshold (not exposed
 // here — application/uc.defaultSimilarityThreshold, meant to become a GUI
-// control, TODO.md § H). "+overlap" (default false, e.g.
-// "person with a red hat*1+overlap") lets a term claim a candidate box
-// another term already claimed this cycle — parsed by parseFilterSpec, not
-// yet consulted by trackManager.reanchor (TODO.md § A). Empty string means
-// "track everything, no filter". Parsed by application/uc.parseFilterSpec.
+// control eventually). "+overlap" (default false, e.g. "person with a red
+// hat*1+overlap") lets a term claim a candidate box another term already
+// claimed this cycle — parsed by parseFilterSpec, not yet consulted by
+// trackManager.reanchor. Empty string means "track everything, no
+// filter". Parsed by application/uc.parseFilterSpec.
 //
-// History (TODO.md § A, docs/adr/clip-backend.md § 12-13/16): CLIP-only
+// History (see docs/adr/clip-backend.md § 12-13/16): CLIP-only
 // (2026-08-10) → exact-label-only, SimilarityThreshold field removed
 // (2026-08-11 morning — CLIP's absolute threshold rejected real matches at
 // every value tried) → hybrid (2026-08-11 afternoon, at the user's
@@ -28,15 +28,17 @@ type RecognitionRequest struct {
 	// Source picks which InputStream feeds this session — "local" (the
 	// backend's own camera, uc.UseCase.localInput) or "browser" (frames
 	// pushed over /ws/ingest by the GUI's own getUserMedia capture,
-	// uc.UseCase.browserInput — TODO.md § H2 "capture caméra navigateur").
-	// Empty defaults to "local" (see newTrackManager's caller,
-	// uc_recognition.go) — every existing CLI/API caller that predates
-	// this field keeps working unchanged. H1/H2 minimal scope: still one
-	// session for the whole process (TODO.md § H1 "Multi-flux" is the
-	// follow-up), Source doesn't add a second concurrent session, just
-	// picks which single input that one session reads from.
+	// uc.UseCase.browserInput). Empty defaults to "local" (see
+	// newTrackManager's caller, uc_recognition.go) — every existing
+	// CLI/API caller that predates this field keeps working unchanged.
+	// Current minimal scope: still one session for the whole process
+	// (multi-stream support is a follow-up), Source doesn't add a second
+	// concurrent session, just picks which single input that one session
+	// reads from.
 	Source string `json:"source,omitempty"`
 }
 
-// RecognitionResponse DTO pour la réponse de reconnaissance
+// RecognitionResponse is the (currently empty) output DTO for a
+// recognition session — results are pushed asynchronously via
+// AlertSender/OutputStream, not returned synchronously here.
 type RecognitionResponse struct{}

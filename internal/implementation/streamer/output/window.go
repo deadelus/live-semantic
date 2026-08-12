@@ -1,4 +1,3 @@
-// Package output provides the implementation of the output stream for displaying frames in a window.
 package output
 
 import (
@@ -10,23 +9,30 @@ import (
 	"gocv.io/x/gocv"
 )
 
+// WindowOutput implements streamer.OutputStream by displaying frames in a
+// native gocv/OpenCV window (HighGUI) — the CLI/desktop path, as opposed
+// to WebSocketOutput's browser-facing one.
 type WindowOutput struct {
 	window *gocv.Window
 }
 
+// NewWindowOutput constructs a WindowOutput with no window opened yet —
+// see Initialize.
 func NewWindowOutput() *WindowOutput {
 	return &WindowOutput{
 		window: nil,
 	}
 }
 
-// Initialize implements the Output.Initialize for WindowOutput.
+// Initialize implements streamer.OutputStream.Initialize — opens the
+// display window.
 func (wo *WindowOutput) Initialize() error {
 	wo.window = gocv.NewWindow("AI Agent")
 	return nil
 }
 
-// Render implements the Output.Render for WindowOutput.
+// Render implements streamer.OutputStream.Render — JPEG round-trips the
+// frame through gocv.IMDecode so it can be shown via HighGUI's IMShow.
 func (wo *WindowOutput) Render(frame *entities.Frame) error {
 	if wo.window == nil {
 		fmt.Println("window closed")
@@ -51,18 +57,19 @@ func (wo *WindowOutput) Render(frame *entities.Frame) error {
 	return nil
 }
 
-// HandleKeyEvent implements the Output.HandleKeyEvent for WindowOutput.
+// HandleKeyEvent implements streamer.OutputStream.HandleKeyEvent — polls
+// for a keypress with a 1ms wait, non-blocking in practice for a video loop.
 func (wo *WindowOutput) HandleKeyEvent() int {
 	key := wo.window.WaitKey(1)
 	return key
 }
 
-// Stop implements the Output.Stop for WindowOutput.
+// Stop implements streamer.OutputStream.Stop — no-op, WindowOutput has
+// nothing to halt independently of Cleanup.
 func (wo *WindowOutput) Stop() {
-	// No-op for window output
 }
 
-// Cleanup implements the Output.Cleanup for WindowOutput.
+// Cleanup implements streamer.OutputStream.Cleanup — closes the window.
 func (wo *WindowOutput) Cleanup() {
 	if wo.window != nil {
 		wo.window.Close()

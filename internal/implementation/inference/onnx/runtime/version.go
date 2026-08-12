@@ -42,6 +42,8 @@ func isAtLeast(got, min string) (bool, error) {
 	return true, nil
 }
 
+// parseVersion splits a "major.minor.patch" string into its three
+// integer components, erroring on any non-numeric or malformed segment.
 func parseVersion(v string) ([3]int, error) {
 	var out [3]int
 	parts := strings.SplitN(v, ".", 3)

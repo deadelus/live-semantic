@@ -10,6 +10,8 @@ import (
 	"github.com/AlecAivazis/survey/v2"
 )
 
+// Run drives the interactive CLI's main menu loop until the user exits or
+// ctx is cancelled (e.g. process shutdown signal).
 func (s *SurveyController) Run(ctx context.Context) error {
 	fmt.Printf("🚀 Welcome to %s Interactive CLI!\n", os.Getenv("APP_NAME"))
 
@@ -42,7 +44,8 @@ func (s *SurveyController) Run(ctx context.Context) error {
 				s.showSettings()
 			case "❌ Exit":
 				fmt.Println("👋 Goodbye!")
-				// Send SIGTERM to self for graceful shutdown and wait briefly
+				// Send SIGTERM to self for graceful shutdown, then wait
+				// briefly for it to be handled before this function returns.
 				p, err := os.FindProcess(os.Getpid())
 				if err == nil {
 					_ = p.Signal(syscall.SIGTERM)

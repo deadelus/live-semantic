@@ -20,12 +20,12 @@ type CameraInput struct {
 
 // NewCameraInput creates a CameraInput bound to the given device index
 // (0 is usually the default/built-in camera on most systems). Configurable
-// per TODO.md § H1 — previously hardcoded to 0 in this constructor itself.
+// (a multi-source/GUI backend need) — previously hardcoded to 0 in this constructor itself.
 func NewCameraInput(device int) *CameraInput {
 	return &CameraInput{device: device}
 }
 
-// Initialize implements the Input.Initialize for CameraInput.
+// Initialize implements streamer.InputStream.Initialize for CameraInput.
 func (ci *CameraInput) Initialize() error {
 	var err error
 	ci.camera, err = gocv.OpenVideoCapture(ci.device)
@@ -35,10 +35,10 @@ func (ci *CameraInput) Initialize() error {
 	return nil
 }
 
-// Start implements the Input.Start for CameraInput. Frames are mirrored
-// horizontally (raw webcam feed reads as "backwards" to the person facing
-// the camera) — see captureLoop's doc comment for why FileInput doesn't do
-// this.
+// Start implements streamer.InputStream.Start for CameraInput. Frames are
+// mirrored horizontally (raw webcam feed reads as "backwards" to the
+// person facing the camera) — see captureLoop's doc comment for why
+// FileInput doesn't do this.
 func (ci *CameraInput) Start(frameActionCallback func(*entities.Frame) (*entities.Frame, error)) error {
 	defer ci.Cleanup()
 
@@ -50,12 +50,12 @@ func (ci *CameraInput) Start(frameActionCallback func(*entities.Frame) (*entitie
 	return nil
 }
 
-// Stop implements the Input.Stop for CameraInput.
+// Stop implements streamer.InputStream.Stop for CameraInput.
 func (ci *CameraInput) Stop() {
 	ci.running = false
 }
 
-// Cleanup implements the Input.Cleanup for CameraInput.
+// Cleanup implements streamer.InputStream.Cleanup for CameraInput.
 func (ci *CameraInput) Cleanup() {
 	if ci.camera != nil {
 		ci.camera.Close()

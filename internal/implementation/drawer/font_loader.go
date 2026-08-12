@@ -10,12 +10,15 @@ import (
 
 const defaultFontPath = "assets/fonts/Roboto-Regular.ttf"
 
+// FontLoader resolves and parses a TTF/OTF font into a font.Face usable
+// by BoxDrawer, falling back to defaults for either field left unset.
 type FontLoader struct {
 	fontFace string
 	fontSize float64
 }
 
-// loadFontFace loads the font face for drawing text on images.
+// LoadFont reads and parses fl.fontFace at fl.fontSize (defaulting to
+// defaultFontPath / size 20 if unset), returning a ready-to-use font.Face.
 func (fl *FontLoader) LoadFont() (font.Face, error) {
 	if fl.fontFace == "" {
 		fl.fontFace = defaultFontPath // Default font if not provided

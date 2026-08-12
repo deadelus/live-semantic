@@ -333,7 +333,7 @@ func TestNewTrackManager_SemanticTermGetsEmbedding(t *testing.T) {
 	}
 }
 
-// --- gallery-backed filter terms (TODO.md § D/§ H1, docs/adr/clip-backend.md § 24) ---
+// --- gallery-backed filter terms (docs/adr/clip-backend.md § 24) ---
 
 func TestNewTrackManager_GalleryTerm_UsesGalleryEmbeddingNotEncodeText(t *testing.T) {
 	encoder := &mockSemanticEncoder{}
@@ -488,7 +488,7 @@ func TestReanchor_SemanticTerm_RanksAndCaps(t *testing.T) {
 
 func TestReanchor_MixedExactAndSemanticTerms(t *testing.T) {
 	// Deliberately different YOLO labels ("car" vs "person") — see
-	// reanchor's doc comment / TODO.md § A: an exact term and a semantic
+	// reanchor's doc comment: an exact term and a semantic
 	// term sharing the *same* YOLO label is the deliberate no-overlap
 	// default (pass 1 claims every box with that label first, cap or
 	// not), confirmed by the user 2026-08-11, not tested here on purpose.

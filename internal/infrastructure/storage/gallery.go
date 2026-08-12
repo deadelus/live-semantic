@@ -1,7 +1,6 @@
 // Package storage holds storage ports for the application layer —
 // currently just GalleryStorage, for "recognize by reference image"
-// filter terms (TODO.md § D "reconnaissance par référence image" / § H1,
-// docs/adr/clip-backend.md § 24), a named CLIP embedding matched via
+// filter terms (docs/adr/clip-backend.md § 24), a named CLIP embedding matched via
 // image↔image cosine similarity instead of text↔image. Extracted
 // 2026-08-12 from a concrete struct application/uc held directly
 // (*ReferenceGallery) into a proper port + implementation/storage/inmemory

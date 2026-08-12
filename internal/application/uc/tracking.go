@@ -26,9 +26,9 @@ func normalizeFilter(filter string) string {
 }
 
 // iouAssociationThreshold: minimum IoU for a fresh detection to be
-// considered the same object as an existing track (TODO.md § B calls for
-// 0.3-0.5). Lowered 0.4 -> 0.3 on 2026-08-09: real-world duplicate tracks
-// observed (same physical person spawning a 2nd/3rd/4th track every
+// considered the same object as an existing track (tracking-by-detection
+// design calls for 0.3-0.5). Lowered 0.4 -> 0.3 on 2026-08-09: real-world
+// duplicate tracks observed (same physical person spawning a 2nd/3rd/4th track every
 // reanchor cycle instead of re-anchoring the existing one) — matches
 // cmd/tracking-drift-bench's own measurement of CSRT's min IoU (0.328) on
 // person.mp4, just under the old 0.4 threshold. A failed match doesn't
@@ -38,9 +38,9 @@ func normalizeFilter(filter string) string {
 const iouAssociationThreshold = 0.3
 
 // defaultSimilarityThreshold gates a semantic (non-COCO) filter term's CLIP
-// cosine similarity (TODO.md § A, docs/adr/clip-backend.md § 13). Hardcoded
+// cosine similarity (docs/adr/clip-backend.md § 13). Hardcoded
 // on purpose (2026-08-11): the user wants a fixed default for now, not a
-// CLI/API knob — that's meant to become a GUI control (TODO.md § H) once
+// CLI/API knob — that's meant to become a GUI control once
 // there's a live-feedback slider to make the threshold's fragility
 // (§ 7/§ 10, margins of 0.01-0.03) something a user can actually see and
 // react to, rather than a number typed blind into a prompt. Still the same
@@ -126,9 +126,9 @@ func boxGap(a, b entities.BoundingBox) float32 {
 
 // Note on reanchor cadence: there used to be an explicit
 // defaultReanchorInterval (frame-count-based gate, plus a
-// LIVESEMANTIC_REANCHOR_INTERVAL env var for A/B testing during the perf
-// investigation, TODO.md § F). Both are gone as of the async pipeline
-// (TODO.md § C, 2026-08-09): the detection loop now pulls from a buffer-1
+// LIVESEMANTIC_REANCHOR_INTERVAL env var for A/B testing during a perf
+// investigation). Both are gone as of the async pipeline
+// (2026-08-09): the detection loop now pulls from a buffer-1
 // overwrite-on-full channel and processes whatever's latest as fast as it
 // can — reanchor's own cost (~150-270ms measured) self-paces it to roughly
 // the target 2-5 FPS without needing an explicit interval. See
@@ -167,14 +167,14 @@ type trackedObject struct {
 }
 
 // notifyDebounce: minimum time between two Notify calls for the same
-// track. Found necessary after decoupling the detection loop (TODO.md § C,
-// 2026-08-10): reanchor now runs continuously (~200ms cadence, self-paced
-// by its own cost) instead of being gated by a frame count tied to camera
-// FPS (~1-2s before) — every reanchor cycle that still matches a confirmed
-// track emits EventTrackMatched, which used to alert roughly once every
-// 1-2s and now would alert ~5x/s. That directly contradicts the original
-// intent (TODO.md § D: "one alert per meaningful lifecycle transition
-// instead of one per frame") — reanchor became frequent enough to
+// track. Found necessary after decoupling the detection loop (async
+// pipeline, 2026-08-10): reanchor now runs continuously (~200ms cadence,
+// self-paced by its own cost) instead of being gated by a frame count tied
+// to camera FPS (~1-2s before) — every reanchor cycle that still matches a
+// confirmed track emits EventTrackMatched, which used to alert roughly
+// once every 1-2s and now would alert ~5x/s. That directly contradicts the
+// original Track aggregate intent ("one alert per meaningful lifecycle
+// transition instead of one per frame") — reanchor became frequent enough to
 // effectively become "per frame" again from the alerting point of view.
 const notifyDebounce = 5 * time.Second
 
@@ -222,7 +222,7 @@ type termMatch struct {
 
 // trackManager owns the set of active tracks, shared between the video loop
 // (advance/boxes, per frame) and the detection loop (reanchor, whenever a
-// frame is handed off — TODO.md § C, the async 3-loop pipeline). mu serializes
+// frame is handed off — the async 3-loop pipeline). mu serializes
 // every public method: coarse-grained on purpose for a first version — the
 // underlying tracker.ObjectTracker instances are themselves not safe for
 // concurrent use (native OpenCV handles), so advance() and reanchor() must
@@ -245,7 +245,7 @@ type trackManager struct {
 	// means "no filter requested" — reanchor then accepts every box, never
 	// calls CLIP.
 	//
-	// History (TODO.md § A, docs/adr/clip-backend.md § 12-13): CLIP-only
+	// History (docs/adr/clip-backend.md § 12-13): CLIP-only
 	// (2026-08-10) → exact-label-only (2026-08-11 morning, CLIP's absolute
 	// threshold was rejecting real matches at any value tried) → this
 	// hybrid (2026-08-11 afternoon, user's explicit request): a term that
@@ -295,7 +295,8 @@ func newTrackManager(uc *UseCase, req dto.RecognitionRequest) (*trackManager, er
 		}
 		// Gallery lookup before falling back to CLIP text encoding — a
 		// third term family alongside COCO labels and free text
-		// (TODO.md § D/§ H1, docs/adr/clip-backend.md § 24): a name
+		// (Track aggregate / GUI backend prerequisites work,
+		// docs/adr/clip-backend.md § 24): a name
 		// registered via AddGalleryReference is matched image↔image
 		// against candidates (reanchor's pass 2, unchanged — it doesn't
 		// care whether Embedding came from EncodeText or a gallery
@@ -355,8 +356,8 @@ func cosineSimilarity(a, b entities.Embedding) float32 {
 }
 
 // count returns the number of active tracks — safe accessor for logging
-// from either loop (TODO.md § C), avoids reaching into m.active directly
-// from outside the package/lock.
+// from either loop (video or detection), avoids reaching into m.active
+// directly from outside the package/lock.
 func (m *trackManager) count() int {
 	m.mu.Lock()
 	defer m.mu.Unlock()
@@ -519,11 +520,11 @@ type scoredCandidate struct {
 
 // reanchor runs a full YOLO detection, gates/associates the results against
 // the active filter (exact COCO-label terms first, then semantic/CLIP terms
-// on whatever's left, TODO.md § A), and IoU-associates survivors against
+// on whatever's left), and IoU-associates survivors against
 // active tracks — spawning new tracks for unmatched detections and missing
 // tracks that weren't matched this cycle. The expensive path — runs on the
-// detection loop's own goroutine, not gated by a frame count (TODO.md § C,
-// see uc_recognition.go's RecognitionUseCase doc comment).
+// detection loop's own goroutine, not gated by a frame count (async
+// pipeline, see uc_recognition.go's RecognitionUseCase doc comment).
 //
 // AnalyzeFrame deliberately runs before the lock is taken: it's the
 // dominant cost (~150-270ms measured) and touches no trackManager state at
@@ -558,7 +559,7 @@ func (m *trackManager) reanchor(frame *entities.Frame, req dto.RecognitionReques
 
 	// Pass 0: relational terms ("container%relation%attachment", e.g.
 	// "person%+%backpack") — geometric decomposition rather than a single
-	// CLIP score on a composed phrase (TODO.md § A, docs/adr/
+	// CLIP score on a composed phrase (docs/adr/
 	// clip-backend.md § 24: CLIP's compound-phrase scoring is dominated by
 	// the base noun, § 22-23 — decomposing into two independently-detected
 	// boxes plus a geometric check sidesteps that entirely). Runs before
@@ -722,8 +723,8 @@ func (m *trackManager) reanchor(frame *entities.Frame, req dto.RecognitionReques
 	// cycle UNLESS that semantic term opts in with "+overlap" (see pass 2
 	// below) — "person*1" alongside "person with a red hat*1" never draws
 	// two boxes on the same physical person by default, but does if the
-	// second term is "person with a red hat*1+overlap" (TODO.md § A,
-	// docs/adr/clip-backend.md § 13/16/17).
+	// second term is "person with a red hat*1+overlap" (docs/adr/
+	// clip-backend.md § 13/16/17).
 	for i, box := range result.BoundingBoxes {
 		term, ok := m.terms[box.Label]
 		if !ok || term.Embedding != nil {
@@ -799,7 +800,7 @@ func (m *trackManager) reanchor(frame *entities.Frame, req dto.RecognitionReques
 			logFields["above_threshold"] = accepted
 			// Logged regardless of whether it's accepted — the only
 			// visibility into *why* a semantic term matched (or didn't)
-			// something surprising, e.g. TODO.md § A's "potted plant" case.
+			// something surprising, e.g. the "potted plant" false-positive case.
 			// Cheap relative to the EncodeImage call above.
 			m.uc.logger.Info("Semantic candidate scored", logFields)
 			if !accepted {
@@ -821,8 +822,8 @@ func (m *trackManager) reanchor(frame *entities.Frame, req dto.RecognitionReques
 }
 
 // matchOrSpawn re-anchors box onto its best-matching existing track (always
-// allowed, regardless of cap — a cap only ever blocks a *new* spawn, TODO.md
-// § A/I), or spawns a new track for it if the filterKey's cap (0 = no cap)
+// allowed, regardless of cap — a cap only ever blocks a *new* spawn), or
+// spawns a new track for it if the filterKey's cap (0 = no cap)
 // isn't already reached. score is the CLIP cosine similarity that produced
 // this candidate for a semantic term (0 for an exact-term/no-filter call,
 // which never has one) — threaded onto the TrackEvent and stored on the
@@ -847,10 +848,11 @@ func (m *trackManager) matchOrSpawn(frame *entities.Frame, box entities.Bounding
 		return
 	}
 
-	// Scene cap (TODO.md § A/I): once this term already has as many active
+	// Scene cap: once this term already has as many active
 	// tracks as it allows, an unmatched extra candidate doesn't spawn a
-	// new one — the "noise" this drops is exactly what a future event/
-	// action system (not built) would hook into, per the user's request.
+	// new one — the "noise" this drops is exactly what a future
+	// scene-condition event/action system (not built) would hook into,
+	// per the user's request.
 	if capVal > 0 && m.countByFilterKey(filterKey) >= capVal {
 		return
 	}
@@ -890,8 +892,8 @@ func (m *trackManager) missUnmatched(now time.Time, matchedTrackIDs map[string]b
 // (restricted to the same class AND the same filterKey, above
 // iouAssociationThreshold, and not already matched this cycle). Greedy
 // per-detection association, not a global optimum (Hungarian algorithm) —
-// sufficient for a first version, revisit if the drift test (TODO.md § B)
-// shows association errors.
+// sufficient for a first version, revisit if the tracking-by-detection
+// drift test shows association errors.
 //
 // filterKey restriction added 2026-08-11 (docs/adr/clip-backend.md § 21) —
 // a real bug, not hypothetical: an exact term and a "+overlap" semantic
@@ -932,7 +934,7 @@ func (m *trackManager) bestMatch(box entities.BoundingBox, filterKey string, tak
 }
 
 // countByFilterKey returns how many active tracks currently belong to this
-// filter term — used to enforce a term's cap (TODO.md § A/I). Keyed by
+// filter term — used to enforce a term's cap. Keyed by
 // filterTerm.Key (trackedObject.filterKey), not by COCO class: for an
 // exact term the two happen to be the same string, but a semantic term's
 // key is free text, not a class name, so it needs its own bucket.
@@ -983,9 +985,9 @@ func (m *trackManager) miss(id string, obj *trackedObject, now time.Time, req dt
 }
 
 // emit logs every track event and forwards it to AlertSender — one alert
-// per meaningful lifecycle transition (TODO.md § D) instead of the old
+// per meaningful lifecycle transition instead of the old
 // per-frame alert, debounced per track (notifyDebounce) since the async
-// detection loop (TODO.md § C) made EventTrackMatched fire far more often
+// detection loop made EventTrackMatched fire far more often
 // than the original "per lifecycle transition" intent.
 //
 // No re-check of the filter here on purpose: by construction, every track
@@ -1025,7 +1027,7 @@ func (m *trackManager) emit(obj *trackedObject, evt *entities.TrackEvent, req dt
 	// list several terms, e.g. "person*2,car"). Confidence/evt.Score is
 	// always 0 (see matchOrSpawn's doc comment) — kept as a field on
 	// entities.Message for whatever eventually reintroduces a per-match
-	// score (galerie de références, TODO.md § D).
+	// score (reference gallery matching).
 	if err := m.uc.notifier.Notify(entities.Message{
 		MatchedFilter: obj.filterKey,
 		Confidence:    evt.Score,

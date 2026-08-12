@@ -1,5 +1,5 @@
 // Package session adds multiple, independently addressable recognition
-// sessions on top of application/uc.UseCase — TODO.md § H1 "Multi-flux",
+// sessions ("multi-flux") on top of application/uc.UseCase —
 // docs/gui/spec.md § 1.2 ("la demande qui a le plus d'impact
 // architectural"). Each Session wraps its own uc.UseCases instance (its
 // own InputStream/OutputStream, own trackManager per call — unchanged
@@ -12,8 +12,8 @@
 // Deliberately additive, not a replacement for the existing single-
 // session REST/WS surface (transport/adapters/api's recognitionController,
 // /ws, /ws/ingest): that path is already tested and the current web/
-// frontend depends on it. Multi-session is a new, parallel capability —
-// TODO.md tracks migrating the frontend onto it separately.
+// frontend depends on it. Multi-session is a new, parallel capability;
+// migrating the frontend onto it is a separate, later effort.
 package session
 
 import (
@@ -345,6 +345,8 @@ func (m *Manager) Input(id string) (streamer.InputStream, bool) {
 	return e.input, true
 }
 
+// get looks up a session's entry by ID under the Manager-level lock —
+// the shared read path behind every exported method that needs one.
 func (m *Manager) get(id string) (*entry, bool) {
 	m.mu.Lock()
 	defer m.mu.Unlock()

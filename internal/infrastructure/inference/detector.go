@@ -1,9 +1,9 @@
 // Package inference defines the port for inference (object detection, and
 // semantic encoding) functionalities.
 //
-// Fallback order (TODO.md § F, not implemented — only the first tier
-// exists today): implementations are expected to be tried in this order
-// of preference, each a fallback for when the previous one isn't
+// Fallback order (cross-cutting perf work, not implemented — only the
+// first tier exists today): implementations are expected to be tried in
+// this order of preference, each a fallback for when the previous one isn't
 // available/fast enough on a given deployment target:
 //
 //  1. Native Go ONNX Runtime binding (github.com/yalue/onnxruntime_go,

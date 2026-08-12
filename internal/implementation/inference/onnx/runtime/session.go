@@ -16,7 +16,7 @@ func InitEnvironment(libraryPath string) error {
 // DestroyEnvironment explicitly releases the process-wide ORT environment.
 //
 // Must be called before process exit — found and confirmed via lldb
-// (TODO.md, bug critique SIGABRT) on 2026-08-10: without this, ORT's own
+// on 2026-08-10: without this, ORT's own
 // internal OrtEnv singleton gets torn down by a C++ static destructor at
 // process exit instead, which throws an uncaught std::system_error ("mutex
 // lock failed: Invalid argument") and crashes with SIGABRT. This is a

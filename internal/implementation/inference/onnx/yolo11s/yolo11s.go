@@ -56,8 +56,9 @@ var yoloClasses = entities.Yolo11sClasses()
 
 // Detector represents the YOLOv11s neural implementation.
 //
-// session is a DynamicAdvancedSession (TODO.md § H1, docs/gui/spec.md §
-// 1.2) rather than an AdvancedSession with tensors fixed at construction:
+// session is a DynamicAdvancedSession (needed once concurrent sessions
+// became a goal, docs/gui/spec.md § 1.2) rather than an AdvancedSession
+// with tensors fixed at construction:
 // AnalyzeFrame allocates fresh input/output tensors per call instead of
 // reusing struct-held ones. That fixed-tensor pattern was confirmed unsafe
 // under concurrent calls on a shared Detector (3/3 data races reproduced
@@ -70,7 +71,7 @@ var yoloClasses = entities.Yolo11sClasses()
 // session as long as each call uses its own buffers. The session/model
 // weights are still loaded once and shared; only the small per-call
 // tensors (~7.5 Mo combined for YOLO at 640x640) are now allocated fresh.
-// Allocation cost per call not benchmarked yet (TODO.md § H1 follow-up).
+// Allocation cost per call not benchmarked yet (perf follow-up).
 type Detector struct {
 	session *ort.DynamicAdvancedSession
 }
@@ -116,7 +117,7 @@ func New(opts ...runtime.Option) (*Detector, error) {
 // AnalyzeFrame implements the ObjectDetector.AnalyzeFrame for Detector.
 // Allocates fresh input/output tensors for this call and destroys them
 // before returning — see Detector's doc comment for why (thread-safety
-// under concurrent calls, TODO.md § H1).
+// under concurrent calls).
 func (d *Detector) AnalyzeFrame(frame *entities.Frame) (*inference.DetectionResult, error) {
 	originalBounds := frame.Image.Bounds()
 
@@ -156,7 +157,7 @@ func (d *Detector) AnalyzeFrame(frame *entities.Frame) (*inference.DetectionResu
 // (an input tensor's backing buffer) with normalized, channel-split
 // (NCHW) RGB data. Free function (not a *Detector method) since it no
 // longer touches any struct-held tensor — the caller owns the tensor's
-// lifetime now (TODO.md § H1).
+// lifetime now.
 func writeInput(data []float32, img image.Image) error {
 	channelSize := modelHeight * modelWidth
 	if len(data) < channelSize*modelInputChannels {
@@ -251,8 +252,11 @@ func decodeDetections(output []float32, originalBounds image.Rectangle) []entiti
 //
 // Also explicitly releases the process-wide ORT environment (see
 // runtime.DestroyEnvironment's doc comment) — without this, the app
-// crashes with SIGABRT at exit (a documented ONNX Runtime bug on macOS,
-// see TODO.md § bug critique). Safe: this project only ever constructs one
+// crashes with SIGABRT at exit (a documented ONNX Runtime bug on macOS —
+// OrtEnv's static C++ destructor throws uncaught at process exit,
+// microsoft/onnxruntime#24579 — fixed upstream for the Node.js binding
+// only, not the C API this project's cgo binding calls). Safe: this
+// project only ever constructs one
 // Detector for the whole process lifetime (cmd/livesemantic/main.go).
 func (d *Detector) Cleanup() {
 	if d.session != nil {

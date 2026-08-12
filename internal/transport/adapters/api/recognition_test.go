@@ -287,8 +287,8 @@ func TestStatus_ReflectsRunningState(t *testing.T) {
 	assertStatus(false)
 }
 
-// TestStatus_SurfacesLastErrorAfterFailedSession — TODO.md § A "l'API
-// REST ne remonte pas au client un filtre invalide", fixed 2026-08-12:
+// TestStatus_SurfacesLastErrorAfterFailedSession — fixed 2026-08-12 (the
+// REST API didn't use to surface an invalid filter to the client):
 // a session that ends in error (e.g. an invalid filter) must be visible
 // via GET /recognition/status, not just server logs.
 func TestStatus_SurfacesLastErrorAfterFailedSession(t *testing.T) {

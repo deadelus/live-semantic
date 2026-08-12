@@ -1,4 +1,6 @@
-// Package output provides concrete streamer.OutputStream adapters.
+// Package output provides concrete streamer.OutputStream adapters:
+// WindowOutput (native gocv window, CLI/desktop) and WebSocketOutput
+// (browser-facing, this file).
 package output
 
 import (
@@ -16,13 +18,14 @@ var _ streamer.BoxAwareOutputStream = (*WebSocketOutput)(nil)
 
 // WebSocketOutput broadcasts rendered frames to every connected client as
 // binary JPEG messages, plus box/label/score data as a separate JSON text
-// message (RenderBoxes, streamer.BoxAwareOutputStream — TODO.md § H2,
-// 2026-08-12) so a client draws its own overlays instead of receiving
-// them pre-composited into the image's pixels. History: H1 minimal scope
-// originally burned boxes into frame.Image server-side (the "MJPEG-like"
-// fallback described in docs/gui/spec.md § 2) — good enough to validate
-// the transport end-to-end, but click-to-select (galerie de références,
-// docs/gui/mockups/ screen 1d) needs box geometry as data, not pixels.
+// message (RenderBoxes, streamer.BoxAwareOutputStream, added 2026-08-12)
+// so a client draws its own overlays instead of receiving
+// them pre-composited into the image's pixels. History: the GUI backend
+// prerequisites' minimal scope originally burned boxes into frame.Image
+// server-side (the "MJPEG-like" fallback described in docs/gui/spec.md
+// § 2) — good enough to validate the transport end-to-end, but
+// click-to-select (reference gallery, docs/gui/mockups/ screen 1d) needs
+// box geometry as data, not pixels.
 type WebSocketOutput struct {
 	mu      sync.RWMutex
 	clients map[*websocket.Conn]struct{}

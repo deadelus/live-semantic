@@ -1,6 +1,10 @@
+// Package dto holds the data-transfer objects use cases return to
+// transport adapters (CLI, API, WebSocket), keeping application logic
+// decoupled from any one transport's serialization concerns.
 package dto
 
-// Result pattern simple
+// Result is a generic success/data-or-error envelope returned by use
+// cases, mirrored 1:1 as the JSON shape transport adapters send back.
 type Result[T any] struct {
 	Success bool   `json:"success"`
 	Data    *T     `json:"data,omitempty"`

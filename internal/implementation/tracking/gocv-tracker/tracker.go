@@ -20,8 +20,8 @@ import (
 )
 
 // init tunes OpenCV for real-time tracking of one webcam frame at a time,
-// found across a real perf investigation on 2026-08-09 (TODO.md § F —
-// history kept there, this comment only states the current understanding):
+// found across a real perf investigation on 2026-08-09 (this comment
+// states the current understanding):
 //
 //   - OPENCV_OPENCL_DEVICE=disabled: KCF's updateProjectionMatrix dispatches
 //     a matrix transpose to the GPU via OpenCV's T-API (UMat/OpenCL). On an
@@ -55,7 +55,7 @@ func init() {
 // Lowered 640 -> 320 on 2026-08-09 (real-world request, more speed traded
 // for more precision loss) — not re-measured on real webcam footage at
 // this value yet, only reasoned from the same quadratic-cost argument that
-// held for 640. Revert or tune per TODO.md § F if tracking gets flaky on
+// held for 640. Revert or tune (perf follow-up) if tracking gets flaky on
 // small/far subjects.
 const maxTrackingDimension = 320
 
@@ -72,6 +72,8 @@ func scaleFor(w, h int) float64 {
 	return float64(maxTrackingDimension) / float64(longest)
 }
 
+// scaleRect scales r's corners by s, used both to bring a box into the
+// downscaled tracking coordinate space (Init) and back out of it (Update).
 func scaleRect(r image.Rectangle, s float64) image.Rectangle {
 	return image.Rect(
 		int(float64(r.Min.X)*s), int(float64(r.Min.Y)*s),
@@ -80,9 +82,9 @@ func scaleRect(r image.Rectangle, s float64) image.Rectangle {
 }
 
 // Algorithm selects which OpenCV tracking algorithm backs a Tracker. Which
-// one performs best on real footage is an open question (TODO.md § B, drift
-// test not run yet) — both are wired behind the same adapter so the choice
-// is a one-line change, not a rewrite.
+// one performs best on real footage is an open question (tracking-by-
+// detection drift test not run yet) — both are wired behind the same
+// adapter so the choice is a one-line change, not a rewrite.
 type Algorithm int
 
 const (
@@ -200,6 +202,8 @@ func New(algorithm Algorithm) (*Tracker, error) {
 	}
 }
 
+// newBackend constructs the underlying gocv.Tracker for t's algorithm
+// choice — a fresh instance every call, per New's single-use constraint.
 func (t *Tracker) newBackend() gocv.Tracker {
 	if t.algorithm == CSRT {
 		return contrib.NewTrackerCSRT()

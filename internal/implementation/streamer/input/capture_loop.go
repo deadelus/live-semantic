@@ -15,7 +15,7 @@ import (
 // iteration so an external Stop() call (flips the caller's own bool) is
 // noticed promptly.
 //
-// Shared by CameraInput and FileInput (TODO.md § H1): the only real
+// Shared by CameraInput and FileInput: the only real
 // differences between a USB webcam and a local file/RTSP/HTTP stream are
 // how the capture gets opened (device index vs URI) and whether the feed
 // should be mirrored — everything past that point is the same OpenCV
@@ -32,8 +32,8 @@ func captureLoop(capture *gocv.VideoCapture, mirror bool, isRunning func() bool,
 		}
 
 		if mirror {
-			// Only a webcam facing the user needs this (TODO.md bug UX) —
-			// a recorded file or an IP camera must never be flipped.
+			// Only a webcam facing the user needs this (mirror-effect UX
+			// fix) — a recorded file or an IP camera must never be flipped.
 			if err := gocv.Flip(imgMat, &imgMat, 1); err != nil {
 				fmt.Println("Warning: could not mirror frame:", err)
 			}

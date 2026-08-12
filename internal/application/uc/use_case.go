@@ -1,4 +1,7 @@
-// Package domain contains the business logic and use cases for the application.
+// Package uc contains the application's use cases (RecognitionUseCase and
+// GalleryReferences) — orchestration logic that depends only on domain
+// entities and infrastructure ports, never on a concrete
+// implementation/* or transport/* type.
 package uc
 
 import (
@@ -39,7 +42,7 @@ type Recognition interface {
 	// see uc_control.go. Named to make clear it belongs to Recognition
 	// specifically (a bare Stop() read as if it might stop *anything* —
 	// found confusing once GalleryReferences existed alongside it in the
-	// same interface). H1 minimal scope (TODO.md § H1): a single shared
+	// same interface). Current minimal scope: a single shared
 	// UseCase serves one recognition session at a time (streamingInput/
 	// streamingOutput are fields set once at construction, not per-call);
 	// the caller (transport/adapters/api) is responsible for not starting
@@ -48,7 +51,7 @@ type Recognition interface {
 	StopRecognition()
 	// WaitRecognition blocks until any in-flight Recognize call has fully
 	// returned. Found necessary 2026-08-11 (real crash, not hypothetical —
-	// docs/adr/clip-backend.md § 15, TODO.md § H1): main.go's graceful
+	// docs/adr/clip-backend.md § 15): main.go's graceful
 	// shutdown handler used to call objectDetector.Cleanup()/
 	// semanticEncoder.Cleanup() unconditionally on SIGTERM, destroying the
 	// shared ONNX sessions while Recognize's detection goroutine could
@@ -61,8 +64,7 @@ type Recognition interface {
 }
 
 // GalleryReferences is CRUD over the "recognize by reference image"
-// gallery (TODO.md § D "reconnaissance par référence image" / § H1,
-// docs/adr/clip-backend.md § 24 — a gallery entry's name becomes usable
+// gallery (docs/adr/clip-backend.md § 24 — a gallery entry's name becomes usable
 // directly as a filter term, matched by image↔image similarity instead
 // of text↔image) — split from Recognition above for the same interface-
 // segregation reason (transport/adapters/api's galleryController only
@@ -136,8 +138,8 @@ type UseCase struct {
 	activeSessions sync.WaitGroup
 
 	// localInput is the backend's own camera/file/RTSP source — always
-	// set. browserInput feeds frames pushed over /ws/ingest (TODO.md § H2
-	// "capture caméra navigateur") — nil in CLI/interactive mode, where
+	// set. browserInput feeds frames pushed over /ws/ingest (browser
+	// camera capture) — nil in CLI/interactive mode, where
 	// there's no web server to receive an ingest connection at all; a
 	// request with Source: "browser" against a nil browserInput fails
 	// clearly (uc_recognition.go) rather than nil-panicking.
@@ -152,7 +154,7 @@ type UseCase struct {
 	trackerFactory  tracking.TrackerFactory
 
 	// gallery is the {name, embedding} storage port for reference-image
-	// filter terms (TODO.md § D/§ H1, docs/adr/clip-backend.md § 24) —
+	// filter terms (docs/adr/clip-backend.md § 24) —
 	// see uc_gallery.go for the GalleryReferences methods around it.
 	// storage.GalleryStorage, not a concrete type (dependency inversion,
 	// 2026-08-12 — this used to be *ReferenceGallery, a concrete struct
@@ -176,7 +178,7 @@ type UseCase struct {
 // (cmd/livesemantic/main.go) constructs the concrete
 // implementation/storage/inmemory.Gallery and passes it in — callers
 // that want the reference gallery *shared* across multiple UseCase
-// instances (TODO.md § H1 "Multi-flux", internal/application/session:
+// instances (multi-flux, internal/application/session:
 // every session should see the same named references, not one gallery
 // each) construct one such Repository and pass the same instance to
 // every NewUseCase call.

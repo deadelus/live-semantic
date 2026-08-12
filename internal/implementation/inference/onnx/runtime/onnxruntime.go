@@ -1,5 +1,10 @@
-// Package runtime resolves the platform-specific ONNX Runtime shared library,
-// shared by every ONNX-backed model implementation (yolo11s, and future models).
+// Package runtime wraps process-wide ONNX Runtime setup shared by every
+// ONNX-backed adapter (yolo11s.Detector, clip.Encoder): resolving the
+// platform-specific shared library (LibraryPath), environment/session
+// lifecycle (InitEnvironment/DestroyEnvironment, session.go), minimum
+// version enforcement (RequireMinVersion, version.go), and Execution
+// Provider configuration (Option, options.go) — so those packages don't
+// each reimplement the same ORT bootstrapping.
 package runtime
 
 import (

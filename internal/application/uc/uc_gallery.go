@@ -23,7 +23,7 @@ type GalleryEntryInfo struct {
 // first, unconditionally, so a gallery entry sharing a COCO name would
 // silently never be reachable as a filter term), then encodes crop once
 // (CLIP EncodeImage — the same call reanchor's semantic pass already
-// makes per candidate box, TODO.md § A) and stores the resulting
+// makes per candidate box) and stores the resulting
 // embedding under name via uc.gallery (the storage.GalleryStorage port —
 // pure storage, doesn't know what a COCO class is, see
 // infrastructure/storage.GalleryStorage's doc comment for why that split
