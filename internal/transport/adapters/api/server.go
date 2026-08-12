@@ -28,6 +28,7 @@ type Server struct {
 	port          int
 	router        *gin.Engine
 	recognition   *recognitionController
+	gallery       *galleryController
 }
 
 // NewServer creates the unified server. broadcaster receives every
@@ -51,6 +52,7 @@ func NewServer(useCases uc.UseCases, broadcaster FrameBroadcaster, frameReceiver
 		port:          port,
 		router:        router,
 		recognition:   newRecognitionController(useCases, logger),
+		gallery:       newGalleryController(useCases, logger),
 	}
 
 	server.setupRoutes()

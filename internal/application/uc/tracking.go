@@ -293,6 +293,25 @@ func newTrackManager(uc *UseCase, req dto.RecognitionRequest) (*trackManager, er
 			m.terms[t.Key] = termMatch{Cap: t.Cap, Overlap: t.Overlap}
 			continue
 		}
+		// Gallery lookup before falling back to CLIP text encoding — a
+		// third term family alongside COCO labels and free text
+		// (TODO.md § D/§ H1, docs/adr/clip-backend.md § 24): a name
+		// registered via AddGalleryReference is matched image↔image
+		// against candidates (reanchor's pass 2, unchanged — it doesn't
+		// care whether Embedding came from EncodeText or a gallery
+		// lookup) instead of text↔image. Checked after isCOCOLabel
+		// (unconditional COCO priority, same reason ReferenceGallery.Add
+		// rejects a COCO-colliding name) but before EncodeText, so a
+		// registered reference never pays for/risks a text-encode error.
+		// No LabelHint/BaseEmbedding for a gallery term — there's no free
+		// text to scan for a mentioned COCO class, and no "base noun" to
+		// diff against (defaultDifferentialMargin, § 23) — falls back to
+		// the absolute threshold alone, same as any other term with no
+		// LabelHint.
+		if emb, ok := uc.gallery.Get(t.Key); ok {
+			m.terms[t.Key] = termMatch{Cap: t.Cap, Embedding: emb, Overlap: t.Overlap}
+			continue
+		}
 		emb, err := uc.semanticEncoder.EncodeText(t.Key)
 		if err != nil {
 			return nil, fmt.Errorf("encode semantic filter term %q: %w", t.Key, err)

@@ -147,6 +147,7 @@ func newTestUseCase(detector *mockObjectDetector, encoder *mockSemanticEncoder, 
 		semanticEncoder: encoder,
 		notifier:        notifier,
 		trackerFactory:  mockTrackerFactory,
+		gallery:         NewReferenceGallery(),
 	}
 }
 
@@ -248,6 +249,66 @@ func TestNewTrackManager_SemanticTermGetsEmbedding(t *testing.T) {
 	}
 	if got.BaseEmbedding == nil {
 		t.Fatal("semantic term with a LabelHint should have a non-nil BaseEmbedding")
+	}
+}
+
+// --- gallery-backed filter terms (TODO.md § D/§ H1, docs/adr/clip-backend.md § 24) ---
+
+func TestNewTrackManager_GalleryTerm_UsesGalleryEmbeddingNotEncodeText(t *testing.T) {
+	encoder := &mockSemanticEncoder{}
+	uc := newTestUseCase(&mockObjectDetector{}, encoder, &mockAlertSender{})
+
+	galleryEmbedding := entities.Embedding{0.5, 0.5, 0}
+	if err := uc.gallery.Add("mon_sac", galleryEmbedding); err != nil {
+		t.Fatalf("gallery.Add() error = %v", err)
+	}
+
+	m, err := newTrackManager(uc, dto.RecognitionRequest{Filter: "mon_sac*1"})
+	if err != nil {
+		t.Fatalf("newTrackManager error = %v", err)
+	}
+	got, ok := m.terms["mon_sac"]
+	if !ok {
+		t.Fatalf("terms = %+v, missing the gallery term", m.terms)
+	}
+	if len(got.Embedding) != len(galleryEmbedding) || got.Embedding[0] != galleryEmbedding[0] {
+		t.Fatalf("term.Embedding = %v, want the gallery's own embedding %v", got.Embedding, galleryEmbedding)
+	}
+	if encoder.encodeTextCalls != 0 {
+		t.Fatalf("EncodeText called %d times, want 0 (a registered gallery name should never fall back to text encoding)", encoder.encodeTextCalls)
+	}
+}
+
+func TestReanchor_GalleryTerm_MatchesCandidateByImageSimilarity(t *testing.T) {
+	target := boxSized("backpack", 0, 40, 40)
+	encoder := &mockSemanticEncoder{scoreByCropSize: map[string]float32{cropSizeKey(target): 0.9}}
+	detector := &mockObjectDetector{boxes: []entities.BoundingBox{target}}
+	uc := newTestUseCase(detector, encoder, &mockAlertSender{})
+
+	// Same reference axis {1,0} the mock's EncodeText/EncodeImage already
+	// use by default — a real gallery embedding would come from a real
+	// EncodeImage call on a reference crop, not from EncodeText, but the
+	// mock's scoring math only cares about the axis, not its origin.
+	if err := uc.gallery.Add("mon_sac", entities.Embedding{1, 0, 0}); err != nil {
+		t.Fatalf("gallery.Add() error = %v", err)
+	}
+
+	req := dto.RecognitionRequest{Filter: "mon_sac*1"}
+	m, err := newTrackManager(uc, req)
+	if err != nil {
+		t.Fatalf("newTrackManager error = %v", err)
+	}
+	if err := m.reanchor(testFrame(), req); err != nil {
+		t.Fatalf("reanchor error = %v", err)
+	}
+
+	if got := m.count(); got != 1 {
+		t.Fatalf("active tracks = %d, want 1 (candidate scores 0.9 against the gallery embedding)", got)
+	}
+	for _, obj := range m.active {
+		if obj.filterKey != "mon_sac" {
+			t.Fatalf("filterKey = %q, want %q", obj.filterKey, "mon_sac")
+		}
 	}
 }
 

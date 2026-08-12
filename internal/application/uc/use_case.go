@@ -3,6 +3,7 @@ package uc
 
 import (
 	"context"
+	"image"
 	"live-semantic/internal/application/dto"
 	"live-semantic/internal/domain"
 	"live-semantic/internal/infrastructure/inference"
@@ -36,6 +37,25 @@ type UseCases interface {
 	// actually unstick a session that's still blocked reading frames),
 	// then Wait(), before tearing down objectDetector/semanticEncoder.
 	Wait()
+
+	// AddGalleryReference encodes crop (a JPEG-decoded image, typically a
+	// user-selected box from the live view) and stores it under name in
+	// the reference gallery (TODO.md § D "reconnaissance par référence
+	// image" / § H1, docs/adr/clip-backend.md § 24 — a gallery entry's
+	// name becomes usable directly as a filter term, matched by
+	// image↔image similarity instead of text↔image). See
+	// ReferenceGallery.Add for the validation rules (name can't be empty
+	// or collide with a COCO class/an existing entry).
+	AddGalleryReference(name string, crop image.Image) error
+	// RemoveGalleryReference deletes a gallery entry — see
+	// ReferenceGallery.Remove (idempotent, not an error if absent).
+	RemoveGalleryReference(name string)
+	// RenameGalleryReference — see ReferenceGallery.Rename.
+	RenameGalleryReference(oldName, newName string) error
+	// SetGalleryReferenceEnabled — see ReferenceGallery.SetEnabled.
+	SetGalleryReferenceEnabled(name string, enabled bool) error
+	// ListGalleryReferences — see ReferenceGallery.List.
+	ListGalleryReferences() []GalleryEntryInfo
 }
 
 // useCase implements the UseCases interface.
@@ -66,6 +86,13 @@ type UseCase struct {
 	// stops the *actual* running input rather than always localInput.
 	mu          sync.Mutex
 	activeInput streamer.InputStream
+
+	// gallery is the {name, embedding} store for reference-image filter
+	// terms (TODO.md § D/§ H1, docs/adr/clip-backend.md § 24) — see
+	// uc_gallery.go for the UseCases methods around it. Created
+	// internally (not a NewUseCase parameter): pure application-layer
+	// state, no external adapter to inject.
+	gallery *ReferenceGallery
 }
 
 // NewUseCase initializes your use cases with all the necessary
@@ -113,5 +140,6 @@ func NewUseCase(ctx context.Context, logger logger.Logger, localInput streamer.I
 		objectDetector:  objectDetector,
 		semanticEncoder: semanticEncoder,
 		trackerFactory:  trackerFactory,
+		gallery:         NewReferenceGallery(),
 	}, nil
 }

@@ -3,6 +3,8 @@ package api
 import (
 	"context"
 	"encoding/json"
+	"fmt"
+	"image"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -11,6 +13,7 @@ import (
 	"time"
 
 	"live-semantic/internal/application/dto"
+	"live-semantic/internal/application/uc"
 
 	"github.com/gin-gonic/gin"
 )
@@ -35,6 +38,66 @@ type mockUseCases struct {
 	result    dto.Result[dto.RecognitionResponse]
 	resultErr error
 	stopCalls int
+
+	// gallery is a minimal real in-memory store (name -> enabled), enough
+	// to exercise galleryController's REST handlers without depending on
+	// uc.UseCase's own gallery.go (a different package's internals) —
+	// this mock only needs to prove the HTTP layer wires calls through
+	// correctly, not re-verify ReferenceGallery's own logic (already
+	// covered by internal/application/uc's tests).
+	galleryMu      sync.Mutex
+	galleryEntries map[string]bool // name -> enabled
+}
+
+func (m *mockUseCases) AddGalleryReference(name string, _ image.Image) error {
+	m.galleryMu.Lock()
+	defer m.galleryMu.Unlock()
+	if m.galleryEntries == nil {
+		m.galleryEntries = map[string]bool{}
+	}
+	if _, exists := m.galleryEntries[name]; exists {
+		return fmt.Errorf("gallery entry %q already exists", name)
+	}
+	m.galleryEntries[name] = true
+	return nil
+}
+
+func (m *mockUseCases) RemoveGalleryReference(name string) {
+	m.galleryMu.Lock()
+	defer m.galleryMu.Unlock()
+	delete(m.galleryEntries, name)
+}
+
+func (m *mockUseCases) RenameGalleryReference(oldName, newName string) error {
+	m.galleryMu.Lock()
+	defer m.galleryMu.Unlock()
+	enabled, ok := m.galleryEntries[oldName]
+	if !ok {
+		return fmt.Errorf("gallery entry %q not found", oldName)
+	}
+	delete(m.galleryEntries, oldName)
+	m.galleryEntries[newName] = enabled
+	return nil
+}
+
+func (m *mockUseCases) SetGalleryReferenceEnabled(name string, enabled bool) error {
+	m.galleryMu.Lock()
+	defer m.galleryMu.Unlock()
+	if _, ok := m.galleryEntries[name]; !ok {
+		return fmt.Errorf("gallery entry %q not found", name)
+	}
+	m.galleryEntries[name] = enabled
+	return nil
+}
+
+func (m *mockUseCases) ListGalleryReferences() []uc.GalleryEntryInfo {
+	m.galleryMu.Lock()
+	defer m.galleryMu.Unlock()
+	out := make([]uc.GalleryEntryInfo, 0, len(m.galleryEntries))
+	for name, enabled := range m.galleryEntries {
+		out = append(out, uc.GalleryEntryInfo{Name: name, Enabled: enabled})
+	}
+	return out
 }
 
 func (m *mockUseCases) RecognitionUseCase(_ context.Context, _ dto.RecognitionRequest) (dto.Result[dto.RecognitionResponse], error) {

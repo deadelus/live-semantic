@@ -469,7 +469,23 @@ Dernière pièce de la grammaire relationnelle actée en § 24 : par défaut l'a
 
 **Grammaire relationnelle du § 24 désormais complète** : `%+%`, `%near=distance%`, `+shared` tous implémentés et testés. Reste ouvert (hors scope, pas commencé) : promotion de la galerie CLIP en termes nommables référençables dans le filtre, surlignage live type regex101, graphe interactif — tout ça reste H2/produit, séquencé après le backend.
 
-## 30. Références
+## 30. Galerie CLIP promue en termes nommables (2026-08-12, branche `feat/reference-gallery`)
+
+Troisième famille de terme de filtre, aux côtés des classes COCO exactes et du texte libre CLIP — TODO.md § D "reconnaissance par référence image" / § H1 "Galerie de références", promue en § 24 : une entrée de galerie nommée devient directement utilisable comme clé de terme dans le filtre.
+
+**Store** (`internal/application/uc/gallery.go`, `ReferenceGallery`) : map `{nom, embedding, enabled}` en mémoire, protégée par un `sync.RWMutex` (pas de base vectorielle à cette échelle, cf. § D d'origine). `Add` rejette un nom vide, un embedding vide, un doublon, **et une collision avec une classe COCO** — un nom de galerie identique à une classe COCO ne serait jamais atteignable (`newTrackManager` vérifie COCO en premier, sans condition) : mieux vaut une erreur claire à l'ajout qu'une entrée silencieusement inutilisable. `Rename`/`SetEnabled`/`Remove`/`List` complètent le CRUD ; `Get` traite une entrée désactivée comme absente (pas un "match vide" silencieux) et est sûre sur un récepteur `nil` (défense en profondeur, `uc.gallery` toujours initialisé par `NewUseCase` mais coût nul à vérifier quand même).
+
+**Intégration `newTrackManager`** : pour un terme non-COCO, la galerie est consultée **avant** l'appel `EncodeText` — un nom enregistré ne paie/ne risque jamais un encodage texte. Aucun `LabelHint`/`BaseEmbedding` pour un terme de galerie (pas de texte libre à scanner pour un mot COCO, pas de "nom de base" contre lequel calculer un delta, § 23) — retombe sur le seuil absolu seul, comme tout terme sans `LabelHint`. La passe 2 de `reanchor` elle-même est **inchangée** : elle calcule une similarité cosinus entre l'embedding du candidat et `term.Embedding`, sans se soucier de son origine (texte ou image) — c'est cette indifférence qui rend l'intégration presque gratuite.
+
+**REST** (`internal/transport/adapters/api/gallery.go`) : `POST /api/v1/gallery` (multipart, champs `name`+`image`, décodage JPEG/PNG), `GET /api/v1/gallery`, `PATCH /api/v1/gallery/:name` (renommage et/ou activation en un seul appel), `DELETE /api/v1/gallery/:name` (idempotent).
+
+**Tests** : 15 cas sur `ReferenceGallery` (CRUD, collisions, normalisation, réception `nil`), 3 sur les méthodes `UseCase` (encodage réel via le mock, propagation d'erreur), 2 d'intégration `newTrackManager`/`reanchor` (résolution galerie sans `EncodeText`, match réel par similarité image↔image), 9 sur les handlers REST (upload multipart réel avec une vraie image PNG encodée à la volée, erreurs 400 propagées, idempotence du delete).
+
+**Testé en conditions réelles, bout en bout, avec du vrai CLIP** (pas des mocks) : upload d'une frame JPEG réelle (extraite de `assets/videos/person.mp4`) via `curl -F`, `EncodeImage` réel, stockage, listage, renommage, activation/désactivation, suppression — tous vérifiés via l'API. Puis filtre `mon_ref` (le nom de la galerie) démarré en session réelle : logs `"Semantic candidate scored"` confirmant un vrai scoring image↔image contre les candidats YOLO de la webcam (scores 0.48-0.61, tous au-dessus du seuil). **Observation notée, pas un bug** : le meilleur score n'était pas contre "person" (la classe de l'image de référence) mais contre "potted plant"/"chair" — cohérent avec la fragilité déjà documentée (§ 7/10/22/23), maintenant observée sur le chemin image↔image plutôt que texte↔image ; pas creusé plus loin ici, à garder en tête si la galerie devient un chantier prioritaire. `go vet`/`gofmt`/`go test -race` propres sur tout le repo.
+
+**Pas fait** : l'UI de sélection en direct (clic sur une box → nom → ajout, `docs/gui/spec.md` § 3.2) reste H2, pas commencée — cette passe couvre uniquement le backend + l'API REST.
+
+## 31. Références
 
 - Modèle original : [openai/clip-vit-base-patch32](https://huggingface.co/openai/clip-vit-base-patch32) (licence MIT, [openai/CLIP](https://github.com/openai/CLIP))
 - Export ONNX retenu : [Xenova/clip-vit-base-patch32](https://huggingface.co/Xenova/clip-vit-base-patch32)
