@@ -443,7 +443,19 @@ La logique de containment est donc validée avec de vrais chiffres, pas seulemen
 
 **Pourquoi l'utilisateur n'a rien vu à l'écran malgré ces matchs confirmés en logs** : `maxMissesBeforeLost = 2` (`entities/track.go`, réglé lors d'une investigation perf antérieure, § F — sans rapport avec ce chantier) tue un track après 2 ratés **consécutifs**. Avec une détection "backpack" aussi instable (match, puis 2-4 cycles sans candidat, répété), le track créé à chaque match meurt quasiment aussitôt — durée de vie réelle de l'ordre d'un cycle (~200ms), largement sous le seuil de perception visuelle. **Pas un bug de `%+%`** — la même limitation de stabilité de détection YOLO déjà documentée (§ 9/§ 10), simplement rendue visible différemment ici. Non retouché : `maxMissesBeforeLost` est une constante globale, la changer affecterait tous les tracks (exact/sémantique/relationnel), pas seulement ce cas d'usage précis — pas une décision à prendre à la légère sans plus de recul.
 
-## 27. Références
+## 27. `%near=distance%` (proximité géométrique) implémenté (2026-08-12, branche `feat/near-relation-operator`)
+
+Deuxième opérateur relationnel, suite directe de § 26 — même grammaire (`container%relation[=param]%attachment`), nouveau registre `relationOperatorSpec{requiresParam bool}` : `+` n'accepte aucun paramètre (erreur si fourni), `near` en exige un (erreur si absent, non numérique, ou ≤ 0) — validé une fois à `parseFilterSpec`, stocké déjà parsé en `float32` (`filterTerm.RelationParam`/`termMatch.RelationParam`, plus une chaîne à reparser plus tard).
+
+**Métrique retenue pour "near" : écart de bord à bord (`boxGap`), pas centre à centre.** Une personne et une voiture garée juste à côté peuvent avoir des centres éloignés (grandes boîtes) tout en étant adjacentes — une distance centre-à-centre pénaliserait injustement les grandes boîtes. `boxGap` calcule le vide entre les rectangles sur chaque axe (0 si superposition/contact), distance euclidienne des deux écarts.
+
+**Pass 0 généralisée** : le calcul de métrique et le tri dépendent maintenant de `term.Relation` (switch à deux branches — `containmentRatio`/décroissant pour `+`, `boxGap`/croissant pour `near`, le plus proche gagne) plutôt qu'un seul chemin ratio-only. Cardinalité/appariement glouton 1:1 inchangés (§ 24/26).
+
+**Tests** : 3 nouveaux tests `reanchor` (match sous le seuil, rejet au-dessus, classement — ce dernier construit délibérément deux paires indépendantes puisque seule la boîte **conteneur** est suivie, une paire seule ne peut pas démontrer un classement) + 5 nouveaux cas de grammaire (paramètre requis/rejeté selon l'opérateur, non-numérique, non-positif). **Classement vérifié détecter une régression réelle** : tri désactivé temporairement (`if false && term.Relation == "near"`), 5/5 échecs reproductibles ; restauré, tout vert.
+
+**Testé en conditions réelles** : câblage confirmé réactif (`person%near=500%chair` sur webcam locale, logs `"Relational term has no candidates this cycle"` à chaque cycle) — pas de scène avec une vraie correspondance disponible pendant ce test automatisé (personne physiquement devant la caméra), donc le cas positif reste à valider visuellement par l'utilisateur. `go vet`/`gofmt`/`go test -race` propres.
+
+## 28. Références
 
 - Modèle original : [openai/clip-vit-base-patch32](https://huggingface.co/openai/clip-vit-base-patch32) (licence MIT, [openai/CLIP](https://github.com/openai/CLIP))
 - Export ONNX retenu : [Xenova/clip-vit-base-patch32](https://huggingface.co/Xenova/clip-vit-base-patch32)

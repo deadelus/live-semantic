@@ -57,8 +57,15 @@ type filterTerm struct {
 	// composed phrase. Key holds the full canonical relation string
 	// ("person%+%backpack") for identity/dedup/display — Container alone
 	// ("person") for matching logic.
-	Relation      string
-	RelationParam string
+	Relation string
+	// RelationParam holds the operator's parameter, parsed to its numeric
+	// value already (0 for "+", which takes none) — e.g. the pixel
+	// distance threshold for "near=50". Kept as a plain float32 rather
+	// than a string: every current/planned operator's parameter is
+	// numeric, and validating/parsing it once here (parseFilterSpec)
+	// rather than deferring to trackManager keeps the same fail-fast
+	// discipline as Cap's int parsing right above.
+	RelationParam float32
 	Container     string
 	Attachment    string
 }
@@ -192,15 +199,26 @@ func splitRelation(part string) (container, relation, param, rest string, hasRel
 	return container, relation, param, rest, true, nil
 }
 
-// relationOperators is the closed set of recognized relation operator
-// names — deliberately small today (docs/adr/clip-backend.md § 24: "%+%"
-// for containment implemented now, others like "%near=distance%"
-// intentionally deferred until there's a real need, each with its own
-// parameters to design). An unrecognized name errors clearly rather than
-// silently matching nothing, same philosophy as "+option" (filterTerm's
-// doc comment).
-var relationOperators = map[string]struct{}{
-	"+": {},
+// relationOperatorSpec describes one recognized relation operator's
+// parameter shape — requiresParam distinguishes "+" (containment, no
+// parameter — relationContainmentThreshold, tracking.go, is a fixed
+// constant, not per-term yet) from "near" (proximity, requires a pixel
+// distance — there's no sane fixed default the way there is for
+// containment, docs/adr/clip-backend.md § 24 always described "near" as
+// needing its own parameter).
+type relationOperatorSpec struct {
+	requiresParam bool
+}
+
+// relationOperators is the closed set of recognized relation operators —
+// deliberately small (docs/adr/clip-backend.md § 24/28: "+" containment
+// and "near" proximity, others intentionally deferred until there's a
+// real need). An unrecognized name errors clearly rather than silently
+// matching nothing, same philosophy as "+option" (filterTerm's doc
+// comment).
+var relationOperators = map[string]relationOperatorSpec{
+	"+":    {requiresParam: false},
+	"near": {requiresParam: true},
 }
 
 // parseFilterSpec parses a comma-separated filter spec into a set of
@@ -214,6 +232,7 @@ var relationOperators = map[string]struct{}{
 //	person*2,car                        -> two independent exact terms
 //	person%+%backpack                   -> Relation="+" Container="person" Attachment="backpack" Key="person%+%backpack"
 //	person%+%backpack*2+overlap         -> cap/options apply to the whole relation, not "backpack" alone
+//	person%near=50%car                  -> Relation="near" RelationParam=50 (pixel gap threshold)
 //
 // Empty raw (after trimming) returns (nil, nil): "no filter",
 // trackManager then accepts every label and never calls CLIP.
@@ -291,9 +310,24 @@ func parseFilterSpec(raw string) ([]filterTerm, error) {
 
 		var term filterTerm
 		if hasRelation {
-			if _, ok := relationOperators[relation]; !ok {
+			spec, ok := relationOperators[relation]
+			if !ok {
 				return nil, fmt.Errorf("unknown relation operator %q in filter term %q", relation, part)
 			}
+			var paramValue float32
+			switch {
+			case spec.requiresParam && param == "":
+				return nil, fmt.Errorf("relation operator %q in filter term %q requires a parameter (e.g. \"%s=50\")", relation, part, relation)
+			case !spec.requiresParam && param != "":
+				return nil, fmt.Errorf("relation operator %q in filter term %q doesn't take a parameter, got %q", relation, part, param)
+			case spec.requiresParam:
+				v, err := strconv.ParseFloat(param, 32)
+				if err != nil || v <= 0 {
+					return nil, fmt.Errorf("invalid parameter %q for relation operator %q in filter term %q: must be a positive number", param, relation, part)
+				}
+				paramValue = float32(v)
+			}
+
 			container = normalizeFilter(container)
 			if !isCOCOLabel(container) {
 				return nil, fmt.Errorf("relation container %q in filter term %q must be a known COCO class (v1: no semantic/fine-tuned container yet)", container, part)
@@ -311,7 +345,7 @@ func parseFilterSpec(raw string) ([]filterTerm, error) {
 			canonical += "%" + key
 			term = filterTerm{
 				Key: canonical, Cap: capValue,
-				Relation: relation, RelationParam: param,
+				Relation: relation, RelationParam: paramValue,
 				Container: container, Attachment: key,
 			}
 		} else {

@@ -93,6 +93,37 @@ func containmentRatio(attachment, container entities.BoundingBox) float32 {
 	return attachment.Intersection(&container) / area
 }
 
+// boxGap returns the pixel distance between a's and b's nearest edges —
+// 0 if they touch or overlap. Used by the "near" relation operator
+// (docs/adr/clip-backend.md § 27) as a proximity metric, distinct from
+// containmentRatio's "+": deliberately edge-to-edge, not center-to-
+// center — two large boxes with far-apart centers can still be
+// edge-adjacent (e.g. a person and a car parked right next to them),
+// which "near" should recognize as close; a center-distance metric would
+// penalize large boxes unfairly relative to small ones for the same
+// physical closeness.
+func boxGap(a, b entities.BoundingBox) float32 {
+	ra, rb := a.ToRect(), b.ToRect()
+
+	dx := float32(0)
+	switch {
+	case ra.Max.X < rb.Min.X:
+		dx = float32(rb.Min.X - ra.Max.X)
+	case rb.Max.X < ra.Min.X:
+		dx = float32(ra.Min.X - rb.Max.X)
+	}
+
+	dy := float32(0)
+	switch {
+	case ra.Max.Y < rb.Min.Y:
+		dy = float32(rb.Min.Y - ra.Max.Y)
+	case rb.Max.Y < ra.Min.Y:
+		dy = float32(ra.Min.Y - rb.Max.Y)
+	}
+
+	return float32(math.Sqrt(float64(dx*dx + dy*dy)))
+}
+
 // Note on reanchor cadence: there used to be an explicit
 // defaultReanchorInterval (frame-count-based gate, plus a
 // LIVESEMANTIC_REANCHOR_INTERVAL env var for A/B testing during the perf
@@ -180,7 +211,7 @@ type termMatch struct {
 	// both be exact COCO labels, checked once at parseFilterSpec time).
 	// Consulted by reanchor's new relational pass — see its doc comment.
 	Relation      string
-	RelationParam string
+	RelationParam float32
 	Container     string
 	Attachment    string
 }
@@ -512,21 +543,25 @@ func (m *trackManager) reanchor(frame *entities.Frame, req dto.RecognitionReques
 	// reasonable to let it claim boxes first over a plain single-condition
 	// term elsewhere in the same filter.
 	//
-	// v1: one operator ("+", containment) — an attachment box counts as
+	// Two operators today: "+" (containment — an attachment box counts as
 	// "in" a container box when relationContainmentThreshold of the
-	// attachment's own area falls inside the container (not IoU: a small
+	// attachment's own area falls inside the container; not IoU, a small
 	// attachment like a backpack inside a much larger container like a
 	// person would score a low IoU by construction — union dominated by
-	// the person's area — despite being fully contained, which is exactly
-	// what this relation means to capture).
+	// the person's area — despite being fully contained) and "near"
+	// (proximity — the pixel gap between the two boxes' nearest edges,
+	// docs/adr/clip-backend.md § 27, must be under the term's own
+	// RelationParam; edge-to-edge rather than center-to-center, see
+	// boxGap's doc comment).
 	//
 	// Cardinality (docs/adr/clip-backend.md § 24, decided before any code
 	// existed here): every valid pair is its own match, greedy 1:1 per
 	// cycle (a box claimed by one pair can't join a second this cycle —
-	// "+shared" for N:M is deferred, not implemented), ranked by
-	// containment ratio descending, top Cap pairs kept. Both boxes in a
-	// kept pair are marked claimed — pass 1/2 never separately reclaim
-	// them (no "+overlap" equivalent for a relational term yet either).
+	// "+shared" for N:M is deferred, not implemented), ranked best-first
+	// (highest containment ratio, or shortest gap for "near" — see the
+	// sort below), top Cap pairs kept. Both boxes in a kept pair are
+	// marked claimed — pass 1/2 never separately reclaim them (no
+	// "+overlap" equivalent for a relational term yet either).
 	for key, term := range m.terms {
 		if term.Relation == "" {
 			continue
@@ -534,7 +569,7 @@ func (m *trackManager) reanchor(frame *entities.Frame, req dto.RecognitionReques
 
 		type relPair struct {
 			containerIdx, attachmentIdx int
-			ratio                       float32
+			metric                      float32 // meaning depends on term.Relation — see the dispatch below
 		}
 
 		// Counted independently of the pairing loop below (not inside its
@@ -576,23 +611,47 @@ func (m *trackManager) reanchor(frame *entities.Frame, req dto.RecognitionReques
 				if ai == ci || claimed[ai] || abox.Label != term.Attachment {
 					continue
 				}
-				ratio := containmentRatio(abox, cbox)
-				// Logged regardless of whether it clears the threshold —
-				// same rationale as pass 2's "Semantic candidate scored".
+
+				// metric's meaning and accept condition depend on the
+				// operator — containment ratio (higher = better, "in") vs.
+				// proximity gap (lower = better, "close"). Both logged
+				// regardless of whether they clear their own accept
+				// condition, same rationale as pass 2's "Semantic
+				// candidate scored": the only visibility into why a
+				// relational term didn't match something that looked
+				// close in the video.
+				var metric float32
+				var accepted bool
+				switch term.Relation {
+				case "near":
+					metric = boxGap(abox, cbox)
+					accepted = metric <= term.RelationParam
+				default: // "+"
+					metric = containmentRatio(abox, cbox)
+					accepted = metric >= relationContainmentThreshold
+				}
 				m.uc.logger.Info("Relational candidate scored", map[string]interface{}{
-					"term":            key,
-					"container":       term.Container,
-					"attachment":      term.Attachment,
-					"ratio":           ratio,
-					"above_threshold": ratio >= relationContainmentThreshold,
+					"term":       key,
+					"relation":   term.Relation,
+					"container":  term.Container,
+					"attachment": term.Attachment,
+					"metric":     metric,
+					"accepted":   accepted,
 				})
-				if ratio < relationContainmentThreshold {
+				if !accepted {
 					continue
 				}
-				pairs = append(pairs, relPair{containerIdx: ci, attachmentIdx: ai, ratio: ratio})
+				pairs = append(pairs, relPair{containerIdx: ci, attachmentIdx: ai, metric: metric})
 			}
 		}
-		sort.Slice(pairs, func(a, b int) bool { return pairs[a].ratio > pairs[b].ratio })
+		// "near" ranks shortest gap first (ascending); every other
+		// operator ("+") ranks highest metric first (descending) — same
+		// two-branch dispatch as the scoring switch above.
+		if term.Relation == "near" {
+			sort.Slice(pairs, func(a, b int) bool { return pairs[a].metric < pairs[b].metric })
+		} else {
+			sort.Slice(pairs, func(a, b int) bool { return pairs[a].metric > pairs[b].metric })
+		}
 
 		usedContainer := make(map[int]bool, len(pairs))
 		usedAttachment := make(map[int]bool, len(pairs))
@@ -610,9 +669,10 @@ func (m *trackManager) reanchor(frame *entities.Frame, req dto.RecognitionReques
 			claimed[p.attachmentIdx] = true
 			m.uc.logger.Info("Relational candidate matched", map[string]interface{}{
 				"term":       key,
+				"relation":   term.Relation,
 				"container":  term.Container,
 				"attachment": term.Attachment,
-				"ratio":      p.ratio,
+				"metric":     p.metric,
 			})
 			m.matchOrSpawn(frame, result.BoundingBoxes[p.containerIdx], key, term.Cap, 0, now, matchedTrackIDs, req)
 			kept++
