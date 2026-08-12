@@ -24,6 +24,13 @@ func (s *Server) setupRoutes() {
 		v1.POST("/recognition/start", s.recognition.start)
 		v1.POST("/recognition/stop", s.recognition.stop)
 		v1.GET("/recognition/status", s.recognition.status)
+
+		// Reference gallery CRUD (TODO.md § D/§ H1, docs/adr/
+		// clip-backend.md § 24) — see gallery.go.
+		v1.POST("/gallery", s.gallery.add)
+		v1.GET("/gallery", s.gallery.list)
+		v1.DELETE("/gallery/:name", s.gallery.remove)
+		v1.PATCH("/gallery/:name", s.gallery.update)
 	}
 }
 
