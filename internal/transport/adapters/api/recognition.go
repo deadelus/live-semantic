@@ -27,8 +27,9 @@ type recognitionController struct {
 	logger   logger.Logger
 	useCases uc.UseCases
 
-	mu      sync.Mutex
-	running bool
+	mu        sync.Mutex
+	running   bool
+	lastError string
 }
 
 func newRecognitionController(useCases uc.UseCases, logger logger.Logger) *recognitionController {
@@ -59,6 +60,7 @@ func (rc *recognitionController) start(c *gin.Context) {
 		return
 	}
 	rc.running = true
+	rc.lastError = "" // clear any error from a previous session — see status's doc comment
 	rc.mu.Unlock()
 
 	go func() {
@@ -75,6 +77,9 @@ func (rc *recognitionController) start(c *gin.Context) {
 		})
 		if !resp.Success {
 			rc.logger.Error("Recognition session ended with error", map[string]interface{}{"error": resp.Error})
+			rc.mu.Lock()
+			rc.lastError = resp.Error
+			rc.mu.Unlock()
 			return
 		}
 		rc.logger.Info("Recognition session ended", nil)
@@ -104,10 +109,25 @@ func (rc *recognitionController) stop(c *gin.Context) {
 	c.JSON(http.StatusAccepted, gin.H{"status": "stopping"})
 }
 
+// status reports whether a session is running and, if the most recent
+// one ended in an error (e.g. an invalid filter), that error — TODO.md
+// § A's "l'API REST ne remonte pas au client un filtre invalide" fixed
+// 2026-08-12, now that H2 gives a client a real reason to poll this
+// (docs/adr/clip-backend.md § 26 onward): start() used to return 202
+// immediately regardless of whether the filter was valid, and the
+// failure only ever surfaced in server logs — a GUI had no way to show
+// the user why nothing happened. lastError is cleared at the start of
+// the *next* start() call, not here, so it survives across polls until
+// superseded by a new attempt.
 func (rc *recognitionController) status(c *gin.Context) {
 	rc.mu.Lock()
 	running := rc.running
+	lastError := rc.lastError
 	rc.mu.Unlock()
 
-	c.JSON(http.StatusOK, gin.H{"running": running})
+	body := gin.H{"running": running}
+	if lastError != "" {
+		body["error"] = lastError
+	}
+	c.JSON(http.StatusOK, body)
 }

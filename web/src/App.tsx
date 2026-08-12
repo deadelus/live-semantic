@@ -22,7 +22,19 @@ function App() {
   useEffect(() => {
     const poll = () => {
       getStatus()
-        .then((s) => setRunning(s.running))
+        .then((s) => {
+          setRunning(s.running)
+          // Surfaces a session that failed server-side (e.g. an invalid
+          // filter) — backend fix 2026-08-12, previously only visible in
+          // server logs, silently doing nothing from this UI's point of
+          // view. Only overwrite the locally-set error with the
+          // server's when the server actually has one, so a
+          // client-side error (e.g. getUserMedia denied) shown by
+          // handleStart isn't immediately clobbered by the next poll.
+          if (s.error) {
+            setError(s.error)
+          }
+        })
         .catch(() => {
           /* transient network hiccup — next poll will retry */
         })
