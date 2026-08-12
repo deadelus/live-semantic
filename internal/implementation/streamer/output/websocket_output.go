@@ -3,22 +3,26 @@ package output
 
 import (
 	"bytes"
+	"encoding/json"
 	"image/jpeg"
 	"live-semantic/internal/domain/entities"
+	"live-semantic/internal/infrastructure/streamer"
 	"sync"
 
 	"github.com/gorilla/websocket"
 )
 
+var _ streamer.BoxAwareOutputStream = (*WebSocketOutput)(nil)
+
 // WebSocketOutput broadcasts rendered frames to every connected client as
-// binary JPEG messages. Boxes/labels/scores are already burned into
-// frame.Image by RecognitionUseCase (uc_recognition.go) before Render is
-// called — this matches the "MJPEG-like" fallback described in
-// docs/gui/spec.md § 2, not the richer JPEG+JSON-per-message format also
-// described there (boxes as structured data). H1 minimal scope
-// (TODO.md § H1): good enough to validate the transport end-to-end;
-// revisit once click-to-select (galerie de références) needs box
-// geometry as data rather than pixels.
+// binary JPEG messages, plus box/label/score data as a separate JSON text
+// message (RenderBoxes, streamer.BoxAwareOutputStream — TODO.md § H2,
+// 2026-08-12) so a client draws its own overlays instead of receiving
+// them pre-composited into the image's pixels. History: H1 minimal scope
+// originally burned boxes into frame.Image server-side (the "MJPEG-like"
+// fallback described in docs/gui/spec.md § 2) — good enough to validate
+// the transport end-to-end, but click-to-select (galerie de références,
+// docs/gui/mockups/ screen 1d) needs box geometry as data, not pixels.
 type WebSocketOutput struct {
 	mu      sync.RWMutex
 	clients map[*websocket.Conn]struct{}
@@ -66,12 +70,42 @@ func (w *WebSocketOutput) Render(frame *entities.Frame) error {
 	if err := jpeg.Encode(buf, frame.Image, &jpeg.Options{Quality: 80}); err != nil {
 		return err
 	}
-	payload := buf.Bytes()
+	return w.broadcast(websocket.BinaryMessage, buf.Bytes())
+}
 
+// boxesMessage envelopes RenderBoxes' payload — a wrapper object rather
+// than a bare JSON array, so a future second message type (e.g. per-
+// stream metadata) can be added on this same channel without an
+// ambiguous "is this array a boxes list or something else" client-side
+// guess. Field is exported (encoding/json needs that) despite the type
+// itself being unexported — only used internally to this file.
+type boxesMessage struct {
+	Boxes []streamer.BoxData `json:"boxes"`
+}
+
+// RenderBoxes implements streamer.BoxAwareOutputStream — broadcasts boxes
+// as a JSON text message, same client list/dead-client handling as
+// Render's binary frames (see broadcast). boxes is marshaled even when
+// empty (an explicit "no detections this cycle" message, not silence —
+// lets a client clear stale overlays instead of guessing why nothing
+// arrived).
+func (w *WebSocketOutput) RenderBoxes(boxes []streamer.BoxData) error {
+	payload, err := json.Marshal(boxesMessage{Boxes: boxes})
+	if err != nil {
+		return err
+	}
+	return w.broadcast(websocket.TextMessage, payload)
+}
+
+// broadcast writes payload to every connected client, dropping (and
+// closing) any whose write fails — a slow/dead consumer must never block
+// the video loop. Shared by Render (binary JPEG) and RenderBoxes (JSON
+// text) — same delivery semantics, only the message type differs.
+func (w *WebSocketOutput) broadcast(messageType int, payload []byte) error {
 	w.mu.RLock()
 	var dead []*websocket.Conn
 	for conn := range w.clients {
-		if err := conn.WriteMessage(websocket.BinaryMessage, payload); err != nil {
+		if err := conn.WriteMessage(messageType, payload); err != nil {
 			dead = append(dead, conn)
 		}
 	}

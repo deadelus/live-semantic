@@ -1,8 +1,10 @@
 package output
 
 import (
+	"encoding/json"
 	"image"
 	"live-semantic/internal/domain/entities"
+	"live-semantic/internal/infrastructure/streamer"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -161,6 +163,89 @@ func TestRender_DropsClientOnWriteFailure(t *testing.T) {
 		t.Fatalf("Render() error = %v, want nil (per-client failures aren't fatal)", err)
 	}
 
+	if len(wo.clients) != 0 {
+		t.Fatalf("clients = %d, want 0 (dead client should have been dropped)", len(wo.clients))
+	}
+}
+
+func TestRenderBoxes_BroadcastsJSONToAllClients(t *testing.T) {
+	wo := NewWebSocketOutput()
+	server1, client1, cleanup1 := newConnPair(t)
+	defer cleanup1()
+	server2, client2, cleanup2 := newConnPair(t)
+	defer cleanup2()
+
+	wo.AddClient(server1)
+	wo.AddClient(server2)
+
+	boxes := []streamer.BoxData{
+		{ID: "person", Label: "person (89.97%)", TrackID: "track-1", X1: 0.1, Y1: 0.2, X2: 0.3, Y2: 0.4},
+	}
+	if err := wo.RenderBoxes(boxes); err != nil {
+		t.Fatalf("RenderBoxes() error = %v", err)
+	}
+
+	for i, client := range []*websocket.Conn{client1, client2} {
+		client.SetReadDeadline(time.Now().Add(2 * time.Second))
+		msgType, payload, err := client.ReadMessage()
+		if err != nil {
+			t.Fatalf("client %d: ReadMessage() error = %v", i, err)
+		}
+		if msgType != websocket.TextMessage {
+			t.Fatalf("client %d: message type = %d, want TextMessage", i, msgType)
+		}
+		var body struct {
+			Boxes []streamer.BoxData `json:"boxes"`
+		}
+		if err := json.Unmarshal(payload, &body); err != nil {
+			t.Fatalf("client %d: failed to decode JSON: %v (payload: %s)", i, err, payload)
+		}
+		if len(body.Boxes) != 1 || body.Boxes[0].ID != "person" || body.Boxes[0].TrackID != "track-1" {
+			t.Fatalf("client %d: decoded boxes = %+v, want the box sent", i, body.Boxes)
+		}
+	}
+}
+
+func TestRenderBoxes_EmptySliceStillSendsAMessage(t *testing.T) {
+	// A client needs an explicit "no detections this cycle" message to
+	// clear stale overlays — silence would be indistinguishable from a
+	// dropped/slow connection.
+	wo := NewWebSocketOutput()
+	serverConn, clientConn, cleanup := newConnPair(t)
+	defer cleanup()
+	wo.AddClient(serverConn)
+
+	if err := wo.RenderBoxes(nil); err != nil {
+		t.Fatalf("RenderBoxes(nil) error = %v", err)
+	}
+
+	clientConn.SetReadDeadline(time.Now().Add(2 * time.Second))
+	_, payload, err := clientConn.ReadMessage()
+	if err != nil {
+		t.Fatalf("ReadMessage() error = %v", err)
+	}
+	var body struct {
+		Boxes []streamer.BoxData `json:"boxes"`
+	}
+	if err := json.Unmarshal(payload, &body); err != nil {
+		t.Fatalf("failed to decode JSON: %v (payload: %s)", err, payload)
+	}
+	if len(body.Boxes) != 0 {
+		t.Fatalf("decoded boxes = %+v, want empty", body.Boxes)
+	}
+}
+
+func TestRenderBoxes_DropsClientOnWriteFailure(t *testing.T) {
+	wo := NewWebSocketOutput()
+	serverConn, _, cleanup := newConnPair(t)
+	defer cleanup()
+
+	wo.AddClient(serverConn)
+	serverConn.Close()
+
+	if err := wo.RenderBoxes([]streamer.BoxData{{ID: "person"}}); err != nil {
+		t.Fatalf("RenderBoxes() error = %v, want nil (per-client failures aren't fatal)", err)
+	}
 	if len(wo.clients) != 0 {
 		t.Fatalf("clients = %d, want 0 (dead client should have been dropped)", len(wo.clients))
 	}

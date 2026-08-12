@@ -498,7 +498,23 @@ Troisième famille de terme de filtre, aux côtés des classes COCO exactes et d
 
 **Ce qui reste à faire, sur une machine avec le matériel** : exécuter `prepare_dataset.py` puis `train.py`, exporter en ONNX (opset 19 pour rester compatible avec le runtime actuel — `yolo11s.go` documente déjà cette contrainte), évaluer sur un sous-ensemble de validation COCO avant de faire confiance au résultat au-delà de "hat", puis mettre à jour manuellement `entities/class.go`/`yolo11s.go` côté Go (`modelClasses = 81`) et remplacer `assets/models/yolo11s.onnx` — étape volontairement manuelle/relue, pas automatisée, vu l'importance de ce modèle dans tout le pipeline.
 
-## 32. Références
+## 32. Protocole `/ws` enrichi — boîtes en JSON séparé (2026-08-12, branche `feat/ws-structured-boxes`)
+
+TODO.md § H2, préparatoire à l'intégration des maquettes GUI (`docs/gui/mockups/`, écrans 1c/1d/1h — boxes dessinées comme éléments DOM cliquables/survolables, pas des pixels figés). Écart assumé depuis § 26 ("boxes déjà dessinées par `RecognitionUseCase`, pas de JSON séparé — suffisant pour valider le transport") — maintenant comblé.
+
+**Nouveau port** (`internal/infrastructure/streamer/streamer.go`) : `BoxData` (label déjà formaté, `TrackID`, coordonnées **normalisées [0,1]** — un client n'a pas besoin de connaître la résolution source pour positionner un overlay) et `BoxAwareOutputStream` (capacité optionnelle, vérifiée par assertion de type dans `uc_recognition.go`, pas ajoutée à l'interface `OutputStream` de base — la fenêtre gocv/CLI n'a pas de canal séparé pour du structuré et n'en a pas besoin).
+
+**`WebSocketOutput`** implémente désormais les deux : `Render` (JPEG binaire, image **non annotée** quand un client box-aware est branché) et `RenderBoxes` (JSON texte, enveloppe `{"boxes":[...]}` — un wrapper plutôt qu'un tableau nu, pour pouvoir ajouter un futur second type de message sans ambiguïté côté client). Toujours envoyé, même vide (`{"boxes":[]}`) — un client doit pouvoir distinguer "rien détecté ce cycle" d'une connexion qui traîne.
+
+**`uc_recognition.go`** : la logique de formatage du label (`boxDescription`, extraite, partagée entre les deux chemins) tourne à l'identique quel que soit le mode de sortie. `cascadeOffsets` (décalage pixel des boxes quasi-identiques, § 19) reste réservé au dessin serveur — un client box-aware peut décaler ses labels avec un vrai layout DOM, plus besoin du contournement pixel.
+
+**Tests** : 3 nouveaux sur `WebSocketOutput` (diffusion JSON à plusieurs clients, message vide explicite, client mort abandonné — même sémantique que `Render`).
+
+**Testé en conditions réelles** : client WS Python maison distinguant les frames binaires (JPEG, SOI `0xFFD8` confirmé, non annoté) des frames texte (`{"boxes":[]}`, envoyées à chaque cycle même sans détection) sur la même connexion `/ws`, session réelle démarrée/arrêtée proprement (pas de SIGABRT/SIGSEGV). `go vet`/`gofmt`/`go test -race` propres sur tout le repo.
+
+**Pas fait** : le frontend (`web/`) ne consomme pas encore ce nouveau canal — `VideoStream.tsx` affiche toujours l'image telle quelle, sans dessiner d'overlay. Prochaine étape logique côté H2.
+
+## 33. Références
 
 - Modèle original : [openai/clip-vit-base-patch32](https://huggingface.co/openai/clip-vit-base-patch32) (licence MIT, [openai/CLIP](https://github.com/openai/CLIP))
 - Export ONNX retenu : [Xenova/clip-vit-base-patch32](https://huggingface.co/Xenova/clip-vit-base-patch32)
