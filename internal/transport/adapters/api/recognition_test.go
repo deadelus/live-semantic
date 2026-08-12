@@ -3,6 +3,7 @@ package api
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"image"
 	"net/http"
@@ -284,4 +285,67 @@ func TestStatus_ReflectsRunningState(t *testing.T) {
 	close(mock.proceed)
 	waitUntil(t, time.Second, func() bool { return !rc.isRunningForTest() })
 	assertStatus(false)
+}
+
+// TestStatus_SurfacesLastErrorAfterFailedSession — TODO.md § A "l'API
+// REST ne remonte pas au client un filtre invalide", fixed 2026-08-12:
+// a session that ends in error (e.g. an invalid filter) must be visible
+// via GET /recognition/status, not just server logs.
+func TestStatus_SurfacesLastErrorAfterFailedSession(t *testing.T) {
+	mock := &mockUseCases{resultErr: errors.New("invalid filter: unknown COCO label")}
+	rc := newRecognitionController(mock, noopLogger{})
+
+	startCtx, _ := newTestContext(http.MethodPost, "/api/v1/recognition/start", `{"filter":"bogus"}`)
+	rc.start(startCtx)
+	waitUntil(t, time.Second, func() bool { return !rc.isRunningForTest() }) // resultErr set -> RecognitionUseCase "returns" immediately
+
+	c, w := newTestContext(http.MethodGet, "/api/v1/recognition/status", "")
+	rc.status(c)
+
+	var body map[string]any
+	if err := json.Unmarshal(w.Body.Bytes(), &body); err != nil {
+		t.Fatalf("failed to decode response body: %v", err)
+	}
+	if body["running"] != false {
+		t.Fatalf("running = %v, want false", body["running"])
+	}
+	if body["error"] != "invalid filter: unknown COCO label" {
+		t.Fatalf("error field = %v, want the session's actual error", body["error"])
+	}
+}
+
+// TestStatus_LastErrorClearedByNextStart confirms a stale error from a
+// past failed session doesn't linger forever — a fresh, currently
+// successful start() must clear it.
+func TestStatus_LastErrorClearedByNextStart(t *testing.T) {
+	mock := &mockUseCases{resultErr: errors.New("boom")}
+	rc := newRecognitionController(mock, noopLogger{})
+
+	startCtx, _ := newTestContext(http.MethodPost, "/api/v1/recognition/start", `{"filter":"bogus"}`)
+	rc.start(startCtx)
+	waitUntil(t, time.Second, func() bool { return !rc.isRunningForTest() })
+
+	if got := rc.lastError; got == "" {
+		t.Fatal("lastError should be set after the first failed session")
+	}
+
+	// Second start, this time the mock succeeds (no proceed channel ->
+	// RecognitionUseCase "returns" immediately with the zero Result).
+	mock.mu.Lock()
+	mock.resultErr = nil
+	mock.mu.Unlock()
+
+	startCtx2, _ := newTestContext(http.MethodPost, "/api/v1/recognition/start", `{"filter":"person"}`)
+	rc.start(startCtx2)
+	waitUntil(t, time.Second, func() bool { return !rc.isRunningForTest() })
+
+	c, w := newTestContext(http.MethodGet, "/api/v1/recognition/status", "")
+	rc.status(c)
+	var body map[string]any
+	if err := json.Unmarshal(w.Body.Bytes(), &body); err != nil {
+		t.Fatalf("failed to decode response body: %v", err)
+	}
+	if _, hasError := body["error"]; hasError {
+		t.Fatalf("error field = %v, want absent after a successful session superseded the failed one", body["error"])
+	}
 }

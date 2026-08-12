@@ -6,6 +6,11 @@
 
 export interface RecognitionStatus {
   running: boolean
+  // Set when the most recent session ended in an error (e.g. an invalid
+  // filter) — backend fix 2026-08-12 (TODO.md § A, recognition.go's
+  // status handler) specifically so a GUI has something to show instead
+  // of silently doing nothing (previously only visible in server logs).
+  error?: string
 }
 
 async function parseJSONOrThrow<T>(res: Response): Promise<T> {
