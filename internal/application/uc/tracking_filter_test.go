@@ -600,6 +600,115 @@ func TestReanchor_SemanticTerm_LabelHintIgnoresMismatchedHighScorer(t *testing.T
 // to reach StateConfirmed (4 instead of minHitsToConfirm=3), and in the
 // worst case (a brief miss on the cycle right after spawning) could reach
 // StateLost without ever confirming, since maxMissesBeforeLost=2.
+// --- relational term tests ("container%+%attachment", docs/adr/clip-backend.md § 24) ---
+
+// containedBackpack/farBackpack/personContainer are shared by the
+// relational tests below: a "person" box, one "backpack" box fully inside
+// it (containmentRatio 1.0), and one far away (containmentRatio 0).
+func personContainer() entities.BoundingBox {
+	return entities.BoundingBox{Label: "person", X1: 0, Y1: 0, X2: 100, Y2: 200}
+}
+func containedBackpack() entities.BoundingBox {
+	return entities.BoundingBox{Label: "backpack", X1: 20, Y1: 20, X2: 80, Y2: 80}
+}
+func farBackpack() entities.BoundingBox {
+	return entities.BoundingBox{Label: "backpack", X1: 1000, Y1: 1000, X2: 1060, Y2: 1060}
+}
+
+func TestReanchor_RelationalTerm_ContainmentMatches(t *testing.T) {
+	detector := &mockObjectDetector{boxes: []entities.BoundingBox{personContainer(), containedBackpack()}}
+	uc := newTestUseCase(detector, &mockSemanticEncoder{}, &mockAlertSender{})
+
+	req := dto.RecognitionRequest{Filter: "person%+%backpack"}
+	m, err := newTrackManager(uc, req)
+	if err != nil {
+		t.Fatalf("newTrackManager error = %v", err)
+	}
+	if err := m.reanchor(testFrame(), req); err != nil {
+		t.Fatalf("reanchor error = %v", err)
+	}
+
+	if got := m.count(); got != 1 {
+		t.Fatalf("active tracks = %d, want 1 (backpack fully inside person satisfies containment)", got)
+	}
+	for _, obj := range m.active {
+		if obj.filterKey != "person%+%backpack" {
+			t.Fatalf("filterKey = %q, want %q", obj.filterKey, "person%+%backpack")
+		}
+		if obj.track.Class != "person" {
+			t.Fatalf("track.Class = %q, want %q (the container box, not the attachment)", obj.track.Class, "person")
+		}
+	}
+}
+
+func TestReanchor_RelationalTerm_NoContainment_NoMatch(t *testing.T) {
+	detector := &mockObjectDetector{boxes: []entities.BoundingBox{personContainer(), farBackpack()}}
+	uc := newTestUseCase(detector, &mockSemanticEncoder{}, &mockAlertSender{})
+
+	req := dto.RecognitionRequest{Filter: "person%+%backpack"}
+	m, err := newTrackManager(uc, req)
+	if err != nil {
+		t.Fatalf("newTrackManager error = %v", err)
+	}
+	if err := m.reanchor(testFrame(), req); err != nil {
+		t.Fatalf("reanchor error = %v", err)
+	}
+
+	if got := m.count(); got != 0 {
+		t.Fatalf("active tracks = %d, want 0 (backpack far from person never satisfies containment)", got)
+	}
+}
+
+func TestReanchor_RelationalTerm_CapLimitsPairs(t *testing.T) {
+	personA := entities.BoundingBox{Label: "person", X1: 0, Y1: 0, X2: 100, Y2: 200}
+	backpackA := entities.BoundingBox{Label: "backpack", X1: 20, Y1: 20, X2: 80, Y2: 80}
+	personB := entities.BoundingBox{Label: "person", X1: 1000, Y1: 0, X2: 1100, Y2: 200}
+	backpackB := entities.BoundingBox{Label: "backpack", X1: 1020, Y1: 20, X2: 1080, Y2: 80}
+
+	detector := &mockObjectDetector{boxes: []entities.BoundingBox{personA, backpackA, personB, backpackB}}
+	uc := newTestUseCase(detector, &mockSemanticEncoder{}, &mockAlertSender{})
+
+	req := dto.RecognitionRequest{Filter: "person%+%backpack*1"}
+	m, err := newTrackManager(uc, req)
+	if err != nil {
+		t.Fatalf("newTrackManager error = %v", err)
+	}
+	if err := m.reanchor(testFrame(), req); err != nil {
+		t.Fatalf("reanchor error = %v", err)
+	}
+
+	if got := m.count(); got != 1 {
+		t.Fatalf("active tracks = %d, want 1 (cap=1 keeps only one of the two equally-valid pairs)", got)
+	}
+}
+
+// TestReanchor_RelationalTerm_GreedyOneToOne: one container box, two
+// attachment boxes both individually satisfying containment — the
+// container can only join ONE pair per cycle (default cardinality,
+// docs/adr/clip-backend.md § 24: "+shared" for N:M is deferred, not
+// implemented), even with a cap generous enough to allow two.
+func TestReanchor_RelationalTerm_GreedyOneToOne(t *testing.T) {
+	container := entities.BoundingBox{Label: "person", X1: 0, Y1: 0, X2: 200, Y2: 200}
+	attachment1 := entities.BoundingBox{Label: "backpack", X1: 10, Y1: 10, X2: 60, Y2: 60}
+	attachment2 := entities.BoundingBox{Label: "backpack", X1: 100, Y1: 100, X2: 150, Y2: 150}
+
+	detector := &mockObjectDetector{boxes: []entities.BoundingBox{container, attachment1, attachment2}}
+	uc := newTestUseCase(detector, &mockSemanticEncoder{}, &mockAlertSender{})
+
+	req := dto.RecognitionRequest{Filter: "person%+%backpack*2"}
+	m, err := newTrackManager(uc, req)
+	if err != nil {
+		t.Fatalf("newTrackManager error = %v", err)
+	}
+	if err := m.reanchor(testFrame(), req); err != nil {
+		t.Fatalf("reanchor error = %v", err)
+	}
+
+	if got := m.count(); got != 1 {
+		t.Fatalf("active tracks = %d, want 1 (one container box can only join one pair per cycle by default, despite cap=2 and two valid attachments)", got)
+	}
+}
+
 func TestReanchor_SpawnedTrackConfirmsInExactlyMinHitsCycles(t *testing.T) {
 	target := box("person", 0)
 	detector := &mockObjectDetector{boxes: []entities.BoundingBox{target}}

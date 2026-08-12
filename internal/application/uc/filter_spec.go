@@ -44,6 +44,23 @@ type filterTerm struct {
 	// but NOT YET consulted by trackManager.reanchor — TODO.md § A tracks
 	// wiring this in; setting it today has no observable effect.
 	Overlap bool
+	// Relation, RelationParam, Container, Attachment are set only for a
+	// relational term: "container%relation[=param]%attachment" (e.g.
+	// "person%+%backpack" — TODO.md § A "décomposition géométrique",
+	// docs/adr/clip-backend.md § 24). Relation == "" (the vast majority of
+	// terms) means every other field here is irrelevant — check that
+	// first. Container/Attachment are matched independently by
+	// trackManager (v1: both must be exact COCO labels — no CLIP/
+	// fine-tuned fallback yet, docs/adr/clip-backend.md § 24's "sinon
+	// repli sur sous-région heuristique" is future work), combined via
+	// Relation's geometric check instead of a single CLIP score on a
+	// composed phrase. Key holds the full canonical relation string
+	// ("person%+%backpack") for identity/dedup/display — Container alone
+	// ("person") for matching logic.
+	Relation      string
+	RelationParam string
+	Container     string
+	Attachment    string
 }
 
 // cocoLabels is the set of valid YOLO11s/COCO class names, built once from
@@ -129,6 +146,63 @@ func isWordByte(b byte) bool {
 		(b >= 'a' && b <= 'z') || (b >= 'A' && b <= 'Z') || (b >= '0' && b <= '9')
 }
 
+// splitRelation extracts a leading "container%relation[=param]%" prefix
+// from part, if present — docs/adr/clip-backend.md § 24's
+// "term := key ['%' operateur ['=' valeur] '%' key] [...]" grammar.
+// Returns hasRelation=false (container/relation/param zeroed, rest==part
+// unchanged) when part contains no '%' at all — the overwhelming majority
+// of terms, which never touch this function's parsing beyond the initial
+// index scan.
+//
+// Deliberately run BEFORE any '+'-based splitting (parseFilterSpec calls
+// this first): the one relation operator implemented so far is literally
+// named "+" (%+%, chosen 2026-08-11 for containment) — splitting on '+'
+// first, as every other part of this grammar already does for options,
+// would shred "%+%" into fragments ("person%", "%backpack...") and misread
+// the relation as two bogus '+' options. Extracting the relation first,
+// with its own '%'-delimited scan, sidesteps that collision entirely
+// rather than special-casing '+' inside the option splitter.
+func splitRelation(part string) (container, relation, param, rest string, hasRelation bool, err error) {
+	firstPct := strings.Index(part, "%")
+	if firstPct == -1 {
+		return "", "", "", part, false, nil
+	}
+	container = strings.TrimSpace(part[:firstPct])
+	if container == "" {
+		return "", "", "", "", false, fmt.Errorf("empty container before '%%' in filter term %q", part)
+	}
+
+	afterFirst := part[firstPct+1:]
+	secondPct := strings.Index(afterFirst, "%")
+	if secondPct == -1 {
+		return "", "", "", "", false, fmt.Errorf("unterminated relation operator in filter term %q (expected a second '%%')", part)
+	}
+	opAndParam := afterFirst[:secondPct]
+	rest = afterFirst[secondPct+1:]
+	if rest == "" {
+		return "", "", "", "", false, fmt.Errorf("missing attachment after relation operator in filter term %q", part)
+	}
+
+	relation, param, _ = strings.Cut(opAndParam, "=")
+	relation = strings.TrimSpace(strings.ToLower(relation))
+	param = strings.TrimSpace(param)
+	if relation == "" {
+		return "", "", "", "", false, fmt.Errorf("empty relation operator in filter term %q", part)
+	}
+	return container, relation, param, rest, true, nil
+}
+
+// relationOperators is the closed set of recognized relation operator
+// names — deliberately small today (docs/adr/clip-backend.md § 24: "%+%"
+// for containment implemented now, others like "%near=distance%"
+// intentionally deferred until there's a real need, each with its own
+// parameters to design). An unrecognized name errors clearly rather than
+// silently matching nothing, same philosophy as "+option" (filterTerm's
+// doc comment).
+var relationOperators = map[string]struct{}{
+	"+": {},
+}
+
 // parseFilterSpec parses a comma-separated filter spec into a set of
 // filterTerm:
 //
@@ -138,6 +212,8 @@ func isWordByte(b byte) bool {
 //	person with a red hat*1+overlap     -> Overlap=true
 //	person with a red hat*1+overlap=false (equivalent to omitting +overlap)
 //	person*2,car                        -> two independent exact terms
+//	person%+%backpack                   -> Relation="+" Container="person" Attachment="backpack" Key="person%+%backpack"
+//	person%+%backpack*2+overlap         -> cap/options apply to the whole relation, not "backpack" alone
 //
 // Empty raw (after trimming) returns (nil, nil): "no filter",
 // trackManager then accepts every label and never calls CLIP.
@@ -182,7 +258,19 @@ func parseFilterSpec(raw string) ([]filterTerm, error) {
 			return nil, fmt.Errorf("empty term in filter %q (stray comma?)", raw)
 		}
 
-		segments := strings.Split(part, "+")
+		// Relation extraction must happen before any '+'-based splitting —
+		// see splitRelation's doc comment (the "%+%" operator's own name
+		// collides with the '+' option delimiter otherwise).
+		container, relation, param, rest, hasRelation, err := splitRelation(part)
+		if err != nil {
+			return nil, err
+		}
+
+		splitTarget := part
+		if hasRelation {
+			splitTarget = rest // "backpack*2+overlap" — container/relation already consumed
+		}
+		segments := strings.Split(splitTarget, "+")
 		mainSegment, optionSegments := segments[0], segments[1:]
 
 		key, capStr, hasCap := strings.Cut(mainSegment, "*")
@@ -201,7 +289,34 @@ func parseFilterSpec(raw string) ([]filterTerm, error) {
 			capValue = n
 		}
 
-		term := filterTerm{Key: key, Cap: capValue}
+		var term filterTerm
+		if hasRelation {
+			if _, ok := relationOperators[relation]; !ok {
+				return nil, fmt.Errorf("unknown relation operator %q in filter term %q", relation, part)
+			}
+			container = normalizeFilter(container)
+			if !isCOCOLabel(container) {
+				return nil, fmt.Errorf("relation container %q in filter term %q must be a known COCO class (v1: no semantic/fine-tuned container yet)", container, part)
+			}
+			if !isCOCOLabel(key) {
+				return nil, fmt.Errorf("relation attachment %q in filter term %q must be a known COCO class (v1: no semantic/fine-tuned attachment yet)", key, part)
+			}
+			if container == key {
+				return nil, fmt.Errorf("relation container and attachment are both %q in filter term %q — a box can't be its own attachment", container, part)
+			}
+			canonical := container + "%" + relation
+			if param != "" {
+				canonical += "=" + param
+			}
+			canonical += "%" + key
+			term = filterTerm{
+				Key: canonical, Cap: capValue,
+				Relation: relation, RelationParam: param,
+				Container: container, Attachment: key,
+			}
+		} else {
+			term = filterTerm{Key: key, Cap: capValue}
+		}
 		seenOptions := make(map[string]struct{}, len(optionSegments))
 		for _, optSeg := range optionSegments {
 			name, valueStr, hasValue := strings.Cut(optSeg, "=")
@@ -230,10 +345,15 @@ func parseFilterSpec(raw string) ([]filterTerm, error) {
 			}
 		}
 
-		if _, dup := seen[key]; dup {
-			return nil, fmt.Errorf("duplicate term %q in filter %q — each term can only appear once (no overlapping filter terms)", key, raw)
+		// term.Key (not the bare "key" var above) — for a relational term
+		// that's the canonical "container%relation%attachment" string, not
+		// just the attachment half, which alone wouldn't be a meaningful
+		// dedup key (two different relations could legitimately share the
+		// same attachment, e.g. "person%+%backpack,car%+%backpack").
+		if _, dup := seen[term.Key]; dup {
+			return nil, fmt.Errorf("duplicate term %q in filter %q — each term can only appear once (no overlapping filter terms)", term.Key, raw)
 		}
-		seen[key] = struct{}{}
+		seen[term.Key] = struct{}{}
 
 		terms = append(terms, term)
 	}

@@ -36,6 +36,27 @@ func TestParseFilterSpec(t *testing.T) {
 		{"non-bool value for overlap rejected", "person*1+overlap=maybe", nil, true},
 		{"repeated option in the same term rejected", "person*1+overlap+overlap", nil, true},
 		{"empty option (stray +) rejected", "person*1+", nil, true},
+		{"relation term, implicit cap", "person%+%backpack", []filterTerm{{
+			Key: "person%+%backpack", Cap: 1,
+			Relation: "+", Container: "person", Attachment: "backpack",
+		}}, false},
+		{"relation term, explicit cap and option", "person%+%backpack*2+overlap", []filterTerm{{
+			Key: "person%+%backpack", Cap: 2, Overlap: true,
+			Relation: "+", Container: "person", Attachment: "backpack",
+		}}, false},
+		{"relation with a parametrized operator name", "person%near=50%backpack", nil, true}, // "near" not in relationOperators yet (§ 24: deferred)
+		{"relation container must be a COCO label", "unicorn%+%backpack", nil, true},
+		{"relation attachment must be a COCO label", "person%+%unicorn", nil, true},
+		{"relation container and attachment can't be the same", "person%+%person", nil, true},
+		{"relation missing closing '%' rejected", "person%+backpack", nil, true},
+		{"relation missing attachment rejected", "person%+%", nil, true},
+		{"relation missing container rejected", "%+%backpack", nil, true},
+		{"unknown relation operator rejected", "person%*%backpack", nil, true},
+		{"two different relations sharing an attachment are not duplicates", "person%+%backpack,car%+%backpack", []filterTerm{
+			{Key: "person%+%backpack", Cap: 1, Relation: "+", Container: "person", Attachment: "backpack"},
+			{Key: "car%+%backpack", Cap: 1, Relation: "+", Container: "car", Attachment: "backpack"},
+		}, false},
+		{"duplicate relation term rejected", "person%+%backpack,person%+%backpack", nil, true},
 	}
 
 	for _, tt := range tests {

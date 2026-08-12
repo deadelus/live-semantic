@@ -69,6 +69,30 @@ const defaultSimilarityThreshold float32 = 0.20
 // correct as-is.
 const defaultDifferentialMargin float32 = 0.02
 
+// relationContainmentThreshold: minimum fraction of an attachment box's own
+// area that must fall inside a container box for reanchor's relational
+// pass ("%+%", docs/adr/clip-backend.md § 24) to count it as contained.
+// Starting value, NOT validated against real webcam data yet — same
+// calibration risk/discipline as defaultSimilarityThreshold and
+// defaultDifferentialMargin (§ 7/§ 10/§ 23): to be adjusted from real
+// testing (e.g. "person%+%backpack"), not assumed correct as-is.
+const relationContainmentThreshold = 0.5
+
+// containmentRatio returns the fraction of attachment's own area that
+// overlaps container, in [0, 1] — deliberately NOT IoU: a small attachment
+// (e.g. a backpack) fully inside a much larger container (e.g. a person)
+// would score a low IoU by construction (union dominated by the
+// container's area) despite being entirely contained, which is exactly
+// the case this relation needs to recognize. 0 for a zero-area attachment
+// box rather than dividing by zero.
+func containmentRatio(attachment, container entities.BoundingBox) float32 {
+	area := float32(attachment.RectArea())
+	if area == 0 {
+		return 0
+	}
+	return attachment.Intersection(&container) / area
+}
+
 // Note on reanchor cadence: there used to be an explicit
 // defaultReanchorInterval (frame-count-based gate, plus a
 // LIVESEMANTIC_REANCHOR_INTERVAL env var for A/B testing during the perf
@@ -147,6 +171,18 @@ type termMatch struct {
 	// (defaultDifferentialMargin) instead of/on top of an absolute
 	// threshold — see that constant's doc comment for why.
 	BaseEmbedding entities.Embedding
+	// Relation, RelationParam, Container, Attachment mirror filterTerm's
+	// same-named fields — set only for a relational term
+	// ("container%relation[=param]%attachment", e.g. "person%+%backpack",
+	// docs/adr/clip-backend.md § 24). Relation == "" for every other term;
+	// when set, Embedding/BaseEmbedding/LabelHint above are unused (no
+	// CLIP call at all for this term — v1 requires Container/Attachment to
+	// both be exact COCO labels, checked once at parseFilterSpec time).
+	// Consulted by reanchor's new relational pass — see its doc comment.
+	Relation      string
+	RelationParam string
+	Container     string
+	Attachment    string
 }
 
 // trackManager owns the set of active tracks, shared between the video loop
@@ -203,6 +239,20 @@ func newTrackManager(uc *UseCase, req dto.RecognitionRequest) (*trackManager, er
 
 	m.terms = make(map[string]termMatch, len(parsed))
 	for _, t := range parsed {
+		if t.Relation != "" {
+			// Relational term ("person%+%backpack") — Key is the canonical
+			// relation string, not itself a COCO label or free text, so it
+			// must be checked (and handled) before either branch below.
+			// No CLIP call: v1 requires both sides to already be exact
+			// COCO labels (parseFilterSpec validated this), matched
+			// geometrically by reanchor's relational pass, not scored.
+			m.terms[t.Key] = termMatch{
+				Cap: t.Cap, Overlap: t.Overlap,
+				Relation: t.Relation, RelationParam: t.RelationParam,
+				Container: t.Container, Attachment: t.Attachment,
+			}
+			continue
+		}
 		if isCOCOLabel(t.Key) {
 			m.terms[t.Key] = termMatch{Cap: t.Cap, Overlap: t.Overlap}
 			continue
@@ -450,6 +500,84 @@ func (m *trackManager) reanchor(frame *entities.Frame, req dto.RecognitionReques
 	}
 
 	claimed := make([]bool, len(result.BoundingBoxes))
+
+	// Pass 0: relational terms ("container%relation%attachment", e.g.
+	// "person%+%backpack") — geometric decomposition rather than a single
+	// CLIP score on a composed phrase (TODO.md § A, docs/adr/
+	// clip-backend.md § 24: CLIP's compound-phrase scoring is dominated by
+	// the base noun, § 22-23 — decomposing into two independently-detected
+	// boxes plus a geometric check sidesteps that entirely). Runs before
+	// pass 1/2 — a relational match is the most specific condition a
+	// filter can express (two boxes AND a spatial relation between them),
+	// reasonable to let it claim boxes first over a plain single-condition
+	// term elsewhere in the same filter.
+	//
+	// v1: one operator ("+", containment) — an attachment box counts as
+	// "in" a container box when relationContainmentThreshold of the
+	// attachment's own area falls inside the container (not IoU: a small
+	// attachment like a backpack inside a much larger container like a
+	// person would score a low IoU by construction — union dominated by
+	// the person's area — despite being fully contained, which is exactly
+	// what this relation means to capture).
+	//
+	// Cardinality (docs/adr/clip-backend.md § 24, decided before any code
+	// existed here): every valid pair is its own match, greedy 1:1 per
+	// cycle (a box claimed by one pair can't join a second this cycle —
+	// "+shared" for N:M is deferred, not implemented), ranked by
+	// containment ratio descending, top Cap pairs kept. Both boxes in a
+	// kept pair are marked claimed — pass 1/2 never separately reclaim
+	// them (no "+overlap" equivalent for a relational term yet either).
+	for key, term := range m.terms {
+		if term.Relation == "" {
+			continue
+		}
+
+		type relPair struct {
+			containerIdx, attachmentIdx int
+			ratio                       float32
+		}
+		var pairs []relPair
+		for ci, cbox := range result.BoundingBoxes {
+			if claimed[ci] || cbox.Label != term.Container {
+				continue
+			}
+			for ai, abox := range result.BoundingBoxes {
+				if ai == ci || claimed[ai] || abox.Label != term.Attachment {
+					continue
+				}
+				ratio := containmentRatio(abox, cbox)
+				if ratio < relationContainmentThreshold {
+					continue
+				}
+				pairs = append(pairs, relPair{containerIdx: ci, attachmentIdx: ai, ratio: ratio})
+			}
+		}
+		sort.Slice(pairs, func(a, b int) bool { return pairs[a].ratio > pairs[b].ratio })
+
+		usedContainer := make(map[int]bool, len(pairs))
+		usedAttachment := make(map[int]bool, len(pairs))
+		kept := 0
+		for _, p := range pairs {
+			if kept >= term.Cap {
+				break
+			}
+			if usedContainer[p.containerIdx] || usedAttachment[p.attachmentIdx] {
+				continue
+			}
+			usedContainer[p.containerIdx] = true
+			usedAttachment[p.attachmentIdx] = true
+			claimed[p.containerIdx] = true
+			claimed[p.attachmentIdx] = true
+			m.uc.logger.Info("Relational candidate matched", map[string]interface{}{
+				"term":       key,
+				"container":  term.Container,
+				"attachment": term.Attachment,
+				"ratio":      p.ratio,
+			})
+			m.matchOrSpawn(frame, result.BoundingBoxes[p.containerIdx], key, term.Cap, 0, now, matchedTrackIDs, req)
+			kept++
+		}
+	}
 
 	// Pass 1: exact COCO-label terms — a candidate whose own YOLO label is
 	// directly requested is claimed immediately, no CLIP involved.
