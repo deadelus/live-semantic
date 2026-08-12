@@ -536,6 +536,37 @@ func (m *trackManager) reanchor(frame *entities.Frame, req dto.RecognitionReques
 			containerIdx, attachmentIdx int
 			ratio                       float32
 		}
+
+		// Counted independently of the pairing loop below (not inside its
+		// nested iteration, which would multiply-count e.g. the same
+		// attachment once per container candidate) — distinguishes "one
+		// side was never even detected by YOLO this cycle" from "both
+		// detected but the geometry doesn't satisfy containment" (logged
+		// per pair below). Found necessary 2026-08-12: the first real
+		// webcam test of this pass gave zero visibility into why
+		// "person%+%backpack" wasn't matching.
+		containerCandidates, attachmentCandidates := 0, 0
+		for i, box := range result.BoundingBoxes {
+			if claimed[i] {
+				continue
+			}
+			if box.Label == term.Container {
+				containerCandidates++
+			}
+			if box.Label == term.Attachment {
+				attachmentCandidates++
+			}
+		}
+		if containerCandidates == 0 || attachmentCandidates == 0 {
+			m.uc.logger.Info("Relational term has no candidates this cycle", map[string]interface{}{
+				"term":                  key,
+				"container":             term.Container,
+				"attachment":            term.Attachment,
+				"container_candidates":  containerCandidates,
+				"attachment_candidates": attachmentCandidates,
+			})
+		}
+
 		var pairs []relPair
 		for ci, cbox := range result.BoundingBoxes {
 			if claimed[ci] || cbox.Label != term.Container {
@@ -546,6 +577,15 @@ func (m *trackManager) reanchor(frame *entities.Frame, req dto.RecognitionReques
 					continue
 				}
 				ratio := containmentRatio(abox, cbox)
+				// Logged regardless of whether it clears the threshold —
+				// same rationale as pass 2's "Semantic candidate scored".
+				m.uc.logger.Info("Relational candidate scored", map[string]interface{}{
+					"term":            key,
+					"container":       term.Container,
+					"attachment":      term.Attachment,
+					"ratio":           ratio,
+					"above_threshold": ratio >= relationContainmentThreshold,
+				})
 				if ratio < relationContainmentThreshold {
 					continue
 				}
