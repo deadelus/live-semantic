@@ -41,9 +41,13 @@ import (
 type Source struct {
 	// Kind is "local" (the backend's own camera, Device selects which),
 	// "browser" (frames pushed over a per-session ingest endpoint — see
-	// transport/adapters/api), or "file" (local video file, RTSP, or
-	// HTTP — URI, all three resolved the same way by gocv, see
-	// implementation/streamer/input.FileInput's own doc comment).
+	// transport/adapters/api), "webrtc" (browser camera over a real
+	// WebRTC PeerConnection instead of repeated JPEG-over-WS snapshots —
+	// implementation/streamer/input.WebRTCInput, negotiated via a
+	// per-session SDP offer/answer REST endpoint, added 2026-08-13), or
+	// "file" (local video file, RTSP, or HTTP — URI, all three resolved
+	// the same way by gocv, see implementation/streamer/input.FileInput's
+	// own doc comment).
 	Kind   string `json:"kind"`
 	Device int    `json:"device,omitempty"`
 	URI    string `json:"uri,omitempty"`

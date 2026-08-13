@@ -338,6 +338,8 @@ func sessionInputFactory(src session.Source) (streamer.InputStream, error) {
 		return input.NewFileInput(src.URI), nil
 	case "browser":
 		return input.NewBrowserInput(), nil
+	case "webrtc":
+		return input.NewWebRTCInput(), nil
 	default:
 		return nil, fmt.Errorf("unknown session source kind %q", src.Kind)
 	}
