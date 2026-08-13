@@ -95,6 +95,65 @@ export interface DeviceInfo {
   busy: boolean
 }
 
+// --- Pause/reprise + retour en arrière (docs/gui/spec.md § 1.5bis,
+// TODO.md § H1), backend added 2026-08-13 (RingBufferOutput). "Pause"
+// itself is purely client-side (LiveView just stops applying incoming WS
+// frames) — these three only back the *rewind* half: how far back is
+// currently buffered, and fetching one buffered instant's boxes/image. ---
+
+export interface RewindBox {
+  id: string
+  label: string
+  trackId: string
+  x1: number
+  y1: number
+  x2: number
+  y2: number
+}
+
+export function getRewindRange(sessionId: string): Promise<{ rangeMs: number }> {
+  return fetch(`/api/v1/sessions/${sessionId}/rewind/range`).then((res) =>
+    parseJSONOrThrow<{ rangeMs: number }>(res),
+  )
+}
+
+interface RawRewindBox {
+  ID: string
+  Label: string
+  TrackID: string
+  X1: number
+  Y1: number
+  X2: number
+  Y2: number
+}
+
+export function getRewindBoxes(
+  sessionId: string,
+  offsetMs: number,
+): Promise<{ boxes: RewindBox[]; actualAgeMs: number }> {
+  return fetch(`/api/v1/sessions/${sessionId}/rewind?offset_ms=${Math.round(offsetMs)}`)
+    .then((res) => parseJSONOrThrow<{ boxes: RawRewindBox[]; actualAgeMs: number }>(res))
+    .then((body) => ({
+      actualAgeMs: body.actualAgeMs,
+      boxes: body.boxes.map((b) => ({
+        id: b.ID,
+        label: b.Label,
+        trackId: b.TrackID,
+        x1: b.X1,
+        y1: b.Y1,
+        x2: b.X2,
+        y2: b.Y2,
+      })),
+    }))
+}
+
+// rewindImageURL is a plain URL, not a fetch wrapper — meant to be used
+// directly as an <img src="...">, same convention as a gallery thumbnail
+// (Library.tsx doesn't wrap that one in a fetch() either).
+export function rewindImageURL(sessionId: string, offsetMs: number): string {
+  return `/api/v1/sessions/${sessionId}/rewind/image?offset_ms=${Math.round(offsetMs)}`
+}
+
 export function listDevices(): Promise<{ devices: DeviceInfo[] }> {
   return fetch('/api/v1/devices').then((res) => parseJSONOrThrow<{ devices: DeviceInfo[] }>(res))
 }

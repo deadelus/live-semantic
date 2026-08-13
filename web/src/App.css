@@ -106,6 +106,29 @@
   color: var(--text-tertiary);
 }
 
+.ls-rewind-bar {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  height: 34px;
+  padding: 0 14px;
+  background: var(--bg-drawer);
+  border-bottom: 1px solid var(--border);
+}
+
+.ls-rewind-bar__slider {
+  flex: 1;
+  accent-color: var(--color-purple);
+}
+
+.ls-rewind-bar__label {
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  color: var(--text-tertiary);
+  white-space: nowrap;
+}
+
 .ls-video-wrap {
   position: relative;
   flex: 1;

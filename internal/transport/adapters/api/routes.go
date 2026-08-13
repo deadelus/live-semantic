@@ -67,6 +67,14 @@ func (s *Server) setupRoutes() {
 		// webrtc.go. Only meaningful for a session created with
 		// Source.Kind == "webrtc" (rejected otherwise, see the handler).
 		v1.POST("/sessions/:id/webrtc/offer", s.handleSessionWebRTCOffer)
+
+		// Pause/reprise + retour en arrière (docs/gui/spec.md § 1.5bis, TODO.md
+		// § H1) — see rewind.go. Only meaningful once the session's output
+		// supports streamer.Rewindable (always true for a session.Manager
+		// session, see cmd/livesemantic/main.go's sessionOutputFactory).
+		v1.GET("/sessions/:id/rewind/range", s.handleSessionRewindRange)
+		v1.GET("/sessions/:id/rewind", s.handleSessionRewindBoxes)
+		v1.GET("/sessions/:id/rewind/image", s.handleSessionRewindImage)
 	}
 }
 
