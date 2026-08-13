@@ -62,6 +62,11 @@ func (s *Server) setupRoutes() {
 		v1.DELETE("/sessions/:id", s.sessions.remove)
 		v1.POST("/sessions/:id/recognition/start", s.sessions.startRecognition)
 		v1.POST("/sessions/:id/recognition/stop", s.sessions.stopRecognition)
+
+		// WebRTC signaling (docs/gui/spec.md § 2, TODO.md § H1) — see
+		// webrtc.go. Only meaningful for a session created with
+		// Source.Kind == "webrtc" (rejected otherwise, see the handler).
+		v1.POST("/sessions/:id/webrtc/offer", s.handleSessionWebRTCOffer)
 	}
 }
 
