@@ -10,8 +10,11 @@
 # mêmes raisons, à fournir localement. Dossier préservé via .gitkeep.
 assets/videos/*.mp4
 
-# Logs applicatifs (cmd/livesemantic/logging.go, withFileLogging) : générés
-# à l'exécution, jamais versionnés. Dossier préservé via .gitkeep.
+# Logs applicatifs — backend (cmd/livesemantic/logging.go,
+# withFileLogging, logs/livesemantic.log) et frontend (web/package.json's
+# "dev:log" script, logs/frontend.log) : générés à l'exécution, tronqués à
+# chaque lancement (pas d'historique multi-run à conserver en dev local),
+# jamais versionnés. Dossier préservé via .gitkeep.
 logs/*.log
 
 # Galerie de références persistée (implementation/storage/diskgallery,
