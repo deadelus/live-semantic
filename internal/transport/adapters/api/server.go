@@ -30,6 +30,7 @@ type Server struct {
 	router        *gin.Engine
 	recognition   *recognitionController
 	gallery       *galleryController
+	collections   *collectionsController
 	sessions      *sessionController
 	devices       *devicesController
 }
@@ -60,6 +61,7 @@ func NewServer(useCases uc.UseCases, broadcaster FrameBroadcaster, frameReceiver
 		router:        router,
 		recognition:   newRecognitionController(useCases, logger),
 		gallery:       newGalleryController(useCases, logger),
+		collections:   newCollectionsController(useCases, logger),
 		sessions:      newSessionController(sessionManager, logger),
 		devices:       newDevicesController(sessionManager),
 	}

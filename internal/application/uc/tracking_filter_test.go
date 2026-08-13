@@ -229,6 +229,15 @@ func (g *mockGalleryRepo) SetEnabled(name string, enabled bool) error {
 	return nil
 }
 
+func (g *mockGalleryRepo) SetCocoClass(name, cocoClass string) error {
+	e, ok := g.entries[name]
+	if !ok {
+		return fmt.Errorf("gallery entry %q not found", name)
+	}
+	e.CocoClass = cocoClass
+	return nil
+}
+
 func (g *mockGalleryRepo) Get(name string) ([]entities.Embedding, bool) {
 	e, ok := g.entries[name]
 	if !ok || !e.Enabled || len(e.Images) == 0 {
@@ -270,7 +279,101 @@ func newTestUseCase(detector *mockObjectDetector, encoder *mockSemanticEncoder, 
 		notifier:        notifier,
 		trackerFactory:  mockTrackerFactory,
 		gallery:         newMockGalleryRepo(),
+		collections:     newMockCollectionRepo(),
 	}
+}
+
+// mockCollectionRepo is a package-local storage.CollectionStorage test
+// double — same rationale as mockGalleryRepo's own doc comment just
+// above (not implementation/*, application/uc's own tests must not
+// import it any more than production code may).
+type mockCollectionRepo struct {
+	entries map[string]*storage.Collection
+}
+
+func newMockCollectionRepo() *mockCollectionRepo {
+	return &mockCollectionRepo{entries: map[string]*storage.Collection{}}
+}
+
+var _ storage.CollectionStorage = (*mockCollectionRepo)(nil)
+
+func (c *mockCollectionRepo) Create(name string, tags []string) error {
+	if name == "" {
+		return fmt.Errorf("collection name cannot be empty")
+	}
+	if _, exists := c.entries[name]; exists {
+		return fmt.Errorf("collection %q already exists", name)
+	}
+	c.entries[name] = &storage.Collection{Name: name, Tags: tags}
+	return nil
+}
+
+func (c *mockCollectionRepo) Delete(name string) { delete(c.entries, name) }
+
+func (c *mockCollectionRepo) Rename(oldName, newName string) error {
+	e, ok := c.entries[oldName]
+	if !ok {
+		return fmt.Errorf("collection %q not found", oldName)
+	}
+	if _, exists := c.entries[newName]; exists {
+		return fmt.Errorf("collection %q already exists", newName)
+	}
+	delete(c.entries, oldName)
+	e.Name = newName
+	c.entries[newName] = e
+	return nil
+}
+
+func (c *mockCollectionRepo) SetTags(name string, tags []string) error {
+	e, ok := c.entries[name]
+	if !ok {
+		return fmt.Errorf("collection %q not found", name)
+	}
+	e.Tags = tags
+	return nil
+}
+
+func (c *mockCollectionRepo) AddTerm(collectionName, termName string) error {
+	e, ok := c.entries[collectionName]
+	if !ok {
+		return fmt.Errorf("collection %q not found", collectionName)
+	}
+	for _, t := range e.Terms {
+		if t == termName {
+			return nil
+		}
+	}
+	e.Terms = append(e.Terms, termName)
+	return nil
+}
+
+func (c *mockCollectionRepo) RemoveTerm(collectionName, termName string) {
+	e, ok := c.entries[collectionName]
+	if !ok {
+		return
+	}
+	for i, t := range e.Terms {
+		if t == termName {
+			e.Terms = append(e.Terms[:i], e.Terms[i+1:]...)
+			return
+		}
+	}
+}
+
+func (c *mockCollectionRepo) Get(name string) (storage.Collection, bool) {
+	e, ok := c.entries[name]
+	if !ok {
+		return storage.Collection{}, false
+	}
+	return *e, true
+}
+
+func (c *mockCollectionRepo) List() []storage.Collection {
+	out := make([]storage.Collection, 0, len(c.entries))
+	for _, e := range c.entries {
+		out = append(out, *e)
+	}
+	return out
 }
 
 // box is a small helper for a test bounding box with a given label and a

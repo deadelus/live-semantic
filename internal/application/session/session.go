@@ -116,6 +116,7 @@ type Manager struct {
 	semanticEncoder       inference.SemanticEncoder
 	trackerFactoryBuilder func() tracking.TrackerFactory
 	gallery               storage.GalleryStorage
+	collections           storage.CollectionStorage
 }
 
 // NewManager creates an empty Manager. galleryRepo is shared across every
@@ -143,6 +144,7 @@ func NewManager(
 	semanticEncoder inference.SemanticEncoder,
 	trackerFactoryBuilder func() tracking.TrackerFactory,
 	galleryRepo storage.GalleryStorage,
+	collectionRepo storage.CollectionStorage,
 ) *Manager {
 	return &Manager{
 		sessions:              make(map[string]*entry),
@@ -154,6 +156,7 @@ func NewManager(
 		semanticEncoder:       semanticEncoder,
 		trackerFactoryBuilder: trackerFactoryBuilder,
 		gallery:               galleryRepo,
+		collections:           collectionRepo,
 	}
 }
 
@@ -178,7 +181,7 @@ func (m *Manager) CreateSession(ctx context.Context, src Source) (Info, error) {
 	// in Recognize (Source == "" -> localInput) always resolves
 	// to the right thing regardless of what kind of source this actually
 	// is (camera, file/RTSP, or browser ingest).
-	useCases, err := uc.NewUseCase(ctx, m.logger, in, in, out, m.notifier, m.objectDetector, m.semanticEncoder, m.trackerFactoryBuilder(), m.gallery)
+	useCases, err := uc.NewUseCase(ctx, m.logger, in, in, out, m.notifier, m.objectDetector, m.semanticEncoder, m.trackerFactoryBuilder(), m.gallery, m.collections)
 	if err != nil {
 		return Info{}, fmt.Errorf("create use cases: %w", err)
 	}

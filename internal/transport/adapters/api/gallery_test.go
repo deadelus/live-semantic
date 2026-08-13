@@ -199,6 +199,33 @@ func TestGalleryUpdate_RenameAndToggle(t *testing.T) {
 	}
 }
 
+// TestGalleryUpdate_CocoClass — Bibliothèque model (2026-08-13,
+// docs/gui/design-brief.md § Bibliothèque, screen 4c): PATCH .../gallery/
+// :name with {"coco_class": "..."} links a Term to a COCO class, and an
+// empty string clears an existing link.
+func TestGalleryUpdate_CocoClass(t *testing.T) {
+	mock := &mockUseCases{galleryEntries: map[string]bool{"thing": true}}
+	gc := newGalleryController(mock, noopLogger{})
+
+	c, w := newParamContext(http.MethodPatch, "/api/v1/gallery/thing", `{"coco_class":"person"}`, "name", "thing")
+	gc.update(c)
+	if w.Code != http.StatusOK {
+		t.Fatalf("status = %d, want %d, body = %s", w.Code, http.StatusOK, w.Body.String())
+	}
+	if got := mock.cocoClasses["thing"]; got != "person" {
+		t.Fatalf("cocoClasses[thing] = %q, want %q", got, "person")
+	}
+
+	c, w = newParamContext(http.MethodPatch, "/api/v1/gallery/thing", `{"coco_class":""}`, "name", "thing")
+	gc.update(c)
+	if w.Code != http.StatusOK {
+		t.Fatalf("status = %d, want %d (clearing), body = %s", w.Code, http.StatusOK, w.Body.String())
+	}
+	if got := mock.cocoClasses["thing"]; got != "" {
+		t.Fatalf("cocoClasses[thing] = %q, want cleared", got)
+	}
+}
+
 func TestGalleryUpdate_UseCaseErrorSurfaced(t *testing.T) {
 	mock := &mockUseCases{}
 	gc := newGalleryController(mock, noopLogger{})

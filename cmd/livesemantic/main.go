@@ -139,12 +139,26 @@ func main() {
 		return
 	}
 
+	// collectionRepo: same sharing rationale as galleryRepo just above —
+	// a Collection groups Terms across every flux, not siloed per-session
+	// (docs/gui/design-brief.md § Bibliothèque, TODO.md § H1 "Modèle
+	// Bibliothèque"). Stored under the same "data/gallery" root as the
+	// Terms it references (diskgallery.NewCollections writes its own
+	// collections.json there, doesn't touch per-Term directories) —
+	// deliberately one root, not two, since a restore/backup of "the
+	// Bibliothèque" should be a single directory copy.
+	collectionRepo, err := diskgallery.NewCollections("data/gallery")
+	if err != nil {
+		engine.Logger().Error("Failed to initialize collection storage", err)
+		return
+	}
+
 	// trackerFactoryBuilder() called fresh here — a dedicated
 	// gocvtracker.Factory (and therefore frame cache) for this UseCase,
 	// not shared with session.Manager's own sessions below. See
 	// session.NewManager's doc comment for why sharing one across
 	// concurrently-running sessions used to SIGSEGV.
-	useCases, err := uc.NewUseCase(engine.Context(), engine.Logger(), localInput, browserInput, streamingOutput, notifier, objectDetector, semanticEncoder, trackerFactoryBuilder(), galleryRepo)
+	useCases, err := uc.NewUseCase(engine.Context(), engine.Logger(), localInput, browserInput, streamingOutput, notifier, objectDetector, semanticEncoder, trackerFactoryBuilder(), galleryRepo, collectionRepo)
 	if err != nil {
 		engine.Logger().Error("Failed to create use cases", err)
 		return
@@ -213,6 +227,7 @@ func main() {
 			semanticEncoder,
 			trackerFactoryBuilder,
 			galleryRepo,
+			collectionRepo,
 		)
 		startWebServer(engine, useCases, wsOutput, browserInput, sessionManager, serverPort)
 	case *interactive:

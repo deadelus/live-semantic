@@ -105,6 +105,37 @@ type GalleryReferences interface {
 	SetGalleryReferenceEnabled(ctx context.Context, name string, enabled bool) error
 	// ListGalleryReferences — see storage.GalleryStorage.List.
 	ListGalleryReferences(ctx context.Context) []GalleryEntryInfo
+	// SetGalleryCocoClass links or unlinks (cocoClass == "") a Term to one
+	// of the 80 native COCO classes — see uc_gallery.go for the validation
+	// (cocoClass must be a real class name, or empty) and
+	// storage.Gallery.CocoClass's doc comment for what the link means.
+	SetGalleryCocoClass(ctx context.Context, name, cocoClass string) error
+
+	// --- Bibliothèque — Collections (2026-08-13, docs/gui/design-brief.md
+	// § Bibliothèque). Kept in this same interface rather than a new one:
+	// a Collection only ever exists to group Terms, the two concepts are
+	// one screen/one product surface ("Bibliothèque"), not two separate
+	// REST resources with independent access patterns — no consumer of
+	// this interface needs Collections without also needing Terms. ---
+
+	// CreateCollection — see storage.CollectionStorage.Create.
+	CreateCollection(ctx context.Context, name string, tags []string) error
+	// DeleteCollection — see storage.CollectionStorage.Delete.
+	DeleteCollection(ctx context.Context, name string)
+	// RenameCollection — see storage.CollectionStorage.Rename.
+	RenameCollection(ctx context.Context, oldName, newName string) error
+	// SetCollectionTags — see storage.CollectionStorage.SetTags.
+	SetCollectionTags(ctx context.Context, name string, tags []string) error
+	// AddTermToCollection links an existing Term into a Collection — see
+	// uc_gallery.go for the "termName must already exist in the gallery"
+	// validation (storage.CollectionStorage itself doesn't check this,
+	// see its own doc comment on cross-port consistency).
+	AddTermToCollection(ctx context.Context, collectionName, termName string) error
+	// RemoveTermFromCollection — see storage.CollectionStorage.RemoveTerm.
+	// Never deletes the Term itself, only the grouping.
+	RemoveTermFromCollection(ctx context.Context, collectionName, termName string)
+	// ListCollections — see storage.CollectionStorage.List.
+	ListCollections(ctx context.Context) []CollectionInfo
 }
 
 // UseCases composes every use case this application exposes. The
@@ -173,6 +204,12 @@ type UseCase struct {
 	// validation moved to uc_gallery.go where the rest of this
 	// application's filter-grammar rules already live).
 	gallery storage.GalleryStorage
+
+	// collections is the Collections storage port (docs/gui/design-brief.md
+	// § Bibliothèque, 2026-08-13) — see uc_gallery.go for the
+	// CollectionStorage-backed methods around it. Same shape/rationale as
+	// gallery just above: a port, never a concrete implementation/* type.
+	collections storage.CollectionStorage
 }
 
 // NewUseCase initializes your use cases with all the necessary
@@ -191,7 +228,7 @@ type UseCase struct {
 // every session should see the same named references, not one gallery
 // each) construct one such Repository and pass the same instance to
 // every NewUseCase call.
-func NewUseCase(ctx context.Context, logger logger.Logger, localInput streamer.InputStream, browserInput streamer.InputStream, streamingOutput streamer.OutputStream, notifier notifier.AlertSender, objectDetector inference.ObjectDetector, semanticEncoder inference.SemanticEncoder, trackerFactory tracking.TrackerFactory, galleryRepo storage.GalleryStorage) (UseCases, error) {
+func NewUseCase(ctx context.Context, logger logger.Logger, localInput streamer.InputStream, browserInput streamer.InputStream, streamingOutput streamer.OutputStream, notifier notifier.AlertSender, objectDetector inference.ObjectDetector, semanticEncoder inference.SemanticEncoder, trackerFactory tracking.TrackerFactory, galleryRepo storage.GalleryStorage, collectionRepo storage.CollectionStorage) (UseCases, error) {
 
 	if ctx == nil {
 		return nil, domain.ErrNilContext
@@ -228,6 +265,10 @@ func NewUseCase(ctx context.Context, logger logger.Logger, localInput streamer.I
 		return nil, domain.ErrNilGalleryRepo
 	}
 
+	if collectionRepo == nil {
+		return nil, domain.ErrNilCollectionRepo
+	}
+
 	return &UseCase{
 		logger:          logger,
 		localInput:      localInput,
@@ -238,5 +279,6 @@ func NewUseCase(ctx context.Context, logger logger.Logger, localInput streamer.I
 		semanticEncoder: semanticEncoder,
 		trackerFactory:  trackerFactory,
 		gallery:         galleryRepo,
+		collections:     collectionRepo,
 	}, nil
 }

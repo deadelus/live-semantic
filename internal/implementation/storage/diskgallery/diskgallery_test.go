@@ -193,6 +193,41 @@ func TestSetEnabled_PersistsAcrossRestart(t *testing.T) {
 	}
 }
 
+// TestSetCocoClass_PersistsAcrossRestart — Bibliothèque model (2026-08-13,
+// docs/gui/design-brief.md § Bibliothèque, screen 4c) — a Term's linked
+// COCO class must survive a restart just like every other field.
+func TestSetCocoClass_PersistsAcrossRestart(t *testing.T) {
+	root := t.TempDir()
+	g, _ := New(root)
+	_, _ = g.AddImage("thing", []float32{1}, thumb)
+	if err := g.SetCocoClass("thing", "person"); err != nil {
+		t.Fatalf("SetCocoClass() error = %v", err)
+	}
+
+	g2, err := New(root)
+	if err != nil {
+		t.Fatalf("New() error = %v", err)
+	}
+	list := g2.List()
+	if len(list) != 1 || list[0].CocoClass != "person" {
+		t.Fatalf("List() after restart = %+v, want CocoClass %q", list, "person")
+	}
+
+	if err := g2.SetCocoClass("thing", ""); err != nil {
+		t.Fatalf("SetCocoClass() (clear) error = %v", err)
+	}
+	if list := g2.List(); len(list) != 1 || list[0].CocoClass != "" {
+		t.Fatalf("List() after clearing = %+v, want empty CocoClass", list)
+	}
+}
+
+func TestSetCocoClass_UnknownEntryErrors(t *testing.T) {
+	g, _ := New(t.TempDir())
+	if err := g.SetCocoClass("does-not-exist", "person"); err == nil {
+		t.Fatal("SetCocoClass() on an unknown entry should error")
+	}
+}
+
 func TestSlug_NameWithSpecialCharactersIsFilesystemSafe(t *testing.T) {
 	g, _ := New(t.TempDir())
 	if _, err := g.AddImage("un sac / très cool!", []float32{1}, thumb); err != nil {
