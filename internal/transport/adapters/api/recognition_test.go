@@ -48,6 +48,15 @@ type mockUseCases struct {
 	// covered by implementation/storage/inmemory's tests).
 	galleryMu      sync.Mutex
 	galleryEntries map[string]bool // name -> enabled
+
+	// removedImage records the last RemoveGalleryImage call's arguments —
+	// lets a test assert the REST layer forwarded name/imageID correctly
+	// without this mock needing a real per-image store.
+	removedImage struct{ name, imageID string }
+	// thumbnail/thumbnailOK back GetGalleryThumbnail — set by a test to
+	// control what the REST handler sees.
+	thumbnail   []byte
+	thumbnailOK bool
 }
 
 func (m *mockUseCases) AddGalleryReference(_ context.Context, name string, _ image.Image) error {
@@ -89,6 +98,24 @@ func (m *mockUseCases) SetGalleryReferenceEnabled(_ context.Context, name string
 	}
 	m.galleryEntries[name] = enabled
 	return nil
+}
+
+// RemoveGalleryImage just records its arguments — this mock's simplified
+// gallery (name -> enabled) has no real per-image store, so there's
+// nothing to actually mutate, but a test can still assert the REST layer
+// forwarded name/imageID correctly.
+func (m *mockUseCases) RemoveGalleryImage(_ context.Context, name, imageID string) {
+	m.galleryMu.Lock()
+	defer m.galleryMu.Unlock()
+	m.removedImage = struct{ name, imageID string }{name, imageID}
+}
+
+// GetGalleryThumbnail returns whatever a test pre-configured via the
+// thumbnail/thumbnailOK fields — defaults to not-found.
+func (m *mockUseCases) GetGalleryThumbnail(_ context.Context, _, _ string) ([]byte, bool) {
+	m.galleryMu.Lock()
+	defer m.galleryMu.Unlock()
+	return m.thumbnail, m.thumbnailOK
 }
 
 func (m *mockUseCases) ListGalleryReferences(_ context.Context) []uc.GalleryEntryInfo {
@@ -287,8 +314,8 @@ func TestStatus_ReflectsRunningState(t *testing.T) {
 	assertStatus(false)
 }
 
-// TestStatus_SurfacesLastErrorAfterFailedSession — TODO.md § A "l'API
-// REST ne remonte pas au client un filtre invalide", fixed 2026-08-12:
+// TestStatus_SurfacesLastErrorAfterFailedSession — fixed 2026-08-12 (the
+// REST API didn't use to surface an invalid filter to the client):
 // a session that ends in error (e.g. an invalid filter) must be visible
 // via GET /recognition/status, not just server logs.
 func TestStatus_SurfacesLastErrorAfterFailedSession(t *testing.T) {

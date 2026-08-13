@@ -15,7 +15,7 @@ var _ streamer.InputStream = (*BrowserInput)(nil)
 // transport/adapters/api, as the browser pushes JPEG frames captured from
 // its own getUserMedia camera) rather than opened directly by this
 // adapter (contrast CameraInput/FileInput, which own a gocv.VideoCapture).
-// TODO.md § H2 "capture caméra navigateur" — makes the GUI usable as a
+// Browser camera capture — makes the GUI usable as a
 // real web app from any device, not just the machine running the backend
 // (docs/gui/spec.md § 2's WebRTC path is the eventual richer version of
 // this same idea; this is the JPEG-over-WS v1 explicitly allowed as a

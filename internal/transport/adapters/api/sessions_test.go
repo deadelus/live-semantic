@@ -115,6 +115,7 @@ func (sessionMockTracker) Cleanup() {}
 // idea in session_test.go).
 type sessionMockGalleryRepo struct {
 	entries map[string]*storage.Gallery
+	nextSeq int
 }
 
 func newSessionMockGalleryRepo() *sessionMockGalleryRepo {
@@ -123,12 +124,31 @@ func newSessionMockGalleryRepo() *sessionMockGalleryRepo {
 
 var _ storage.GalleryStorage = (*sessionMockGalleryRepo)(nil)
 
-func (g *sessionMockGalleryRepo) Add(name string, embedding entities.Embedding) error {
-	if _, exists := g.entries[name]; exists {
-		return fmt.Errorf("gallery entry %q already exists", name)
+func (g *sessionMockGalleryRepo) AddImage(name string, embedding entities.Embedding, thumbnail []byte) (string, error) {
+	g.nextSeq++
+	id := fmt.Sprintf("img-%d", g.nextSeq)
+	e, ok := g.entries[name]
+	if !ok {
+		e = &storage.Gallery{Name: name, Enabled: true}
+		g.entries[name] = e
 	}
-	g.entries[name] = &storage.Gallery{Name: name, Embedding: embedding, Enabled: true}
-	return nil
+	e.Images = append(e.Images, storage.GalleryImage{ID: id, Embedding: embedding})
+	return id, nil
+}
+func (g *sessionMockGalleryRepo) RemoveImage(name, imageID string) {
+	e, ok := g.entries[name]
+	if !ok {
+		return
+	}
+	for i, img := range e.Images {
+		if img.ID == imageID {
+			e.Images = append(e.Images[:i], e.Images[i+1:]...)
+			break
+		}
+	}
+	if len(e.Images) == 0 {
+		delete(g.entries, name)
+	}
 }
 func (g *sessionMockGalleryRepo) Remove(name string) { delete(g.entries, name) }
 func (g *sessionMockGalleryRepo) Rename(oldName, newName string) error {
@@ -149,12 +169,28 @@ func (g *sessionMockGalleryRepo) SetEnabled(name string, enabled bool) error {
 	e.Enabled = enabled
 	return nil
 }
-func (g *sessionMockGalleryRepo) Get(name string) (entities.Embedding, bool) {
+func (g *sessionMockGalleryRepo) Get(name string) ([]entities.Embedding, bool) {
 	e, ok := g.entries[name]
-	if !ok || !e.Enabled {
+	if !ok || !e.Enabled || len(e.Images) == 0 {
 		return nil, false
 	}
-	return e.Embedding, true
+	out := make([]entities.Embedding, len(e.Images))
+	for i, img := range e.Images {
+		out[i] = img.Embedding
+	}
+	return out, true
+}
+func (g *sessionMockGalleryRepo) Thumbnail(name, imageID string) ([]byte, bool) {
+	e, ok := g.entries[name]
+	if !ok {
+		return nil, false
+	}
+	for _, img := range e.Images {
+		if img.ID == imageID {
+			return []byte("thumb"), true
+		}
+	}
+	return nil, false
 }
 func (g *sessionMockGalleryRepo) List() []storage.Gallery {
 	out := make([]storage.Gallery, 0, len(g.entries))
@@ -176,7 +212,7 @@ func newSessionTestServer() (*gin.Engine, *session.Manager) {
 		sessionMockNotifier{},
 		sessionMockDetector{},
 		sessionMockEncoder{},
-		sessionMockTrackerFactory,
+		func() tracking.TrackerFactory { return sessionMockTrackerFactory },
 		newSessionMockGalleryRepo(),
 	)
 

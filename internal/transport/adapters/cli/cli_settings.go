@@ -6,6 +6,9 @@ import (
 	"github.com/AlecAivazis/survey/v2"
 )
 
+// showSettings prompts for a settings category — only Log Level is
+// actually implemented (configureLogLevel); Theme/Advanced are
+// placeholders.
 func (s *SurveyController) showSettings() {
 	var setting string
 	prompt := &survey.Select{
@@ -33,6 +36,8 @@ func (s *SurveyController) showSettings() {
 	}
 }
 
+// configureLogLevel prompts for a log level — display only today, the
+// selection isn't actually applied to s.logger or anywhere else yet.
 func (s *SurveyController) configureLogLevel() {
 	var level string
 	prompt := &survey.Select{

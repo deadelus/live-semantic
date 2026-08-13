@@ -1,5 +1,5 @@
 // Package session adds multiple, independently addressable recognition
-// sessions on top of application/uc.UseCase — TODO.md § H1 "Multi-flux",
+// sessions ("multi-flux") on top of application/uc.UseCase —
 // docs/gui/spec.md § 1.2 ("la demande qui a le plus d'impact
 // architectural"). Each Session wraps its own uc.UseCases instance (its
 // own InputStream/OutputStream, own trackManager per call — unchanged
@@ -12,8 +12,8 @@
 // Deliberately additive, not a replacement for the existing single-
 // session REST/WS surface (transport/adapters/api's recognitionController,
 // /ws, /ws/ingest): that path is already tested and the current web/
-// frontend depends on it. Multi-session is a new, parallel capability —
-// TODO.md tracks migrating the frontend onto it separately.
+// frontend depends on it. Multi-session is a new, parallel capability;
+// migrating the frontend onto it is a separate, later effort.
 package session
 
 import (
@@ -110,12 +110,12 @@ type Manager struct {
 	inputFactory  InputFactory
 	outputFactory OutputFactory
 
-	logger          logger.Logger
-	notifier        notifier.AlertSender
-	objectDetector  inference.ObjectDetector
-	semanticEncoder inference.SemanticEncoder
-	trackerFactory  tracking.TrackerFactory
-	gallery         storage.GalleryStorage
+	logger                logger.Logger
+	notifier              notifier.AlertSender
+	objectDetector        inference.ObjectDetector
+	semanticEncoder       inference.SemanticEncoder
+	trackerFactoryBuilder func() tracking.TrackerFactory
+	gallery               storage.GalleryStorage
 }
 
 // NewManager creates an empty Manager. galleryRepo is shared across every
@@ -124,6 +124,16 @@ type Manager struct {
 // uc.NewUseCase's doc comment) — pass a fresh
 // implementation/storage/inmemory.New() if no sharing with anything else
 // is wanted.
+//
+// trackerFactoryBuilder, unlike objectDetector/semanticEncoder/gallery, is
+// called fresh once per CreateSession rather than shared as-is — found
+// necessary 2026-08-13 by a real SIGSEGV: gocvtracker.Factory owns a
+// frame-conversion cache (gocvtracker.frameCache) that's only safe to
+// share among Trackers *within one session*, never across sessions
+// running concurrently (see that package's own doc comment for the crash
+// trace). The composition root (cmd/livesemantic/main.go) passes a
+// closure that builds a brand new *gocvtracker.Factory each call, not a
+// shared instance.
 func NewManager(
 	inputFactory InputFactory,
 	outputFactory OutputFactory,
@@ -131,19 +141,19 @@ func NewManager(
 	notifier notifier.AlertSender,
 	objectDetector inference.ObjectDetector,
 	semanticEncoder inference.SemanticEncoder,
-	trackerFactory tracking.TrackerFactory,
+	trackerFactoryBuilder func() tracking.TrackerFactory,
 	galleryRepo storage.GalleryStorage,
 ) *Manager {
 	return &Manager{
-		sessions:        make(map[string]*entry),
-		inputFactory:    inputFactory,
-		outputFactory:   outputFactory,
-		logger:          logger,
-		notifier:        notifier,
-		objectDetector:  objectDetector,
-		semanticEncoder: semanticEncoder,
-		trackerFactory:  trackerFactory,
-		gallery:         galleryRepo,
+		sessions:              make(map[string]*entry),
+		inputFactory:          inputFactory,
+		outputFactory:         outputFactory,
+		logger:                logger,
+		notifier:              notifier,
+		objectDetector:        objectDetector,
+		semanticEncoder:       semanticEncoder,
+		trackerFactoryBuilder: trackerFactoryBuilder,
+		gallery:               galleryRepo,
 	}
 }
 
@@ -168,7 +178,7 @@ func (m *Manager) CreateSession(ctx context.Context, src Source) (Info, error) {
 	// in Recognize (Source == "" -> localInput) always resolves
 	// to the right thing regardless of what kind of source this actually
 	// is (camera, file/RTSP, or browser ingest).
-	useCases, err := uc.NewUseCase(ctx, m.logger, in, in, out, m.notifier, m.objectDetector, m.semanticEncoder, m.trackerFactory, m.gallery)
+	useCases, err := uc.NewUseCase(ctx, m.logger, in, in, out, m.notifier, m.objectDetector, m.semanticEncoder, m.trackerFactoryBuilder(), m.gallery)
 	if err != nil {
 		return Info{}, fmt.Errorf("create use cases: %w", err)
 	}
@@ -345,6 +355,8 @@ func (m *Manager) Input(id string) (streamer.InputStream, bool) {
 	return e.input, true
 }
 
+// get looks up a session's entry by ID under the Manager-level lock —
+// the shared read path behind every exported method that needs one.
 func (m *Manager) get(id string) (*entry, bool) {
 	m.mu.Lock()
 	defer m.mu.Unlock()

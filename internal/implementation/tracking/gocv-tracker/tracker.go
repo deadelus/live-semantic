@@ -20,8 +20,8 @@ import (
 )
 
 // init tunes OpenCV for real-time tracking of one webcam frame at a time,
-// found across a real perf investigation on 2026-08-09 (TODO.md § F —
-// history kept there, this comment only states the current understanding):
+// found across a real perf investigation on 2026-08-09 (this comment
+// states the current understanding):
 //
 //   - OPENCV_OPENCL_DEVICE=disabled: KCF's updateProjectionMatrix dispatches
 //     a matrix transpose to the GPU via OpenCV's T-API (UMat/OpenCL). On an
@@ -55,7 +55,7 @@ func init() {
 // Lowered 640 -> 320 on 2026-08-09 (real-world request, more speed traded
 // for more precision loss) — not re-measured on real webcam footage at
 // this value yet, only reasoned from the same quadratic-cost argument that
-// held for 640. Revert or tune per TODO.md § F if tracking gets flaky on
+// held for 640. Revert or tune (perf follow-up) if tracking gets flaky on
 // small/far subjects.
 const maxTrackingDimension = 320
 
@@ -72,6 +72,8 @@ func scaleFor(w, h int) float64 {
 	return float64(maxTrackingDimension) / float64(longest)
 }
 
+// scaleRect scales r's corners by s, used both to bring a box into the
+// downscaled tracking coordinate space (Init) and back out of it (Update).
 func scaleRect(r image.Rectangle, s float64) image.Rectangle {
 	return image.Rect(
 		int(float64(r.Min.X)*s), int(float64(r.Min.Y)*s),
@@ -80,9 +82,9 @@ func scaleRect(r image.Rectangle, s float64) image.Rectangle {
 }
 
 // Algorithm selects which OpenCV tracking algorithm backs a Tracker. Which
-// one performs best on real footage is an open question (TODO.md § B, drift
-// test not run yet) — both are wired behind the same adapter so the choice
-// is a one-line change, not a rewrite.
+// one performs best on real footage is an open question (tracking-by-
+// detection drift test not run yet) — both are wired behind the same
+// adapter so the choice is a one-line change, not a rewrite.
 type Algorithm int
 
 const (
@@ -114,9 +116,10 @@ type Tracker struct {
 	backend    gocv.Tracker
 	label      string
 	confidence float32
+	cache      *frameCache
 }
 
-// sharedFrameMat caches the last image.Image -> gocv.Mat conversion (already
+// frameCache caches the last image.Image -> gocv.Mat conversion (already
 // downscaled to maxTrackingDimension), keyed by *entities.Frame pointer
 // identity. gocv.ImageToMatRGB is a pure-Go, per-pixel loop, and every
 // Tracker instance used to redo it independently on every Init/Update call.
@@ -126,21 +129,28 @@ type Tracker struct {
 // turns N conversions/frame into 1 — and doing the downscale here too means
 // it also only happens once per frame, not once per track.
 //
-// Deliberately package-level, not per-Tracker: multiple Tracker instances
-// (one per track) must share the same cache to benefit. The only
-// consequence is a single Mat's worth of native memory held until the next
-// distinct frame arrives — bounded, reclaimed by the OS at process exit,
-// not worth a cross-package release hook for.
+// One instance per Factory (see Factory's own doc comment), not a package-
+// level global anymore — a real SIGSEGV found 2026-08-13 (multi-flux, two
+// sessions running concurrently — one on the built-in webcam, one on an
+// external/iPhone Continuity Camera) is why: with a single shared cache,
+// one session's cycle could call matForFrame with a *different* frame
+// pointer and Close() the Mat another session's Tracker.Update() was still
+// mid-call on in native OpenCV/cgo code (Update() releases this cache's
+// lock before the native call, see its own doc comment) — a use-after-free
+// in C++ that segfaulted the whole process (goroutine trace: gocv/contrib
+// TrackerSubclass_Update -> addr=0x0). trackManager's own lock
+// (application/uc/tracking.go) only ever serialized calls *within one
+// session* — it was never a cross-session guarantee, contrary to what the
+// previous version of this doc comment assumed. Scoping one frameCache per
+// Factory (and therefore per session, since Factory is now built fresh per
+// session — see cmd/livesemantic/main.go) fixes this at the root instead
+// of trying to serialize across sessions, which would defeat the point of
+// running them concurrently.
 //
-// mu guards the cache fields themselves (avoids corrupting frame/mat/scale
-// if this package were ever called from two goroutines at once). It does
-// NOT by itself make concurrent Init/Update calls on different Tracker
-// instances safe — the actual guarantee against that comes from
-// trackManager's coarser lock (application/uc/tracking.go), which
-// serializes every advance()/reanchor() call and therefore every path that
-// reaches into this package. This mutex is defense-in-depth for the cache
-// state, not a substitute for that.
-var sharedFrameMat struct {
+// mu guards the cache fields themselves against the *intra-session*
+// concurrent-call case (defense in depth — trackManager's own lock already
+// serializes those in practice).
+type frameCache struct {
 	mu    sync.Mutex
 	frame *entities.Frame
 	mat   gocv.Mat
@@ -150,13 +160,13 @@ var sharedFrameMat struct {
 // matForFrame returns a downscaled gocv.Mat view of frame's image (see
 // maxTrackingDimension) and the scale factor applied, converting once per
 // distinct *entities.Frame and reusing it on subsequent calls with the same
-// pointer. See sharedFrameMat's doc comment for the safety argument.
-func matForFrame(frame *entities.Frame) (gocv.Mat, float64, error) {
-	sharedFrameMat.mu.Lock()
-	defer sharedFrameMat.mu.Unlock()
+// pointer. See frameCache's doc comment for the safety argument.
+func (c *frameCache) matForFrame(frame *entities.Frame) (gocv.Mat, float64, error) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
 
-	if sharedFrameMat.frame == frame {
-		return sharedFrameMat.mat, sharedFrameMat.scale, nil
+	if c.frame == frame {
+		return c.mat, c.scale, nil
 	}
 
 	full, err := gocv.ImageToMatRGB(frame.Image)
@@ -177,29 +187,43 @@ func matForFrame(frame *entities.Frame) (gocv.Mat, float64, error) {
 		mat = resized
 	}
 
-	if sharedFrameMat.frame != nil {
-		sharedFrameMat.mat.Close()
+	if c.frame != nil {
+		c.mat.Close()
 	}
-	sharedFrameMat.frame = frame
-	sharedFrameMat.mat = mat
-	sharedFrameMat.scale = scale
+	c.frame = frame
+	c.mat = mat
+	c.scale = scale
 	return mat, scale, nil
 }
 
-// New creates a Tracker backed by the given algorithm. The underlying
-// OpenCV tracker instance is only created on Init — OpenCV trackers are
-// single-use (see gocv.Tracker.Init godoc: once lost, you must Close() and
-// create a new instance, not reuse the old one), Init here recreates it
-// every time to hide that constraint from callers.
+// New creates a Tracker backed by the given algorithm, with its own
+// private frameCache — a safe default for direct callers (tests, any
+// non-Factory usage) that aren't otherwise sharing a cache with anything.
+// Prefer going through a Factory (see its own doc comment) when multiple
+// Trackers need to share one cache (e.g. every track within one session).
+// The underlying OpenCV tracker instance is only created on Init — OpenCV
+// trackers are single-use (see gocv.Tracker.Init godoc: once lost, you
+// must Close() and create a new instance, not reuse the old one), Init
+// here recreates it every time to hide that constraint from callers.
 func New(algorithm Algorithm) (*Tracker, error) {
+	return newWithCache(algorithm, &frameCache{})
+}
+
+// newWithCache is New with an explicit, possibly-shared cache — used by
+// Factory.New so every Tracker it creates shares one frameCache instance
+// (same session), while still never sharing across Factory instances
+// (different sessions, see frameCache's doc comment).
+func newWithCache(algorithm Algorithm, cache *frameCache) (*Tracker, error) {
 	switch algorithm {
 	case KCF, CSRT:
-		return &Tracker{algorithm: algorithm}, nil
+		return &Tracker{algorithm: algorithm, cache: cache}, nil
 	default:
 		return nil, fmt.Errorf("gocvtracker: unsupported algorithm %v", algorithm)
 	}
 }
 
+// newBackend constructs the underlying gocv.Tracker for t's algorithm
+// choice — a fresh instance every call, per New's single-use constraint.
 func (t *Tracker) newBackend() gocv.Tracker {
 	if t.algorithm == CSRT {
 		return contrib.NewTrackerCSRT()
@@ -213,7 +237,7 @@ func (t *Tracker) Init(frame *entities.Frame, box entities.BoundingBox) error {
 		return fmt.Errorf("gocvtracker: nil frame")
 	}
 
-	mat, scale, err := matForFrame(frame)
+	mat, scale, err := t.cache.matForFrame(frame)
 	if err != nil {
 		return fmt.Errorf("gocvtracker: image to mat: %w", err)
 	}
@@ -242,7 +266,7 @@ func (t *Tracker) Update(frame *entities.Frame) (entities.BoundingBox, bool) {
 		return entities.BoundingBox{}, false
 	}
 
-	mat, scale, err := matForFrame(frame)
+	mat, scale, err := t.cache.matForFrame(frame)
 	if err != nil {
 		return entities.BoundingBox{}, false
 	}
@@ -279,18 +303,31 @@ func (t *Tracker) Cleanup() {
 // algorithm it wants and injects it, so application/uc never imports
 // this package or knows an Algorithm value exists (dependency inversion
 // — see tracking.TrackerFactory's doc comment).
+//
+// Owns one frameCache, shared by every Tracker this Factory instance
+// creates — correct within one session (every track needs the same
+// per-frame Mat conversion, frameCache's whole point) but, since
+// 2026-08-13, deliberately NOT shared across Factory instances anymore:
+// the composition root must build a fresh Factory per session (mono-
+// session UseCase and each session.Manager entry alike) rather than
+// reusing one Factory everywhere, or this cache would be right back to
+// being a de facto global — see frameCache's doc comment for the SIGSEGV
+// that cost.
 type Factory struct {
 	algorithm Algorithm
+	cache     *frameCache
 }
 
-// NewFactory creates a Factory that always builds trackers using algorithm.
+// NewFactory creates a Factory that always builds trackers using
+// algorithm, with a fresh frameCache — call this once per session, not
+// once for the whole process (see Factory's own doc comment).
 func NewFactory(algorithm Algorithm) *Factory {
-	return &Factory{algorithm: algorithm}
+	return &Factory{algorithm: algorithm, cache: &frameCache{}}
 }
 
 var _ tracking.TrackerFactory = (*Factory)(nil)
 
 // New implements tracking.TrackerFactory.
 func (f *Factory) New() (tracking.ObjectTracker, error) {
-	return New(f.algorithm)
+	return newWithCache(f.algorithm, f.cache)
 }

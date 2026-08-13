@@ -1,7 +1,11 @@
 // Captures the user's own device camera (getUserMedia) and streams it to
-// the backend's /ws/ingest endpoint as one JPEG frame per tick — the
-// "JPEG-over-WS" v1 the backend's docs/gui/spec.md § 2 explicitly allows
-// as a simpler fallback before a full WebRTC (pion/webrtc) integration.
+// the backend's per-session ingest endpoint (/ws/sessions/:id/ingest) as
+// one JPEG frame per tick — the "JPEG-over-WS" v1 the backend's
+// docs/gui/spec.md § 2 explicitly allows as a simpler fallback before a
+// full WebRTC (pion/webrtc) integration. Migrated 2026-08-13 from the
+// mono-session /ws/ingest endpoint — the ingest path is now passed to
+// start() rather than hardcoded, since it depends on which session this
+// capture feeds.
 // This is what makes the GUI a real web app usable from any device's
 // camera, not just the machine running the Go backend (TODO.md § H2,
 // clarified with the user 2026-08-12 — the earlier "local camera" slice
@@ -29,7 +33,10 @@ export class BrowserCamera {
   private static readonly captureIntervalMs = 150
   private static readonly jpegQuality = 0.8
 
-  async start(): Promise<void> {
+  // ingestPath: e.g. `/ws/sessions/${sessionId}/ingest` — the caller
+  // (App.tsx) owns knowing which session this capture feeds, this class
+  // stays session-agnostic.
+  async start(ingestPath: string): Promise<void> {
     this.stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: false })
 
     this.video = document.createElement('video')
@@ -42,13 +49,13 @@ export class BrowserCamera {
     this.canvas.height = this.video.videoHeight || 480
 
     const proto = window.location.protocol === 'https:' ? 'wss' : 'ws'
-    this.ws = new WebSocket(`${proto}://${window.location.host}/ws/ingest`)
+    this.ws = new WebSocket(`${proto}://${window.location.host}${ingestPath}`)
     this.ws.binaryType = 'arraybuffer'
 
     await new Promise<void>((resolve, reject) => {
       if (!this.ws) return reject(new Error('WebSocket not created'))
       this.ws.onopen = () => resolve()
-      this.ws.onerror = () => reject(new Error('failed to connect to /ws/ingest'))
+      this.ws.onerror = () => reject(new Error(`failed to connect to ${ingestPath}`))
     })
 
     this.intervalId = window.setInterval(() => this.captureAndSend(), BrowserCamera.captureIntervalMs)

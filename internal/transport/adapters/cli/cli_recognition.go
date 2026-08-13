@@ -9,10 +9,13 @@ import (
 	"github.com/AlecAivazis/survey/v2"
 )
 
+// createRecognitionFlow prompts interactively for a filter spec, confirms,
+// then submits it through the same handler/envelope path the REST API
+// uses (envelopes.TransportRequest, Source: "interactive").
 func (s *SurveyController) createRecognitionFlow() error {
 	fmt.Println("\n📸 Recognition...")
 
-	// Hybrid filter (TODO.md § A, docs/adr/clip-backend.md § 12-13/16):
+	// Hybrid filter (docs/adr/clip-backend.md § 12-13/16):
 	// "key[*cap][+option[=value]]...", comma-separated for multiple terms.
 	// A key that's one of the 80 COCO classes matches exactly, no
 	// similarity score involved ("person" up to 1, "person*2" up to 2). A
@@ -21,7 +24,7 @@ func (s *SurveyController) createRecognitionFlow() error {
 	// tracking.go's defaultSimilarityThreshold; not a CLI knob on purpose,
 	// meant to become a GUI control later). "+overlap" (default false)
 	// lets a term claim a candidate box another term already claimed this
-	// cycle — parsed, not yet consulted by reanchor (TODO.md § A).
+	// cycle — parsed, not yet consulted by reanchor.
 	var qs = []*survey.Question{
 		{
 			Name:     "filter",
@@ -38,7 +41,7 @@ func (s *SurveyController) createRecognitionFlow() error {
 		return err
 	}
 
-	// Confirmer avant création
+	// Confirm before submitting.
 	confirm := false
 	confirmPrompt := &survey.Confirm{
 		Message: fmt.Sprintf("Recognize %s?", answers.Filter),
@@ -52,7 +55,7 @@ func (s *SurveyController) createRecognitionFlow() error {
 		return nil
 	}
 
-	// Créer via le handler
+	// Submit via the handler.
 	req := envelopes.TransportRequest[dto.RecognitionRequest]{
 		Data: dto.RecognitionRequest{
 			Filter: answers.Filter,

@@ -112,8 +112,16 @@ func TestGalleryAdd_MissingImage_ReturnsBadRequest(t *testing.T) {
 	}
 }
 
+// TestGalleryAdd_UseCaseErrorSurfaced only proves gc.add() propagates
+// whatever error the use case layer returns as HTTP 400 — it doesn't
+// assert a specific business rule. The mock's own AddGalleryReference
+// (recognition_test.go) still rejects a duplicate name to have *some*
+// realistic error to trigger; the real uc.UseCase.AddGalleryReference no
+// longer does (2026-08-13, multi-image entries: a duplicate name now
+// appends another reference photo instead of erroring — see
+// uc_gallery_test.go for that real behavior).
 func TestGalleryAdd_UseCaseErrorSurfaced(t *testing.T) {
-	mock := &mockUseCases{galleryEntries: map[string]bool{"mon_sac": true}} // pre-existing -> AddGalleryReference errors on duplicate
+	mock := &mockUseCases{galleryEntries: map[string]bool{"mon_sac": true}}
 	gc := newGalleryController(mock, noopLogger{})
 
 	c, w := newMultipartAddRequest(t, "mon_sac", true)
@@ -212,5 +220,62 @@ func TestGalleryUpdate_InvalidJSON_ReturnsBadRequest(t *testing.T) {
 
 	if w.Code != http.StatusBadRequest {
 		t.Fatalf("status = %d, want %d", w.Code, http.StatusBadRequest)
+	}
+}
+
+// newTwoParamContext is newParamContext's sibling for the two per-image
+// routes (:name/:imageID) — added 2026-08-13 alongside multi-image
+// entries.
+func newTwoParamContext(method, path, name, imageID string) (*gin.Context, *httptest.ResponseRecorder) {
+	gin.SetMode(gin.TestMode)
+	w := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(w)
+	c.Request = httptest.NewRequest(method, path, bytes.NewBuffer(nil))
+	c.Params = gin.Params{{Key: "name", Value: name}, {Key: "imageID", Value: imageID}}
+	return c, w
+}
+
+func TestGalleryRemoveImage_ForwardsNameAndImageID(t *testing.T) {
+	mock := &mockUseCases{}
+	gc := newGalleryController(mock, noopLogger{})
+
+	c, w := newTwoParamContext(http.MethodDelete, "/api/v1/gallery/mon_sac/images/img-1", "mon_sac", "img-1")
+	gc.removeImage(c)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("status = %d, want %d", w.Code, http.StatusOK)
+	}
+	if mock.removedImage.name != "mon_sac" || mock.removedImage.imageID != "img-1" {
+		t.Fatalf("RemoveGalleryImage called with %+v, want name=mon_sac imageID=img-1", mock.removedImage)
+	}
+}
+
+func TestGalleryThumbnail_Found_ReturnsJPEGBytes(t *testing.T) {
+	mock := &mockUseCases{thumbnail: []byte{0xFF, 0xD8, 0xFF}, thumbnailOK: true}
+	gc := newGalleryController(mock, noopLogger{})
+
+	c, w := newTwoParamContext(http.MethodGet, "/api/v1/gallery/mon_sac/images/img-1", "mon_sac", "img-1")
+	gc.thumbnail(c)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("status = %d, want %d", w.Code, http.StatusOK)
+	}
+	if ct := w.Header().Get("Content-Type"); ct != "image/jpeg" {
+		t.Fatalf("Content-Type = %q, want image/jpeg", ct)
+	}
+	if w.Body.String() != string([]byte{0xFF, 0xD8, 0xFF}) {
+		t.Fatalf("body = %v, want the thumbnail bytes", w.Body.Bytes())
+	}
+}
+
+func TestGalleryThumbnail_NotFound_Returns404(t *testing.T) {
+	mock := &mockUseCases{thumbnailOK: false}
+	gc := newGalleryController(mock, noopLogger{})
+
+	c, w := newTwoParamContext(http.MethodGet, "/api/v1/gallery/mon_sac/images/nope", "mon_sac", "nope")
+	gc.thumbnail(c)
+
+	if w.Code != http.StatusNotFound {
+		t.Fatalf("status = %d, want %d", w.Code, http.StatusNotFound)
 	}
 }

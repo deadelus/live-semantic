@@ -12,11 +12,11 @@ package uc
 // implementations only flip an internal flag, they don't panic or block
 // when called on an idle stream.
 //
-// H1 minimal scope (TODO.md § H1): still one session for the whole
-// process (the caller — today, transport/adapters/api's
+// Current minimal scope (GUI backend prerequisites): still one session
+// for the whole process (the caller — today, transport/adapters/api's
 // recognitionController — is responsible for not starting a second
 // Recognize concurrently). What that one session reads from can now vary
-// per call (TODO.md § H2 "capture caméra navigateur": localInput or
+// per call, since browser camera capture landed (localInput or
 // browserInput, dto.RecognitionRequest.Source) — StopRecognition() reads
 // activeInput (set by Recognize at the start of its call) rather than
 // assuming localInput, so it stops whichever is actually running. Revisit

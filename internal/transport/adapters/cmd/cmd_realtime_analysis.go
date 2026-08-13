@@ -8,6 +8,9 @@ import (
 	"github.com/spf13/cobra"
 )
 
+// recognitionCmd runs one Recognize call synchronously (blocks until the
+// video loop stops), same use case as the interactive CLI/REST paths, via
+// the package-level useCases wired in by Execute (root.go).
 var recognitionCmd = &cobra.Command{
 	Use:   "recognition",
 	Short: "Run recognition with a hybrid label/semantic filter",
@@ -39,7 +42,7 @@ var recognitionCmd = &cobra.Command{
 
 func init() {
 	rootCmd.AddCommand(recognitionCmd)
-	// Hybrid filter (TODO.md § A, docs/adr/clip-backend.md § 12-13/16):
+	// Hybrid filter (docs/adr/clip-backend.md § 12-13/16):
 	// comma-separated terms, each optionally capped with "*N" ("person" =
 	// up to 1, "person*2" = up to 2) and/or extended with "+option[=value]"
 	// (currently just "+overlap", default false, parsed but not yet

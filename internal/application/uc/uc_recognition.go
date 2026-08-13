@@ -35,11 +35,11 @@ func boxDescription(tb trackedBox) string {
 }
 
 // Recognize starts the continuous analysis of the video stream, as
-// two decoupled loops (TODO.md § C) sharing one trackManager:
+// two decoupled loops (the async 3-loop pipeline) sharing one trackManager:
 //
 //   - Video loop (this goroutine, driven by streamingInput.Start): per
-//     frame, advances existing tracks via the cheap per-object tracker
-//     (TODO.md § B) and renders — never waits on detection.
+//     frame, advances existing tracks via the cheap per-object
+//     tracking-by-detection tracker and renders — never waits on detection.
 //   - Detection loop (goroutine spawned below): re-detects via YOLO
 //     (reanchor) whenever a frame is available, at its own pace. Frames are
 //     handed off through a buffer-1, overwrite-on-full channel — the video
@@ -49,13 +49,13 @@ func boxDescription(tb trackedBox) string {
 //     naturally self-paces it to roughly the 2-5 FPS this was meant to run
 //     at, without needing a ticker.
 //
-// V1 "naive resync" (TODO.md § C): a reanchored frame can be a few tens of
+// V1 "naive resync": a reanchored frame can be a few tens of
 // ms stale by the time the detection loop gets to it — accepted, the
 // tracker (running continuously on the video loop) catches up on its own.
 // No ring buffer / replay (V2) yet.
 //
-// Alerts fire once per track lifecycle event (TrackEntered/TrackMatched,
-// TODO.md § D) rather than once per frame.
+// Alerts fire once per track lifecycle event (TrackEntered/TrackMatched)
+// rather than once per frame.
 func (uc *UseCase) Recognize(ctx context.Context, req dto.RecognitionRequest) (dto.Result[dto.RecognitionResponse], error) {
 	// Tracked end-to-end (every return path, including the early-exit ones
 	// below) so WaitRecognition() can block until this call has genuinely
@@ -86,8 +86,8 @@ func (uc *UseCase) Recognize(ctx context.Context, req dto.RecognitionRequest) (d
 	}
 	defer tracks.cleanup()
 
-	// Source picks which InputStream this session reads from (TODO.md
-	// § H2 "capture caméra navigateur") — "local" (default, empty string
+	// Source picks which InputStream this session reads from (browser
+	// camera capture) — "local" (default, empty string
 	// included) is the backend's own camera, unchanged behavior for every
 	// pre-existing CLI/API caller; "browser" is frames pushed over
 	// /ws/ingest. Resolved and validated before touching any I/O, same
@@ -108,8 +108,19 @@ func (uc *UseCase) Recognize(ctx context.Context, req dto.RecognitionRequest) (d
 		uc.mu.Unlock()
 	}()
 
-	streamingInput.Initialize()
-	uc.streamingOutput.Initialize()
+	// Errors checked from 2026-08-13 on — used to be discarded (`Initialize()`
+	// called for effect only), which silently hid real failures like a
+	// camera device already held by another process/browser tab (same
+	// physical webcam requested by a "local" and a "browser" session at
+	// once — a real case that surfaced this). Failing fast here means the
+	// caller (recognitionController/sessionController) gets a real error
+	// message instead of a session that reports success with zero frames.
+	if err := streamingInput.Initialize(); err != nil {
+		return dto.Failure[dto.RecognitionResponse]("failed to initialize input stream: " + err.Error()), err
+	}
+	if err := uc.streamingOutput.Initialize(); err != nil {
+		return dto.Failure[dto.RecognitionResponse]("failed to initialize output stream: " + err.Error()), err
+	}
 
 	// ctx is watched for the *entire* call, not just checked once above —
 	// found 2026-08-12 while auditing ctx usage across every uc method: it
@@ -122,7 +133,7 @@ func (uc *UseCase) Recognize(ctx context.Context, req dto.RecognitionRequest) (d
 	// one. watchDone stops the watcher when Recognize returns on
 	// its own (StopRecognition()/key event/stream end), so it doesn't leak for the
 	// lifetime of a ctx that's never cancelled (e.g. context.Background(),
-	// what every caller passes today — TODO.md § H1: a per-session
+	// what every caller passes today — a per-session
 	// cancellable context is a natural follow-up once a caller actually
 	// wants to tie a session's lifetime to one).
 	watchDone := make(chan struct{})
@@ -159,7 +170,7 @@ func (uc *UseCase) Recognize(ctx context.Context, req dto.RecognitionRequest) (d
 	frameCount := 0
 	lastFrameAt := time.Now()
 
-	streamingInput.Start(func(frame *entities.Frame) (*entities.Frame, error) {
+	startErr := streamingInput.Start(func(frame *entities.Frame) (*entities.Frame, error) {
 		frameStart := time.Now()
 		// Proxy for real achieved FPS: includes camera capture wait, which
 		// happens in the input stream's loop before this callback runs and
@@ -191,7 +202,7 @@ func (uc *UseCase) Recognize(ctx context.Context, req dto.RecognitionRequest) (d
 		outImage := frame.Image
 		boxes := tracks.boxes()
 
-		// boxAware outputs (TODO.md § H2, 2026-08-12 — streamer.
+		// boxAware outputs (added 2026-08-12 — streamer.
 		// BoxAwareOutputStream, in practice *output.WebSocketOutput)
 		// receive the frame undrawn plus box data as structured JSON —
 		// the client draws its own overlays (docs/gui/mockups/ 1c/1d/1h)
@@ -292,6 +303,16 @@ func (uc *UseCase) Recognize(ctx context.Context, req dto.RecognitionRequest) (d
 	uc.streamingOutput.Stop()
 	close(frameChan)
 	<-detectionDone
+
+	// startErr's return value used to be discarded entirely — this used
+	// to be the last (and worst) link in the same silent-failure chain as
+	// the Initialize() checks above: even if the input stream died mid-
+	// session (see captureLoop's doc comment), Recognize still reported
+	// dto.Success unconditionally.
+	if startErr != nil {
+		uc.logger.Error("Input stream ended with an error", map[string]interface{}{"error": startErr.Error()})
+		return dto.Failure[dto.RecognitionResponse](startErr.Error()), startErr
+	}
 
 	fmt.Println("Recognition completed successfully.")
 	return dto.Success(dto.RecognitionResponse{}), nil

@@ -1,0 +1,59 @@
+.ls-sources {
+  flex: 1;
+  min-height: 0;
+  padding: 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  overflow-y: auto;
+}
+
+.ls-sources__devices h2 {
+  margin: 0 0 10px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.ls-sources__device-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.ls-sources__list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.ls-sources__row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 14px;
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+}
+
+.ls-sources__label {
+  font-size: 13px;
+  color: var(--text-primary);
+  font-weight: 600;
+}
+
+.ls-sources__filter {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  color: var(--text-tertiary);
+}
+
+.ls-sources__actions {
+  margin-left: auto;
+  display: flex;
+  gap: 8px;
+}

@@ -12,9 +12,9 @@ import (
 )
 
 // sessionController is the REST surface over session.Manager — the
-// multi-flux counterpart to recognitionController (TODO.md § H1
-// "Multi-flux"), addressable by session ID rather than one process-wide
-// session. Deliberately parallel to, not replacing, recognitionController:
+// multi-flux counterpart to recognitionController, addressable by session
+// ID rather than one process-wide session. Deliberately parallel to, not
+// replacing, recognitionController:
 // see session.go's package doc comment for why both currently coexist.
 type sessionController struct {
 	manager *session.Manager

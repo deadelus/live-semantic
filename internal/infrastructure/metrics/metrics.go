@@ -1,7 +1,7 @@
 // Package metrics defines the port for operational metrics collection
-// (latency, throughput, match rate...). No metrics exist today beyond zap
-// logs — see TODO.md § E. First implementation is a console logger
-// (implementation/metrics/console-metrics), consistent with Phase 1 of the
+// (latency, throughput, match rate...). No metrics existed before this
+// port (ports/dependency-inversion cleanup work). First implementation is
+// a console logger (implementation/metrics/console-metrics), consistent with Phase 1 of the
 // roadmap in overview.md; a real backend (Prometheus/StatsD/...) is future
 // work, not scoped here.
 package metrics

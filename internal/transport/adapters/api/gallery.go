@@ -15,11 +15,11 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
-// galleryController wires REST CRUD around uc.GalleryReferences (TODO.md
-// § D/§ H1, docs/adr/clip-backend.md § 24) — a "recognize by reference
-// image" filter term family, alongside COCO labels and free text. H1
-// minimal scope, same as recognitionController: no auth, no per-session
-// scoping (the gallery is process-wide, TODO.md § H1 "Multi-flux" doesn't
+// galleryController wires REST CRUD around uc.GalleryReferences
+// (docs/adr/clip-backend.md § 24) — a "recognize by reference
+// image" filter term family, alongside COCO labels and free text. Same
+// minimal scope as recognitionController: no auth, no per-session
+// scoping (the gallery is process-wide, multi-flux doesn't
 // change that — see infrastructure/storage.GalleryStorage's doc comment for
 // why sharing across sessions is the point, not a limitation). Depends
 // on uc.GalleryReferences, not the wider uc.UseCases (interface
@@ -43,6 +43,13 @@ func newGalleryController(useCases uc.GalleryReferences, logger logger.Logger) *
 // auto-detects — JPEG/PNG registered above), not JPEG-only like
 // /ws/ingest's own decode path, since a GUI's "select a box, submit a
 // crop" flow isn't tied to the video pipeline's own encoding choice.
+//
+// Calling this again with a name that already has entries *adds* another
+// reference photo to it instead of erroring (2026-08-13, multi-image
+// entries — see AddGalleryReference's own doc comment) — a GUI offering
+// "add another photo to an existing term" and "create a new term" can
+// point both at this same endpoint, the only difference is which name it
+// sends.
 func (gc *galleryController) add(c *gin.Context) {
 	name := c.PostForm("name")
 	if name == "" {
@@ -82,9 +89,36 @@ func (gc *galleryController) list(c *gin.Context) {
 
 // remove handles DELETE /api/v1/gallery/:name. Idempotent (matches
 // storage.GalleryStorage.Remove) — always 200, even if the name never existed.
+// remove handles DELETE /api/v1/gallery/:name — the whole entry, every
+// reference photo included ("v1" of the delete flow). See removeImage
+// for removing a single photo out of several instead.
 func (gc *galleryController) remove(c *gin.Context) {
 	gc.useCases.RemoveGalleryReference(c.Request.Context(), c.Param("name"))
 	c.JSON(http.StatusOK, gin.H{"status": "removed"})
+}
+
+// removeImage handles DELETE /api/v1/gallery/:name/images/:imageID — "v2"
+// of the delete flow (2026-08-13, multi-image entries): removes one
+// reference photo without touching the entry's other photos. If it was
+// the last one, the whole entry goes with it (RemoveGalleryImage's own
+// doc comment) — same end state as calling remove above, just reached by
+// deleting photos down to zero instead of one explicit call.
+func (gc *galleryController) removeImage(c *gin.Context) {
+	gc.useCases.RemoveGalleryImage(c.Request.Context(), c.Param("name"), c.Param("imageID"))
+	c.JSON(http.StatusOK, gin.H{"status": "removed"})
+}
+
+// thumbnail handles GET /api/v1/gallery/:name/images/:imageID — serves
+// one reference photo's stored thumbnail directly (real Content-Type,
+// no base64/JSON wrapping), so a GUI can point a plain <img src="..."> at
+// it.
+func (gc *galleryController) thumbnail(c *gin.Context) {
+	data, ok := gc.useCases.GetGalleryThumbnail(c.Request.Context(), c.Param("name"), c.Param("imageID"))
+	if !ok {
+		c.JSON(http.StatusNotFound, gin.H{"error": "thumbnail not found"})
+		return
+	}
+	c.Data(http.StatusOK, "image/jpeg", data)
 }
 
 // update handles PATCH /api/v1/gallery/:name — JSON body with either or

@@ -24,7 +24,7 @@ type FrameBroadcaster interface {
 }
 
 // FrameReceiver accepts frames decoded from a browser's own camera feed
-// (TODO.md § H2 "capture caméra navigateur") — narrow interface, same
+// (browser camera capture) — narrow interface, same
 // rationale as FrameBroadcaster: main.go wires in the concrete
 // *implementation/streamer/input.BrowserInput, this package only depends
 // on the method it needs.
@@ -34,7 +34,7 @@ type FrameReceiver interface {
 
 var wsUpgrader = websocket.Upgrader{
 	CheckOrigin: func(r *http.Request) bool {
-		// Dev-only: no origin check yet. H1 minimal scope (TODO.md § H1)
+		// Dev-only: no origin check yet. Current minimal scope
 		// doesn't cover auth/CORS — revisit before anything but local use.
 		return true
 	},
@@ -71,8 +71,8 @@ func (s *Server) handleWebSocket(c *gin.Context) {
 }
 
 // handleWebSocketIngest is the reverse direction of handleWebSocket: a
-// browser pushes its own camera feed (TODO.md § H2 "capture caméra
-// navigateur") as one binary JPEG message per frame, decoded here and
+// browser pushes its own camera feed (browser camera capture) as one
+// binary JPEG message per frame, decoded here and
 // handed to frameReceiver (in practice input.BrowserInput.PushFrame) for
 // RecognitionUseCase to consume like any other InputStream. Non-binary
 // messages (text/ping) are ignored rather than erroring — a client
@@ -115,8 +115,8 @@ func (s *Server) handleWebSocketIngest(c *gin.Context) {
 	}
 }
 
-// handleSessionWebSocket is handleWebSocket's per-session counterpart
-// (TODO.md § H1 Multi-flux) — same binary-JPEG-frames contract, but
+// handleSessionWebSocket is handleWebSocket's per-session, multi-flux
+// counterpart — same binary-JPEG-frames contract, but
 // against session.Manager.Output(id) instead of the single process-wide
 // broadcaster. The type assertion to FrameBroadcaster always succeeds in
 // practice: session.Manager's OutputFactory (wired in main.go) only ever

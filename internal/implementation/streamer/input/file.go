@@ -13,8 +13,8 @@ var _ streamer.InputStream = (*FileInput)(nil)
 // FileInput reads frames from any URI OpenCV's FFmpeg backend can open:
 // a local video file path, or a network stream URL (rtsp://, http://,
 // ...) — gocv.VideoCaptureFile handles both the same way, picking the
-// backend from the URI scheme. TODO.md § H1 lists "fichier vidéo local"
-// and "RTSP/caméra IP" as two separate adapters, but the open call and
+// backend from the URI scheme. "Local video file" and "RTSP/IP camera"
+// were originally scoped as two separate adapters, but the open call and
 // read loop are identical either way — one type, not two.
 //
 // Local files were already proven working in this project (cmd/tracking-
@@ -60,7 +60,7 @@ func NewFileInput(uri string) *FileInput {
 	return &FileInput{uri: uri}
 }
 
-// Initialize implements the Input.Initialize for FileInput.
+// Initialize implements streamer.InputStream.Initialize for FileInput.
 func (fi *FileInput) Initialize() error {
 	var err error
 	fi.capture, err = gocv.VideoCaptureFile(fi.uri)
@@ -70,9 +70,13 @@ func (fi *FileInput) Initialize() error {
 	return nil
 }
 
-// Start implements the Input.Start for FileInput. Unlike CameraInput,
-// frames are never mirrored — a recorded file or an IP camera's own feed
-// must be shown as-is.
+// Start implements streamer.InputStream.Start for FileInput. Unlike
+// CameraInput, frames are never mirrored — a recorded file or an IP
+// camera's own feed must be shown as-is. treatEndAsError=false: reaching
+// the end of a file/stream while still "running" is the expected way
+// this adapter stops (see the type's own doc comment on the known
+// no-reconnect gap for RTSP) — captureLoop's onFrame-error path still
+// propagates real errors from further down the pipeline.
 func (fi *FileInput) Start(frameActionCallback func(*entities.Frame) (*entities.Frame, error)) error {
 	defer fi.Cleanup()
 
@@ -80,16 +84,15 @@ func (fi *FileInput) Start(frameActionCallback func(*entities.Frame) (*entities.
 		return fmt.Errorf("file input not initialized")
 	}
 	fi.running = true
-	captureLoop(fi.capture, false, func() bool { return fi.running }, frameActionCallback)
-	return nil
+	return captureLoop(fi.capture, false, false, func() bool { return fi.running }, frameActionCallback)
 }
 
-// Stop implements the Input.Stop for FileInput.
+// Stop implements streamer.InputStream.Stop for FileInput.
 func (fi *FileInput) Stop() {
 	fi.running = false
 }
 
-// Cleanup implements the Input.Cleanup for FileInput.
+// Cleanup implements streamer.InputStream.Cleanup for FileInput.
 func (fi *FileInput) Cleanup() {
 	if fi.capture != nil {
 		fi.capture.Close()

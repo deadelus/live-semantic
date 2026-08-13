@@ -5,19 +5,16 @@ import (
 	"live-semantic/internal/transport/envelopes"
 )
 
-// HandleRecognition handles a Recognition request
-// It takes a envelopes.TransportRequest with dto.RecognitionRequest data and returns a envelopes.TransportResponse with dto.RecognitionResponse
+// HandleRecognitionUseCase adapts a TransportRequest to a uc.Recognition.Recognize
+// call and folds its (dto.Result, error) return into the uniform
+// TransportResponse shape — the translation layer so every transport
+// adapter deals in envelopes, never uc.Recognize's own signature directly.
 func (h *BaseHandler) HandleRecognitionUseCase(req envelopes.TransportRequest[dto.RecognitionRequest]) envelopes.TransportResponse[dto.RecognitionResponse] {
-	// Log the request details
-	// This is where you would typically log the request for debugging or monitoring purposes
 	h.logger.Info("Handling Recognition request", map[string]interface{}{
 		"filter": req.Data.Filter,
 	})
 
-	// Call the use case with the request data
 	result, err := h.useCases.Recognize(req.Context, req.Data)
-
-	// Handle errors and convert to envelopes.TransportResponse
 	if err != nil {
 		return envelopes.TransportResponse[dto.RecognitionResponse]{
 			Success: false,
@@ -26,7 +23,6 @@ func (h *BaseHandler) HandleRecognitionUseCase(req envelopes.TransportRequest[dt
 		}
 	}
 
-	// Check if the result is successful and return the appropriate envelopes.TransportResponse
 	if result.Success {
 		return envelopes.TransportResponse[dto.RecognitionResponse]{
 			Success: true,
@@ -35,7 +31,6 @@ func (h *BaseHandler) HandleRecognitionUseCase(req envelopes.TransportRequest[dt
 		}
 	}
 
-	// If the result is not successful, return an error response
 	return envelopes.TransportResponse[dto.RecognitionResponse]{
 		Success: false,
 		Error:   result.Error,

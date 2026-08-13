@@ -8,8 +8,8 @@ import (
 	"live-semantic/internal/domain/entities"
 )
 
-// filterTerm is one parsed component of a recognition filter spec
-// (TODO.md § A): "key[*cap][+option[=value]]...". key is either a
+// filterTerm is one parsed component of a recognition filter spec:
+// "key[*cap][+option[=value]]...". key is either a
 // YOLO11s/COCO class name (exact label match, no CLIP involved) or free
 // text (matched semantically via CLIP against every YOLO candidate box
 // not already claimed by an exact term this cycle) — trackManager decides
@@ -28,7 +28,7 @@ type filterTerm struct {
 	// dedup key below.
 	Key string
 	// Cap is the maximum number of simultaneous tracks accepted for this
-	// term — a "scene condition" (TODO.md § A/I): 1 by default ("person"
+	// term — a "scene condition": 1 by default ("person"
 	// means "I expect a person box"), explicit with "*N" ("person*2" means
 	// "up to 2 person boxes"). For a semantic term, candidates are ranked
 	// by CLIP score and only the top Cap above threshold are kept. Never
@@ -41,13 +41,13 @@ type filterTerm struct {
 	// user confirmed 2026-08-11, tested live, that a term should never
 	// draw a second box on the same physical object unless explicitly
 	// asked to (docs/adr/clip-backend.md § 13/16). Parsed and stored here,
-	// but NOT YET consulted by trackManager.reanchor — TODO.md § A tracks
-	// wiring this in; setting it today has no observable effect.
+	// but NOT YET consulted by trackManager.reanchor — wiring this in is
+	// still open work; setting it today has no observable effect.
 	Overlap bool
 	// Relation, RelationParam, Container, Attachment are set only for a
 	// relational term: "container%relation[=param]%attachment" (e.g.
-	// "person%+%backpack" — TODO.md § A "décomposition géométrique",
-	// docs/adr/clip-backend.md § 24). Relation == "" (the vast majority of
+	// "person%+%backpack" — geometric decomposition, docs/adr/
+	// clip-backend.md § 24). Relation == "" (the vast majority of
 	// terms) means every other field here is irrelevant — check that
 	// first. Container/Attachment are matched independently by
 	// trackManager (v1: both must be exact COCO labels — no CLIP/
@@ -162,6 +162,8 @@ func containsWord(haystack, needle string) bool {
 	}
 }
 
+// isWordByte reports whether b can be part of a word for containsWord's
+// ASCII-only boundary check (letters, digits, underscore).
 func isWordByte(b byte) bool {
 	return b == '_' ||
 		(b >= 'a' && b <= 'z') || (b >= 'A' && b <= 'Z') || (b >= '0' && b <= '9')
@@ -259,7 +261,7 @@ var relationOperators = map[string]relationOperatorSpec{
 // Rejects (rather than silently ignoring):
 //   - a duplicate key across terms (e.g. "person*2,person*3", or the same
 //     free-text term twice) — each term is meant to be able to drive its
-//     own event/action later (TODO.md § A/I) and a candidate box can only
+//     own event/action later and a candidate box can only
 //     be claimed by one term per cycle by default (Overlap=false), so a
 //     duplicate can never be a meaningful second condition, only a
 //     mistake.

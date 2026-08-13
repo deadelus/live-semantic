@@ -97,21 +97,64 @@ une seule structure :
     choix du matériel d'inférence, choix de variante de modèle.
 - **Interaction clé — sélection runtime + labellisation** : l'utilisateur
   clique sur une box déjà détectée, ou dessine une box à main levée si rien
-  n'est détecté dessus → un petit formulaire lui demande un label → l'objet
-  rejoint une galerie de références réutilisable, listée dans le volet de
-  droite. Chaque entrée : activable/désactivable, renommable, supprimable
-  individuellement. Doit rester fluide, sans bloquer longtemps la lecture.
+  n'est détecté dessus → un petit formulaire lui demande un nom de Terme →
+  l'objet rejoint la Bibliothèque (voir § dédiée ci-dessous), listée dans
+  le volet de droite. Chaque entrée : activable/désactivable, renommable,
+  supprimable individuellement. Doit rester fluide, sans bloquer longtemps
+  la lecture.
 - Réglages de filtre dans le volet de droite :
-  - Champ de filtre texte libre — plusieurs filtres actifs simultanément
-    possibles sur un même flux.
+  - Champ de filtre — combobox unique avec autocomplétion **priorisée** :
+    Classes COCO (vocabulaire fermé du modèle actif) → Termes de Ma
+    Bibliothèque → texte libre en dernier recours si rien ne correspond
+    (option grisée, explicitement signalée comme "mode moins fiable" —
+    voir § Bibliothèque). Plusieurs filtres actifs simultanément possibles
+    sur un même flux.
   - **Slider de seuil de similarité avec retour visuel en direct** : le
     score mesuré doit visiblement bouger pendant que l'utilisateur déplace
-    le slider, avant même de valider. Élément différenciant du produit,
-    pas un simple champ numérique — à soigner particulièrement.
+    le slider, avant même de valider. Ne s'applique qu'aux Termes texte
+    libre — un Terme lié à une classe COCO ou un Terme de Bibliothèque
+    matche par comparaison vectorielle/classe, pas de slider dessus.
+    Élément différenciant du produit, à soigner particulièrement.
   - Raccourci "appliquer à toutes les sources actives" (utile en usage
     mono-caméra ou pour répliquer un réglage sur plusieurs flux d'un coup).
 - Overlay de performance optionnel et discret : FPS, latence, nombre
   d'objets suivis — masquable, ne doit jamais gêner la lecture de l'image.
+
+### Bibliothèque — Collections › Termes (remplace "galerie de références")
+
+Modèle acté dans la dernière passe de mockups (écrans 4a-4e) — remplace la
+terminologie "galerie de références" utilisée plus haut dans ce document
+et dans les itérations antérieures des mockups (2a-2e "Galerie", 3a-3d
+"Termes" sans Collections) :
+
+- **Collection** : nom + tags plats (jamais d'imbrication, gérés
+  uniquement via combobox "réutiliser ou Créer" — pas de gestion de tags
+  séparée). Sert à organiser/filtrer transversalement, pas une hiérarchie.
+- **Terme** : nom (texte, encodé en vecteur CLIP) + **1 à N photos de
+  référence obligatoires** (chaque photo = un vecteur image CLIP lié au
+  vecteur texte). Un Terme sans photo n'existe pas — lier texte à texte
+  seul n'a pas de sens produit ici. Retirer la dernière photo équivaut à
+  supprimer le Terme (confirmation demandée).
+- **Classe COCO liée (optionnelle)** sur un Terme : restreint l'évaluation
+  de ce Terme aux seules boîtes déjà classées par YOLO dans cette classe
+  (plus rapide, plus précis) — badge `COCO` visible partout où le Terme
+  apparaît. Si aucune classe COCO du modèle actif ne correspond au nom
+  saisi, avertissement explicite dans l'éditeur ("rien ne sera détecté
+  pour ce Terme sans classe détectable") avec actions "changer de modèle"
+  / "fine-tuner le modèle actuel".
+- Un Terme peut appartenir à plusieurs Collections sans duplication
+  (partage, pas de copie).
+- **Barre de filtre caméra (autocomplétion)** : priorité stricte à
+  l'affichage — Classes COCO natives du modèle actif, puis Termes de "Ma
+  Bibliothèque" (avec vignette + nb de photos + classe COCO liée si
+  présente), puis texte libre en dernier recours seulement si rien ne
+  correspond dans les deux groupes précédents (option visuellement grisée,
+  étiquetée "mode moins fiable — CLIP compare sans classe ni photo de
+  référence").
+
+Écrans de référence : `docs/gui/mockups/LiveSemantic Mockups.dc.html`
+§4a (liste Collections), §4b (détail Collection), §4c (éditeur de Terme),
+§4d (planche d'états/validation), §4e (barre de filtre caméra).
 
 ### Historique / alertes
 

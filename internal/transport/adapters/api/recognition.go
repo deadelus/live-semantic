@@ -15,10 +15,10 @@ import (
 )
 
 // recognitionController wires REST start/stop/status around the single,
-// process-wide Recognize run. H1 minimal scope (TODO.md § H1): one webcam
+// process-wide Recognize run. Current minimal scope: one webcam
 // session, no session IDs yet — uc.UseCase's streamingInput/
-// streamingOutput are shared fields, not per-call (see TODO.md § H1
-// "Multi-flux" for the follow-up that replaces this with per-ID sessions).
+// streamingOutput are shared fields, not per-call (see the multi-flux
+// work for the follow-up that replaces this with per-ID sessions).
 // The `running` guard here exists purely to reject a second concurrent
 // start with a clear error instead of two goroutines fighting over the
 // same InputStream. Depends on uc.Recognition, not the wider uc.UseCases
@@ -57,7 +57,7 @@ func (rc *recognitionController) start(c *gin.Context) {
 	if rc.running {
 		rc.mu.Unlock()
 		c.JSON(http.StatusConflict, gin.H{
-			"error": "a recognition session is already running — stop it first (H1 minimal scope: one session at a time, see TODO.md § H1 Multi-flux)",
+			"error": "a recognition session is already running — stop it first (current minimal scope: one session at a time, see the multi-flux work)",
 		})
 		return
 	}
@@ -113,10 +113,10 @@ func (rc *recognitionController) stop(c *gin.Context) {
 }
 
 // status reports whether a session is running and, if the most recent
-// one ended in an error (e.g. an invalid filter), that error — TODO.md
-// § A's "l'API REST ne remonte pas au client un filtre invalide" fixed
-// 2026-08-12, now that H2 gives a client a real reason to poll this
-// (docs/adr/clip-backend.md § 26 onward): start() used to return 202
+// one ended in an error (e.g. an invalid filter), that error — fixed
+// 2026-08-12 (the REST API didn't use to surface an invalid filter to the
+// client at all), now that the web frontend gives a client a real reason
+// to poll this (docs/adr/clip-backend.md § 26 onward): start() used to return 202
 // immediately regardless of whether the filter was valid, and the
 // failure only ever surfaced in server logs — a GUI had no way to show
 // the user why nothing happened. lastError is cleared at the start of

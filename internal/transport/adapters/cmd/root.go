@@ -1,3 +1,7 @@
+// Package cmd is the cobra-based non-interactive CLI transport adapter
+// (as opposed to transport/adapters/cli's interactive survey-driven one)
+// — one subcommand per use case, e.g. recognitionCmd
+// (cmd_realtime_analysis.go).
 package cmd
 
 import (

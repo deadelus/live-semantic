@@ -1,7 +1,7 @@
-// Package api is the unified HTTP + WebSocket backend for the GUI (H1
-// minimal scope, TODO.md § H1): REST control (recognition start/stop/
-// status) and a single /ws endpoint streaming annotated JPEG frames, on
-// one gin.Engine/one port.
+// Package api is the unified HTTP + WebSocket backend for the GUI
+// (GUI backend prerequisites, minimal scope): REST control (recognition
+// start/stop/status) and a single /ws endpoint streaming annotated JPEG
+// frames, on one gin.Engine/one port.
 //
 // Deliberately one server for both, not two independent processes: the
 // GUI needs REST control and live video against the *same* running
@@ -31,6 +31,7 @@ type Server struct {
 	recognition   *recognitionController
 	gallery       *galleryController
 	sessions      *sessionController
+	devices       *devicesController
 }
 
 // NewServer creates the unified server. broadcaster receives every
@@ -38,13 +39,13 @@ type Server struct {
 // *implementation/streamer/output.WebSocketOutput, the same instance
 // passed as uc.NewUseCase's streamingOutput, so frames rendered by the
 // running RecognitionUseCase reach whoever is connected to /ws.
-// frameReceiver is the reverse direction (TODO.md § H2 "capture caméra
-// navigateur") — in practice *implementation/streamer/input.BrowserInput,
-// the same instance passed as one of uc.NewUseCase's InputStream options.
-// sessionManager backs the parallel, per-ID multi-flux surface (TODO.md
-// § H1 "Multi-flux" — see sessions.go/session.go's package doc comment
-// for why it coexists with the single-session useCases/broadcaster/
-// frameReceiver above rather than replacing them).
+// frameReceiver is the reverse direction (browser camera capture) — in
+// practice *implementation/streamer/input.BrowserInput, the same instance
+// passed as one of uc.NewUseCase's InputStream options.
+// sessionManager backs the parallel, per-ID multi-flux surface (see
+// sessions.go/session.go's package doc comment for why it coexists with
+// the single-session useCases/broadcaster/frameReceiver above rather than
+// replacing them).
 func NewServer(useCases uc.UseCases, broadcaster FrameBroadcaster, frameReceiver FrameReceiver, sessionManager *session.Manager, logger logger.Logger, port int) *Server {
 	gin.SetMode(gin.ReleaseMode)
 	router := gin.New()
@@ -60,6 +61,7 @@ func NewServer(useCases uc.UseCases, broadcaster FrameBroadcaster, frameReceiver
 		recognition:   newRecognitionController(useCases, logger),
 		gallery:       newGalleryController(useCases, logger),
 		sessions:      newSessionController(sessionManager, logger),
+		devices:       newDevicesController(sessionManager),
 	}
 
 	server.setupRoutes()

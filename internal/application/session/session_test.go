@@ -132,6 +132,7 @@ func (mockTracker) Cleanup() {}
 // package's mockGalleryRepo doc comment).
 type mockGalleryRepo struct {
 	entries map[string]*storage.Gallery
+	nextSeq int
 }
 
 func newMockGalleryRepo() *mockGalleryRepo {
@@ -140,12 +141,31 @@ func newMockGalleryRepo() *mockGalleryRepo {
 
 var _ storage.GalleryStorage = (*mockGalleryRepo)(nil)
 
-func (g *mockGalleryRepo) Add(name string, embedding entities.Embedding) error {
-	if _, exists := g.entries[name]; exists {
-		return fmt.Errorf("gallery entry %q already exists", name)
+func (g *mockGalleryRepo) AddImage(name string, embedding entities.Embedding, thumbnail []byte) (string, error) {
+	g.nextSeq++
+	id := fmt.Sprintf("img-%d", g.nextSeq)
+	e, ok := g.entries[name]
+	if !ok {
+		e = &storage.Gallery{Name: name, Enabled: true}
+		g.entries[name] = e
 	}
-	g.entries[name] = &storage.Gallery{Name: name, Embedding: embedding, Enabled: true}
-	return nil
+	e.Images = append(e.Images, storage.GalleryImage{ID: id, Embedding: embedding})
+	return id, nil
+}
+func (g *mockGalleryRepo) RemoveImage(name, imageID string) {
+	e, ok := g.entries[name]
+	if !ok {
+		return
+	}
+	for i, img := range e.Images {
+		if img.ID == imageID {
+			e.Images = append(e.Images[:i], e.Images[i+1:]...)
+			break
+		}
+	}
+	if len(e.Images) == 0 {
+		delete(g.entries, name)
+	}
 }
 func (g *mockGalleryRepo) Remove(name string) { delete(g.entries, name) }
 func (g *mockGalleryRepo) Rename(oldName, newName string) error {
@@ -166,12 +186,28 @@ func (g *mockGalleryRepo) SetEnabled(name string, enabled bool) error {
 	e.Enabled = enabled
 	return nil
 }
-func (g *mockGalleryRepo) Get(name string) (entities.Embedding, bool) {
+func (g *mockGalleryRepo) Get(name string) ([]entities.Embedding, bool) {
 	e, ok := g.entries[name]
-	if !ok || !e.Enabled {
+	if !ok || !e.Enabled || len(e.Images) == 0 {
 		return nil, false
 	}
-	return e.Embedding, true
+	out := make([]entities.Embedding, len(e.Images))
+	for i, img := range e.Images {
+		out[i] = img.Embedding
+	}
+	return out, true
+}
+func (g *mockGalleryRepo) Thumbnail(name, imageID string) ([]byte, bool) {
+	e, ok := g.entries[name]
+	if !ok {
+		return nil, false
+	}
+	for _, img := range e.Images {
+		if img.ID == imageID {
+			return []byte("thumb"), true
+		}
+	}
+	return nil, false
 }
 func (g *mockGalleryRepo) List() []storage.Gallery {
 	out := make([]storage.Gallery, 0, len(g.entries))
@@ -192,7 +228,7 @@ func newTestManager(mi *mockInput) *Manager {
 		mockNotifier{},
 		mockDetector{},
 		mockEncoder{},
-		mockTrackerFactory,
+		func() tracking.TrackerFactory { return mockTrackerFactory },
 		// gallery — NewUseCase requires a non-nil Repository since the
 		// 2026-08-12 port extraction (no more internal fallback, see its
 		// doc comment); a fresh one per test is fine here, TestGallery
@@ -237,7 +273,7 @@ func TestCreateSession_InputFactoryErrorPropagates(t *testing.T) {
 	m := NewManager(
 		func(Source) (streamer.InputStream, error) { return nil, boom },
 		func() streamer.OutputStream { return mockOutput{} },
-		noopLogger{}, mockNotifier{}, mockDetector{}, mockEncoder{}, mockTrackerFactory, nil,
+		noopLogger{}, mockNotifier{}, mockDetector{}, mockEncoder{}, func() tracking.TrackerFactory { return mockTrackerFactory }, nil,
 	)
 
 	if _, err := m.CreateSession(context.Background(), Source{Kind: "local"}); !errors.Is(err, boom) {
@@ -445,14 +481,14 @@ func TestOutput_Input_UnknownSession(t *testing.T) {
 // implementation/gallery/inmemory's tests).
 func TestGallerySharedAcrossSessions(t *testing.T) {
 	galleryRepo := newMockGalleryRepo()
-	if err := galleryRepo.Add("mon_sac", entities.Embedding{1, 0}); err != nil {
-		t.Fatalf("galleryRepo.Add() error = %v", err)
+	if _, err := galleryRepo.AddImage("mon_sac", entities.Embedding{1, 0}, []byte("thumb")); err != nil {
+		t.Fatalf("galleryRepo.AddImage() error = %v", err)
 	}
 
 	m := NewManager(
 		func(Source) (streamer.InputStream, error) { return newMockInput(), nil },
 		func() streamer.OutputStream { return mockOutput{} },
-		noopLogger{}, mockNotifier{}, mockDetector{}, mockEncoder{}, mockTrackerFactory, galleryRepo,
+		noopLogger{}, mockNotifier{}, mockDetector{}, mockEncoder{}, func() tracking.TrackerFactory { return mockTrackerFactory }, galleryRepo,
 	)
 
 	infoA, _ := m.CreateSession(context.Background(), Source{Kind: "local"})

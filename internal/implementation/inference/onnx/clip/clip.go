@@ -1,3 +1,6 @@
+// Package clip implements the inference.SemanticEncoder port on CLIP
+// ViT-B/32, directly against github.com/yalue/onnxruntime_go (no
+// intermediate wrapper), same as implementation/inference/onnx/yolo11s.
 package clip
 
 import (
@@ -61,8 +64,8 @@ var (
 // graph genuinely doesn't have one, confirming CLIP's original
 // eot-position pooling design doesn't need one here) -> text_embeds on the
 // text side. See docs/adr/clip-backend.md.
-// Encoder's two sessions are DynamicAdvancedSession (TODO.md § H1,
-// docs/gui/spec.md § 1.2), same rationale as yolo11s.Detector's doc
+// Encoder's two sessions are DynamicAdvancedSession (docs/gui/spec.md
+// § 1.2), same rationale as yolo11s.Detector's doc
 // comment: EncodeImage/EncodeText allocate fresh tensors per call instead
 // of reusing struct-held ones, which were confirmed unsafe under
 // concurrent calls on a shared Encoder. Model weights still load once and
@@ -122,7 +125,7 @@ func New(opts ...runtime.Option) (*Encoder, error) {
 
 // EncodeImage implements SemanticEncoder.EncodeImage for Encoder. frame is
 // expected to already be a crop of the region of interest (a YOLO bounding
-// box, TODO.md § A) — this does not detect or crop anything itself.
+// box) — this does not detect or crop anything itself.
 func (e *Encoder) EncodeImage(frame *entities.Frame) (entities.Embedding, error) {
 	if frame == nil || frame.Image == nil {
 		return nil, fmt.Errorf("clip: nil frame")
@@ -152,7 +155,7 @@ func (e *Encoder) EncodeImage(frame *entities.Frame) (entities.Embedding, error)
 }
 
 // EncodeText implements SemanticEncoder.EncodeText for Encoder. Callers
-// should call this once per filter at startup, not per frame (TODO.md § A).
+// should call this once per filter at startup, not per frame.
 func (e *Encoder) EncodeText(text string) (entities.Embedding, error) {
 	inputIDs, err := ort.NewEmptyTensor[int64](ort.NewShape(1, contextLength))
 	if err != nil {
@@ -185,8 +188,8 @@ func (e *Encoder) EncodeText(text string) (entities.Embedding, error) {
 // deliberately NOT a plain squash-resize to 224x224 (yolo11s.go's simpler
 // approach), which would distort aspect ratio. Fills data (a vision input
 // tensor's backing buffer) with normalized (CLIP's own mean/std, not plain
-// /255), channel-split (NCHW) RGB data. Free function (TODO.md § H1 — see
-// yolo11s.writeInput's doc comment for why).
+// /255), channel-split (NCHW) RGB data. Free function — see
+// yolo11s.writeInput's doc comment for why.
 func writeImage(data []float32, img image.Image) error {
 	channelSize := imageSize * imageSize
 	if len(data) < channelSize*3 {
@@ -268,8 +271,8 @@ func (e *Encoder) Cleanup() {
 	// No struct-held input/output tensors to destroy anymore — EncodeImage/
 	// EncodeText allocate and destroy their own per call (see Encoder's doc
 	// comment).
-	// Same fix as yolo11s.Detector.Cleanup (see its doc comment / TODO.md
-	// bug critique SIGABRT) — required here too, independently: whichever
+	// Same fix as yolo11s.Detector.Cleanup (see its doc comment — the
+	// 2026-08-10 SIGABRT-on-shutdown root cause) — required here too, independently: whichever
 	// of the two Cleanup()s runs first actually destroys the shared ORT
 	// environment, runtime.DestroyEnvironment() is a no-op if already
 	// destroyed, so having both call it is safe, not redundant risk.

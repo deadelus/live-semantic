@@ -1,10 +1,17 @@
 # Spec GUI desktop + web — LiveSemantic
 
 Document de travail pour cadrer la GUI (desktop + web, API interne, sources
-vidéo multiples). Statut : **proposition, rien de ce document n'est
-implémenté** — à valider avant de coder quoi que ce soit. Écrit après
-vérification directe du code existant (pas de suppositions non marquées
-comme telles).
+vidéo multiples). Statut au **2026-08-13** : la majorité de § 1 (prérequis
+backend) est **faite et testée** — câblage API, multi-flux
+(`session.Manager`), galerie REST, ingestion navigateur JPEG-over-WS,
+protocole `/ws` structuré. **Le frontend `web/` a été basculé le même
+jour** de l'ancienne API mono-session (`/api/v1/recognition/*`, `/ws`)
+vers les endpoints multi-flux (`/api/v1/sessions/*`,
+`/ws/sessions/:id[/ingest]`, voir `web/src/api.ts`) — un seul
+session/onglet pour l'instant (la vue liste/mosaïque multi-source, § 3.1,
+n'existe pas encore), mais chaque appel est déjà scopé par session, donc
+additif pour la suite plutôt qu'une nouvelle migration à refaire. La
+galerie de références n'a en revanche pas encore d'UI (§ 1.4).
 
 Pour le brief produit/design à transmettre (écrans, interactions, décisions
 UX — sans les détails techniques backend ci-dessous), voir
@@ -37,24 +44,32 @@ UX — sans les détails techniques backend ci-dessous), voir
 Ordonné par dépendance. Rien ci-dessous n'existe aujourd'hui sauf mention
 contraire.
 
-### 1.1 Câblage de l'API (bloquant absolu, effort M)
+### 1.1 Câblage de l'API — **fait le 2026-08-10, étendu au multi-flux le 2026-08-12**
 
-`internal/transport/adapters/api` (gin) et `internal/transport/adapters/websocket`
-(gorilla) existent comme adaptateurs mais **ne sont reliés à aucune
-logique métier** — readme.md le dit explicitement, vérifié dans le code :
-zéro appel à `UseCase.RecognitionUseCase` depuis ces deux adaptateurs
-aujourd'hui. Seul le CLI (`internal/transport/adapters/cli` /
-`internal/transport/adapters/cmd`) est câblé.
+~~`internal/transport/adapters/api` (gin) et `internal/transport/adapters/websocket`
+(gorilla) existent comme adaptateurs mais ne sont reliés à aucune logique
+métier~~ — **obsolète, plus vrai depuis le 2026-08-10.** Les deux serveurs
+gin séparés ont été fusionnés en un seul (`internal/transport/adapters/api`,
+flag `-s`/`--web`), réellement branché sur `uc.Recognition`/
+`uc.GalleryReferences`. Testé bout-en-bout en conditions réelles (webcam
+locale + session fichier simultanées, curl/client WS, `go test -race`
+propre sur `internal/...`).
 
-À faire :
-- Endpoints REST (gin) : démarrer/arrêter une session de reconnaissance,
-  changer le filtre/seuil en cours de route, CRUD sur la galerie de
-  références (§ 1.4), lister les sources vidéo actives.
-- Protocole WebSocket (gorilla) : voir § 2, table transport.
-- Définir le modèle de "session" : aujourd'hui `RecognitionUseCase` est un
-  appel bloquant unique par processus. Il faut le faire tourner en
-  plusieurs instances concurrentes adressables par ID (une par onglet/flux,
-  § 1.2).
+Ce qui existe aujourd'hui côté backend :
+- **Mono-session (legacy, toujours actif)** : `POST/POST/GET
+  /api/v1/recognition/{start,stop,status}`, `GET /ws` (vidéo), `GET
+  /ws/ingest` (caméra navigateur).
+- **Multi-flux (`session.Manager`, depuis le 2026-08-12)** : `POST/GET
+  /api/v1/sessions`, `GET/DELETE /api/v1/sessions/:id`, `POST
+  /api/v1/sessions/:id/recognition/{start,stop}`, `GET
+  /ws/sessions/:id`, `GET /ws/sessions/:id/ingest` — additif, ne remplace
+  pas le mono-session.
+- **Galerie de références** : `POST/GET/PATCH/DELETE /api/v1/gallery`
+  (§ 1.4, backend fait, UI pas commencée).
+
+**Ce qui n'est pas fait** : le frontend `web/` ne consomme que le chemin
+mono-session — la bascule vers `/api/v1/sessions/*` + `/ws/sessions/:id`
+est un chantier séparé, pas commencé (voir l'accroche en tête de fichier).
 
 ### 1.2 Concurrence multi-flux (bloquant pour le multiplex demandé) — **investigué et résolu le 2026-08-10**
 
@@ -87,19 +102,22 @@ modèle (poids ONNX) reste chargé une seule fois et partagé, seuls les
 tenseurs (petits pour CLIP texte/image, ~7.5 Mo cumulés input+output pour
 YOLO à 640×640) sont alloués par appel.
 
-**Décision retenue : migrer `yolo11s.Detector` et `clip.Encoder` de
-`AdvancedSession` vers `DynamicAdvancedSession`**, avec allocation de
-tenseurs frais par appel plutôt que des tenseurs figés en champs de
-struct. Reste à faire (pas fait dans cette investigation, qui visait à
-trancher l'approche, pas à livrer le code) :
-- Réécrire `yolo11s.go`/`clip.go` sur ce nouveau pattern.
-- Mesurer le coût réel de l'allocation par appel (non benchmarké) — non
-  bloquant pour trancher l'architecture, mais à surveiller : si le coût
-  GC devient significatif sous charge multi-flux, un pool de tenseurs
-  (`sync.Pool` par goroutine/flux) resterait possible sans revenir aux
-  tenseurs figés par session.
-- Revalider `gocv-tracker` séparément (§ ci-dessous, pas concerné par
-  cette investigation — c'est un risque distinct, pas résolu ici).
+**Décision mise en œuvre : `yolo11s.Detector` et `clip.Encoder` migrés de
+`AdvancedSession` vers `DynamicAdvancedSession` — fait le 2026-08-11.**
+Tenseurs input/output désormais alloués par appel
+(`ort.NewEmptyTensor` + `defer .Destroy()` locaux dans
+`AnalyzeFrame`/`EncodeImage`/`EncodeText`), plus de champs de struct
+partagés. **Le `session.Manager` multi-flux (§ 1.1, fait le 2026-08-12)
+s'appuie directement sur cette migration** — plusieurs sessions partagent
+`objectDetector`/`semanticEncoder` sans instance dédiée par flux, comme
+prévu ici. Testé en conditions réelles (webcam + fichier vidéo
+simultanément, filtres différents, `go test -race` propre) mais **pas de
+mesure de charge CPU à N flux réels** — toujours ouvert, voir § 4 point 2.
+Reste non fait :
+- Coût de l'allocation par appel toujours pas benchmarké isolément (pas
+  de régression observée manuellement, pas mesuré précisément).
+- `gocv-tracker` en concurrence réelle (§ 4 point 6) — distinct de ce
+  risque ONNX, toujours pas revalidé en charge multi-flux.
 
 **Point annexe trouvé pendant le test, à documenter pour la suite** : le
 binaire compilé avec `-race` **plante systématiquement à la sortie**
@@ -136,24 +154,25 @@ Le port `streamer.InputStream` existe déjà (`internal/infrastructure/streamer`
 — extension sans toucher domain/application, seulement de nouveaux
 adaptateurs dans `internal/implementation/streamer/`.
 
-- **USB/webcam avec device configurable** (effort XS) : aujourd'hui
-  `input.NewCameraInput()` ouvre le device `0` en dur
-  (`internal/implementation/streamer/input/camera.go`). Paramétrer l'index.
-- **RTSP/caméra IP** (effort S, MAIS non testé bout-en-bout) : `gocv`
-  expose `VideoCaptureFile(uri)` / `OpenVideoCapture(url)`, et il existe
-  une constante `VideoCaptureFFmpeg` dans le binding — le transport RTSP
-  est supporté par l'API Go. **Vérifié le 2026-08-10** : le build OpenCV
-  local a bien FFmpeg comme dépendance (`brew info opencv`). **Pas encore
-  testé avec un vrai flux RTSP** (aucun sous la main au moment d'écrire
-  ceci) — à valider avec une caméra IP ou un flux public avant de
-  considérer ce point acquis. Gestion de la reconnexion à prévoir (un flux
-  réseau peut couper, contrairement à une webcam locale).
-- **Frames navigateur (JPEG-over-WS)** (effort S) : le backend reçoit des
-  frames JPEG poussées périodiquement sur une connexion WebSocket dédiée,
-  les décode en `entities.Frame`. Réutilise l'infra WS déjà prévue pour
-  l'affichage (§ 2).
-- **WebRTC (navigateur → backend)** (effort L, prioritaire selon la
-  décision ci-dessus) : nécessite `pion/webrtc` (jamais utilisé dans ce
+- **USB/webcam avec device configurable** — **fait le 2026-08-11** :
+  `input.NewCameraInput(device int)`, plus de `0` en dur. Pas encore
+  exposé via CLI/REST/GUI (source selection, § H1 Multi-flux/H2) — juste
+  rendu possible côté adaptateur.
+- **RTSP/caméra IP** — **testé bout-en-bout le 2026-08-11** via
+  `cmd/rtsp-smoke-test` (outil dev conservé dans le repo, pas jetable —
+  pas de test automatisé versionné possible pour RTSP) contre un flux
+  auto-hébergé (`mediamtx` + `ffmpeg` en boucle) : dimensions correctes,
+  cleanup propre, débit variable (~18-32 fps une fois la session
+  stabilisée) sur plusieurs runs. **Reconnexion automatique sur coupure
+  réseau toujours pas implémentée** (lacune documentée, pas un oubli).
+- **Frames navigateur (JPEG-over-WS)** — **fait le 2026-08-12** :
+  `implementation/streamer/input.BrowserInput` + `GET /ws/ingest` (legacy)
+  et son pendant par session `GET /ws/sessions/:id/ingest` ; côté
+  frontend, `web/src/BrowserCamera.ts` pointe désormais sur ce dernier
+  (bascule du 2026-08-13, voir accroche en tête de fichier).
+- **WebRTC (navigateur → backend)** (effort L, toujours pas commencé,
+  prioritaire selon la décision ci-dessus une fois attaqué) : nécessite
+  `pion/webrtc` (jamais utilisé dans ce
   projet, nouvelle dépendance CGo-free en Go pur — contrairement à
   `gocv`/`onnxruntime_go`, c'est un vrai avantage, pas de fragilité CGo
   supplémentaire). Le backend agit comme un pair WebRTC, décode les frames
@@ -162,12 +181,12 @@ adaptateurs dans `internal/implementation/streamer/`.
   réseau local, la traversée NAT nécessite un serveur STUN (souvent
   suffisant) voire TURN (si NAT symétrique) — pas juste "WebRTC marche
   tout seul" en pair-à-pair direct. À prévoir dans l'estimation d'effort.
-- **Fichier vidéo local** (effort XS, **déjà prouvé dans ce projet**) :
-  `gocv.VideoCaptureFile(path)` sur un fichier local est déjà utilisé et
-  fonctionnel — `cmd/tracking-drift-bench/main.go:96`, le test de dérive
-  KCF/CSRT tourne dessus depuis `TODO.md` § B. Il manque juste un
-  adaptateur `InputStream` propre (aujourd'hui c'est un outil jetable
-  headless, pas un port), pas de risque technique résiduel.
+- **Fichier vidéo local** — **fait le 2026-08-11** :
+  `implementation/streamer/input.FileInput` (même type que RTSP/caméra
+  IP ci-dessus — `gocv.VideoCaptureFile(uri)` résout les deux depuis le
+  schéma de l'URI, pas deux adaptateurs séparés), testé contre
+  `assets/videos/car.mp4` (238 frames, cleanup propre), 8 tests
+  table-driven versionnés.
 - **Flux live YouTube (ou similaire)** (effort S, nouvelle dépendance
   externe) : une URL YouTube n'est pas directement lisible par
   FFmpeg/OpenCV — il faut d'abord résoudre l'URL réelle du flux média
@@ -183,13 +202,29 @@ adaptateurs dans `internal/implementation/streamer/`.
   fragilité externe au projet à surveiller (pas un choix "install once,
   works forever"). Non testé à ce jour.
 
-### 1.4 Galerie de références (feature métier à construire, effort M)
+### 1.4 Galerie de références / Bibliothèque — **backend (v1 plate) fait le 2026-08-12, UI pas commencée, modèle produit revu depuis (mockups 4a-4e)**
 
-Décidé dans une passe précédente (`TODO.md` § D), zéro ligne de code à ce
-jour. Store en mémoire `{label, embedding}`, alimenté par `EncodeImage`
-sur un crop sélectionné en direct (§ 3.2), comparé par similarité cosinus
-à chaque détection au lieu du filtre texte (ou en complément — à trancher
-dans la spec fonctionnelle, § 3.3).
+Store en mémoire `{label, embedding}` (`implementation/gallery/inmemory.Gallery`,
+port `infrastructure/gallery.Repository`), comparé par similarité cosinus
+à chaque détection en complément du filtre texte. REST complet et testé
+en conditions réelles : `POST /api/v1/gallery` (upload multipart réel),
+`GET`/`PATCH` (rename/enable-disable)/`DELETE`. **Reste ouvert : l'UI de
+sélection en direct côté H2** (clic sur une box existante ou dessin à
+main levée → mini-formulaire label → appel `POST /api/v1/gallery` avec le
+crop, § 1.5/3.2) — dépend du scaffolding H2 existant, pas commencée.
+
+**Écart modèle à noter avant de construire l'UI** (design figé dans les
+mockups du 2026-08-13, `docs/gui/design-brief.md` § Bibliothèque) : le
+produit attendu est plus riche que le store plat actuel —
+**Collection** (nom + tags plats) › **Terme** (nom + **1..N photos
+obligatoires**, chacune un vecteur image lié au vecteur texte du nom ; un
+Terme sans photo n'existe pas) + **classe COCO liée optionnelle**
+(restreint l'évaluation aux boîtes déjà classées YOLO dans cette classe).
+Un Terme peut appartenir à plusieurs Collections sans duplication. Rien de
+tout ça (Collections, tags, multi-photo par entrée, lien COCO explicite)
+n'existe côté `gallery.Repository`/`inmemory.Gallery` aujourd'hui — à
+chiffrer comme extension du modèle de données backend avant d'attaquer
+l'UI H2, pas juste un habillage visuel du store existant.
 
 ### 1.5 Sélection runtime + labellisation (feature métier, effort M)
 
@@ -239,16 +274,25 @@ serveur backend en local au démarrage. Pas de travail UI dupliqué.
 
 ## 2. Couche transport
 
+**Fait le 2026-08-12** : la ligne "vue complète" ci-dessous est implémentée
+avec un protocole en deux messages par frame (`streamer.BoxAwareOutputStream`) —
+un message binaire (JPEG **non annoté**) + un message JSON texte séparé
+(`{"boxes":[...]}`, coordonnées normalisées `[0,1]`, toujours envoyé même
+vide), pas les boxes déjà dessinées dans le JPEG comme le premier jet du
+2026-08-10. Existe en mono-session (`/ws`) et par session (`/ws/sessions/:id`).
+Reste non fait : la ligne "tuiles mosaïque" (abonnement par flux avec
+fps/boxes ajustables, § 3.1) — aucun protocole dédié n'existe encore.
+
 | Flux | Sens | Transport | Format | Priorité | Effort |
 |---|---|---|---|---|---|
-| Vidéo + boxes + scores → GUI, onglet actif (vue complète) | backend → client | WebSocket | Frames JPEG (ou MJPEG-like) + JSON (boxes, label, score CLIP, track ID) par message, framerate normal | P0 | S |
+| Vidéo + boxes + scores → GUI, onglet actif (vue complète) | backend → client | WebSocket | Frames JPEG (ou MJPEG-like) + JSON (boxes, label, score CLIP, track ID) par message, framerate normal | P0 — **fait** | S |
 | Vidéo → GUI, tuiles mosaïque (aperçu léger, § 3.1) | backend → client | WebSocket | Frames JPEG seules, ~1 fps, **sans** boxes/JSON — un flux distinct/dégradé du précédent, pas le même abonnement | P1 (dépend du choix mosaïque, § 3.1) | S, mais protocole à concevoir en même temps que la ligne au-dessus (pas après) |
 | Webcam navigateur → backend (pipeline YOLO/CLIP) | client → backend | **WebRTC** (prioritaire) | Flux vidéo décodé côté Go via `pion/webrtc` | P0 | L |
-| Webcam navigateur → backend (fallback) | client → backend | WebSocket (JPEG-over-WS) | Frame JPEG poussée à N fps | P1 (fallback si WebRTC bloque) | S |
-| Caméra USB/RTSP/fichier local → backend | — (local au backend) | `gocv`/FFmpeg direct | — (ne repasse jamais par le navigateur) | P0 (USB, fichier local) / P1 (RTSP, non testé) | XS (USB, fichier local — déjà prouvé) / S (RTSP) |
+| Webcam navigateur → backend (fallback) | client → backend | WebSocket (JPEG-over-WS) | Frame JPEG poussée à N fps | P1 (fallback si WebRTC bloque) — **fait, backend + frontend mono-session** | S |
+| Caméra USB/RTSP/fichier local → backend | — (local au backend) | `gocv`/FFmpeg direct | — (ne repasse jamais par le navigateur) | P0 (USB, fichier local) / P1 (RTSP) — **tous faits et testés côté adaptateur**, pas encore sélectionnables depuis la GUI | XS (USB, fichier local) / S (RTSP) |
 | Flux YouTube/live externe → backend | — (local au backend) | `yt-dlp` (shell-out) résout l'URL réelle, puis `gocv`/FFmpeg direct | — | P1 | S (dépendance externe, non testée) |
-| Contrôle (filtres, seuils, galerie, sélection runtime) | client ↔ backend | REST (gin) pour commandes ponctuelles, WebSocket pour retour live (ex. score qui bouge pendant qu'on bouge un slider) | JSON | P0 | M |
-| Multi-flux / sessions | client ↔ backend | Chaque onglet/tuile = une session logique avec un ID, une connexion WS dédiée pour son flux vidéo, ses commandes REST scopées par `sessionID` | — | P0 | Dépend de § 1.2 |
+| Contrôle (filtres, seuils, galerie, sélection runtime) | client ↔ backend | REST (gin) pour commandes ponctuelles, WebSocket pour retour live (ex. score qui bouge pendant qu'on bouge un slider) | JSON | P0 — REST galerie/recognition **fait**, seuil/sélection runtime pas exposés | M |
+| Multi-flux / sessions | client ↔ backend | Chaque onglet/tuile = une session logique avec un ID, une connexion WS dédiée pour son flux vidéo, ses commandes REST scopées par `sessionID` | — | P0 — **backend fait (`session.Manager`), frontend pas branché dessus** | Dépend de § 1.2 |
 
 ---
 
@@ -357,12 +401,19 @@ global unique imposé.
 >   API avant de construire un slider qui n'aurait rien à piloter à
 >   distance.
 
-- Champ filtre — **hybride** : sélecteur de labels COCO (match exact) et/ou
-  champ texte libre (match sémantique CLIP) par flux ; le backend
-  n'accepte qu'une seule string aujourd'hui (`dto.RecognitionRequest.Filter`,
-  spec `"label*N,texte libre*N"` — à faire évoluer vers une structure plus
-  riche côté transport si la GUI a besoin de distinguer les deux visuellement
-  avant sérialisation, § 1.1).
+- Champ filtre — **hybride, avec priorité d'autocomplétion fixée par les
+  mockups du 2026-08-13** (écran 4e, voir `docs/gui/design-brief.md` §
+  Bibliothèque) : une combobox unique propose, dans l'ordre, (1) Classes
+  COCO natives du modèle actif (match exact), (2) Termes de "Ma
+  Bibliothèque" (§ 1.4 — comparaison au(x) vecteur(s) image du Terme,
+  restreinte à sa classe COCO liée si présente), puis (3) texte libre en
+  dernier recours seulement si rien ne correspond aux deux premiers
+  groupes (option grisée "mode moins fiable"). Le backend n'accepte
+  qu'une seule string aujourd'hui (`dto.RecognitionRequest.Filter`, spec
+  `"label*N,texte libre*N"`) et ne connaît pas la notion de Terme de
+  Bibliothèque distincte d'un label COCO ou d'un texte libre — à faire
+  évoluer vers une structure plus riche côté transport (§ 1.1) une fois
+  le modèle Collections/Termes construit côté backend (§ 1.4).
 - Slider de seuil de similarité avec retour visuel en direct — **redevient
   pertinent, mais seulement pour les termes texte libre** (pas les labels
   COCO, qui n'ont pas de score). Le calibrage reste instable et dépend de
@@ -416,15 +467,14 @@ aujourd'hui, aucun n'est exposé :
 
 Par ordre d'impact sur le planning :
 
-1. ~~Thread-safety des sessions ONNX en concurrence~~ — **résolu le
-   2026-08-10** (§ 1.2) : testé avec `-race`, confirmé unsafe dans le
-   pattern actuel, fix identifié et validé (`DynamicAdvancedSession`).
-   Reste à *implémenter* le fix dans `yolo11s.go`/`clip.go` (pas fait,
-   l'investigation visait à trancher l'architecture).
-2. **Charge CPU réelle en multi-flux** — aucun EP GPU câblé, tout CPU.
+1. ~~Thread-safety des sessions ONNX en concurrence~~ — **résolu et
+   implémenté** : `DynamicAdvancedSession` en place depuis le 2026-08-11,
+   `session.Manager` multi-flux dessus depuis le 2026-08-12, testé en
+   conditions réelles (webcam + fichier simultanés, `-race` propre).
+2. **Charge CPU réelle en multi-flux** — toujours ouvert, aucun EP GPU câblé, tout CPU.
    Latence par flux mesurée en solo (~180-320ms/cycle reanchor) à
    multiplier par le facteur de contention choisi en § 1.2.
-3. ~~RTSP réel non testé~~ — **résolu le 2026-08-11** (TODO.md § H1) :
+3. ~~RTSP réel non testé~~ — **résolu le 2026-08-11** :
    `implementation/streamer/input.FileInput` testé bout-en-bout via
    `cmd/rtsp-smoke-test` (outil dev conservé, pas jetable — pas de test
    automatisé possible pour RTSP) contre un flux auto-hébergé (`mediamtx` +
@@ -450,20 +500,25 @@ Par ordre d'impact sur le planning :
 
 ## 5. Ordre d'implémentation recommandé
 
-1. Câblage API minimal (gin + WS) sur le flux existant (webcam locale
-   unique) — valide le bout-en-bout sans la complexité multi-flux.
-2. Migration `yolo11s.Detector`/`clip.Encoder` vers `DynamicAdvancedSession`
-   (§ 1.2, architecture tranchée, reste à coder) — prérequis réel du
-   multi-flux, plus petit qu'estimé initialement (pas de pool/sérialisation
-   à construire, juste changer le pattern d'allocation des tenseurs).
-3. Device USB configurable + RTSP + fichier vidéo local (extension
-   `InputStream`), test avec une vraie caméra IP/flux public.
-4. Multi-flux (plusieurs `RecognitionUseCase` concurrents, adressables par
-   ID) — s'appuie sur le point 2, mesurer la charge CPU réelle (§ 4, point 2)
-   avant d'annoncer un nombre de flux simultanés supporté.
-5. Ingestion WebRTC navigateur.
-6. Fallback JPEG-over-WS (peut être fait en parallèle du point 5, plus
-   simple) + flux YouTube (`yt-dlp`, indépendant du reste).
-7. Wrapper desktop Wails.
-8. Galerie de références + sélection runtime (§ 1.4/1.5).
-9. UI complète (couleurs configurables, historique, réglages avancés).
+État au 2026-08-13 — points 1 à 4 et 6 sont **faits** côté backend, et le
+frontend `web/` a été basculé sur le multi-flux le même jour (§ 1.1). La
+suite (5, 7, 8 UI, 9) reste à faire — voir la section H2 du backlog de
+développement pour le détail écran par écran.
+
+1. ~~Câblage API minimal (gin + WS)~~ — **fait le 2026-08-10.**
+2. ~~Migration `DynamicAdvancedSession`~~ — **fait le 2026-08-11.**
+3. ~~Device USB configurable + RTSP + fichier vidéo local~~ — **fait et
+   testé le 2026-08-11** (RTSP via `mediamtx` auto-hébergé, pas de flux
+   public fiable disponible).
+4. ~~Multi-flux (`session.Manager`)~~ — **fait le 2026-08-12, frontend
+   basculé le 2026-08-13.** Charge CPU réelle à N flux toujours pas
+   mesurée (§ 4 point 2).
+5. Ingestion WebRTC navigateur — **pas commencé.**
+6. ~~Fallback JPEG-over-WS~~ — **fait le 2026-08-12** (backend), frontend
+   basculé sur l'ingestion par session le 2026-08-13. Flux YouTube
+   (`yt-dlp`) — **pas commencé**, indépendant du reste.
+7. Wrapper desktop Wails — **pas commencé**, attend un H2 fonctionnel.
+8. ~~Galerie de références~~ — **backend fait le 2026-08-12**, UI et
+   sélection runtime (§ 1.5) **pas commencées**.
+9. UI complète (couleurs configurables, historique, réglages avancés) —
+   **pas commencée**.

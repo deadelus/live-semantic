@@ -2,7 +2,7 @@ package entities
 
 import "time"
 
-// TrackState represents where a Track is in its lifecycle (TODO.md § D).
+// TrackState represents where a Track is in its lifecycle.
 type TrackState int
 
 const (
@@ -14,8 +14,8 @@ const (
 	// considered a real tracked object.
 	StateConfirmed
 	// StateCoasting: not matched by a fresh detection this cycle, position
-	// held by the tracker (§ B) alone between two re-detections. Still
-	// alive, but degrading.
+	// held by the tracking-by-detection tracker alone between two
+	// re-detections. Still alive, but degrading.
 	StateCoasting
 	// StateLost: too many consecutive misses (neither a fresh detection nor
 	// the tracker could locate the object) — dead, callers should drop it.
@@ -40,7 +40,7 @@ func (s TrackState) String() string {
 
 // TrackEventType distinguishes the lifecycle transitions a Track can emit.
 // Callers (application layer) translate these into AlertSender
-// notifications instead of alerting on every single frame (TODO.md § D).
+// notifications instead of alerting on every single frame.
 type TrackEventType int
 
 const (
@@ -76,13 +76,14 @@ type TrackEvent struct {
 	Type  TrackEventType
 	Track *Track
 
-	// Score is the semantic match score (CLIP cosine similarity, TODO.md
-	// § A) that led to this event, when applicable — set by MatchDetection,
-	// 0 for events that don't stem from a semantic match (EventTrackLost,
-	// or a match made with no filter active, i.e. no CLIP score was ever
-	// computed for it). Added 2026-08-10: alerts (application/uc.emit)
-	// used to report the detector's own box.Confidence here instead, which
-	// isn't the score that actually decided whether this event happened.
+	// Score is the semantic match score (CLIP cosine similarity, once the
+	// YOLO->crop->CLIP cascade lands) that led to this event, when
+	// applicable — set by MatchDetection. 0 for events that don't stem
+	// from a semantic match (EventTrackLost, or a match made with no
+	// filter active, i.e. no CLIP score was ever computed for it). As of
+	// 2026-08-10, alerts (application/uc.emit) report this instead of the
+	// detector's own box.Confidence, which isn't what actually decided
+	// whether this event happened.
 	Score float32
 }
 
@@ -108,8 +109,8 @@ const (
 )
 
 // Track is the domain aggregate for one physical object followed across
-// frames (TODO.md § D). It aggregates a class label, a position history and
-// semantic embeddings (Embeddings stays empty until § A / CLIP exists —
+// frames. It aggregates a class label, a position history and semantic
+// embeddings (Embeddings stays empty until the CLIP cascade exists —
 // nothing populates it yet).
 type Track struct {
 	ID         string
@@ -140,9 +141,10 @@ func NewTrack(id string, box BoundingBox, at time.Time) *Track {
 }
 
 // MatchDetection records a fresh detection that was IoU-associated to this
-// track (§ B re-anchoring). Resets the miss streak; once enough consecutive
-// hits accumulate, promotes StateTentative → StateConfirmed. score is the
-// semantic match score (CLIP cosine similarity) that led to this
+// track (tracking-by-detection re-anchoring). Resets the miss streak; once
+// enough consecutive hits accumulate, promotes StateTentative →
+// StateConfirmed. score is the semantic match score (CLIP cosine
+// similarity) that led to this
 // association, if any (0 when no filter was active) — threaded onto the
 // returned TrackEvent, not stored on the box itself (BoundingBox stays a
 // generic domain type, not CLIP-specific). Returns the TrackEvent to alert
@@ -171,9 +173,10 @@ func (t *Track) MatchDetection(box BoundingBox, at time.Time, score float32) *Tr
 	}
 }
 
-// Coast records a tracker-only update (§ B): no fresh detection matched
-// this track this cycle, but the tracker still reports a position. Moves
-// StateConfirmed → StateCoasting. No-op on a StateLost track.
+// Coast records a tracker-only update (tracking-by-detection): no fresh
+// detection matched this track this cycle, but the tracker still reports
+// a position. Moves StateConfirmed → StateCoasting. No-op on a StateLost
+// track.
 func (t *Track) Coast(box BoundingBox, at time.Time) {
 	if t.State == StateLost {
 		return
@@ -186,10 +189,11 @@ func (t *Track) Coast(box BoundingBox, at time.Time) {
 	}
 }
 
-// Miss records a frame where neither a fresh detection nor the tracker (§ B)
-// could locate the object. Past maxMissesBeforeLost consecutive misses,
-// transitions to StateLost and returns the corresponding TrackEvent — nil
-// otherwise, or if the track is already StateLost.
+// Miss records a frame where neither a fresh detection nor the tracker
+// (tracking-by-detection) could locate the object. Past
+// maxMissesBeforeLost consecutive misses, transitions to StateLost and
+// returns the corresponding TrackEvent — nil otherwise, or if the track
+// is already StateLost.
 func (t *Track) Miss(at time.Time) *TrackEvent {
 	if t.State == StateLost {
 		return nil
@@ -205,7 +209,8 @@ func (t *Track) Miss(at time.Time) *TrackEvent {
 }
 
 // AddEmbedding appends a semantic embedding to this track's aggregate.
-// Populated once § A (CLIP) is integrated — no caller does this yet.
+// Populated once the YOLO->crop->CLIP cascade is integrated — no caller
+// does this yet.
 func (t *Track) AddEmbedding(e Embedding) {
 	t.Embeddings = append(t.Embeddings, e)
 }

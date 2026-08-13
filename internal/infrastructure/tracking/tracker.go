@@ -1,7 +1,8 @@
 // Package tracking defines the port for tracking-by-detection between two
-// re-detections (see TODO.md § B). No implementation exists yet — target is
-// a gocv-native tracker (KCF, CSRT or MOSSE, choice pending a drift test on
-// real video).
+// re-detections. Implemented by implementation/tracking/gocv-tracker (a
+// gocv-native tracker — CSRT as of writing; the KCF/MOSSE alternative
+// choice was settled by a drift test on real video, docs/adr/
+// object-tracking.md).
 package tracking
 
 import (
@@ -27,8 +28,8 @@ type ObjectTracker interface {
 // TrackerFactory creates a new ObjectTracker instance. Needed because
 // trackers are single-object/single-use (see gocv-tracker's Init doc: once
 // a track is lost, the underlying native tracker must be discarded and
-// recreated, not reused) — the re-anchoring loop (TODO.md § B) needs a
-// fresh instance per confirmed track, not a shared singleton.
+// recreated, not reused) — the tracking-by-detection re-anchoring loop
+// needs a fresh instance per confirmed track, not a shared singleton.
 //
 // A genuine interface (2026-08-12, was a bare `func() (ObjectTracker,
 // error)` type before — per explicit review feedback: application/uc.

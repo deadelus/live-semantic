@@ -15,6 +15,8 @@ const (
 	defaultLabelFontSize = 12
 )
 
+// BoxDrawer composites a set of Box values onto a copy of img, converted
+// to *image.RGBA for in-place pixel mutation.
 type BoxDrawer struct {
 	img           *image.RGBA
 	boxes         []Box
@@ -22,7 +24,10 @@ type BoxDrawer struct {
 	labelFontSize float64
 }
 
-// NewBoxDrawer creates a new BoxDrawer instance with the given image.
+// NewBoxDrawer creates a new BoxDrawer for img and boxes, loading the
+// default label font — returns nil if img is nil or the default font
+// fails to load (callers should treat a nil result as "skip drawing,
+// render the original frame").
 func NewBoxDrawer(img image.Image, boxes []Box) *BoxDrawer {
 	if img == nil {
 		return nil
@@ -50,6 +55,8 @@ func NewBoxDrawer(img image.Image, boxes []Box) *BoxDrawer {
 	}
 }
 
+// SetFonts overrides the label font/size after construction — no-op on
+// the current font if the new one fails to load.
 func (bd *BoxDrawer) SetFonts(labelFontPath string, labelFontSize float64) {
 	fl := &FontLoader{
 		fontFace: labelFontPath,
@@ -64,12 +71,12 @@ func (bd *BoxDrawer) SetFonts(labelFontPath string, labelFontSize float64) {
 	bd.labelFontSize = labelFontSize
 }
 
-// ToImage returns the current image.
+// ToImage returns the current (possibly already-drawn-on) image.
 func (bd *BoxDrawer) ToImage() *image.RGBA {
 	return bd.img
 }
 
-// ToBytes returns the current image.
+// ToBytes JPEG-encodes the current image, or nil on encoding failure.
 func (bd *BoxDrawer) ToBytes() []byte {
 	var buf bytes.Buffer
 	if err := jpeg.Encode(&buf, bd.img, nil); err != nil {
@@ -78,7 +85,7 @@ func (bd *BoxDrawer) ToBytes() []byte {
 	return buf.Bytes()
 }
 
-// DrawBox draws bounding boxes on the image with labels and confidence scores.
+// Draw renders every box (rectangle + label) onto bd's image, in order.
 func (bd *BoxDrawer) Draw() {
 	for _, box := range bd.boxes {
 		bd.DrawRect(bd.img, box)
@@ -86,7 +93,8 @@ func (bd *BoxDrawer) Draw() {
 	}
 }
 
-// DrawRect draws a rectangle on the image with the specified color and thickness
+// DrawRect draws box's outline onto img, one pixel ring per unit of
+// thickness (a hollow rectangle, not filled).
 func (bd *BoxDrawer) DrawRect(img *image.RGBA, box Box) {
 	col := box.Color
 	thickness := box.Thickness
@@ -112,7 +120,8 @@ func (bd *BoxDrawer) DrawRect(img *image.RGBA, box Box) {
 	}
 }
 
-// DrawLabel draws a label on the image at the specified position
+// WriteLabel draws box.Description onto img, offset (x, y) pixels from
+// box's top-left corner.
 func (bd *BoxDrawer) WriteLabel(img *image.RGBA, box Box, x, y int) {
 	rect := box.ToRect()
 	col := box.Color
