@@ -36,6 +36,32 @@
   display: inline-block;
 }
 
+.ls-topbar__tabs {
+  display: flex;
+  gap: 4px;
+  align-self: stretch;
+  align-items: flex-end;
+}
+
+.ls-topbar__tab {
+  padding: 8px 16px 9px;
+  border: 1px solid transparent;
+  border-bottom: none;
+  background: none;
+  color: var(--text-tertiary);
+  font-family: var(--font-sans);
+  font-size: 12.5px;
+  cursor: pointer;
+  border-radius: var(--radius-md) var(--radius-md) 0 0;
+}
+
+.ls-topbar__tab--active {
+  background: var(--bg-panel);
+  border-color: var(--border);
+  color: var(--text-primary);
+  font-weight: 600;
+}
+
 .ls-topbar__spacer {
   flex: 1;
 }

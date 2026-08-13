@@ -98,3 +98,123 @@ export interface DeviceInfo {
 export function listDevices(): Promise<{ devices: DeviceInfo[] }> {
   return fetch('/api/v1/devices').then((res) => parseJSONOrThrow<{ devices: DeviceInfo[] }>(res))
 }
+
+// --- Bibliothèque — Termes (gallery) + Collections (docs/gui/design-brief.md
+// § Bibliothèque, backend added 2026-08-13, branch feat/gui-library-backend).
+// Mirrors uc.GalleryEntryInfo/uc.CollectionInfo — kept as separate,
+// frontend-owned types rather than importing anything (there's nothing to
+// import across the Go/TS boundary), same spirit as SessionInfo above. ---
+
+export interface GalleryImageRef {
+  id: string
+}
+
+// Mirrors uc.GalleryEntryInfo. A Term with zero Images can't actually
+// happen server-side (storage.GalleryStorage.RemoveImage deletes the
+// whole entry once its last photo is gone, "un Terme sans photo n'existe
+// pas") — Images is still typed as possibly-empty here defensively, not
+// because the backend is expected to ever send that.
+export interface GalleryEntry {
+  name: string
+  enabled: boolean
+  images: GalleryImageRef[]
+  cocoClass?: string
+}
+
+export function listGallery(): Promise<{ entries: GalleryEntry[] }> {
+  return fetch('/api/v1/gallery').then((res) => parseJSONOrThrow<{ entries: GalleryEntry[] }>(res))
+}
+
+export function removeGalleryTerm(name: string): Promise<{ status: string }> {
+  return fetch(`/api/v1/gallery/${encodeURIComponent(name)}`, { method: 'DELETE' }).then((res) =>
+    parseJSONOrThrow<{ status: string }>(res),
+  )
+}
+
+export function removeGalleryImage(name: string, imageID: string): Promise<{ status: string }> {
+  return fetch(
+    `/api/v1/gallery/${encodeURIComponent(name)}/images/${encodeURIComponent(imageID)}`,
+    { method: 'DELETE' },
+  ).then((res) => parseJSONOrThrow<{ status: string }>(res))
+}
+
+// updateGalleryTerm applies any of new_name/enabled/coco_class at once —
+// mirrors galleryController.update's own "applied in that order" contract
+// (rename, then enabled, then coco_class). Pass cocoClass: '' to clear an
+// existing link (see gallery.go's own doc comment — a nil field is "leave
+// untouched", an empty string is "clear it", the two are not the same).
+export function updateGalleryTerm(
+  name: string,
+  patch: { newName?: string; enabled?: boolean; cocoClass?: string },
+): Promise<{ status: string; name: string }> {
+  return fetch(`/api/v1/gallery/${encodeURIComponent(name)}`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      new_name: patch.newName,
+      enabled: patch.enabled,
+      coco_class: patch.cocoClass,
+    }),
+  }).then((res) => parseJSONOrThrow<{ status: string; name: string }>(res))
+}
+
+// Mirrors uc.CollectionInfo.
+export interface CollectionEntry {
+  name: string
+  tags: string[]
+  terms: string[]
+}
+
+export function listCollections(): Promise<{ collections: CollectionEntry[] }> {
+  return fetch('/api/v1/collections').then((res) =>
+    parseJSONOrThrow<{ collections: CollectionEntry[] }>(res),
+  )
+}
+
+export function createCollection(
+  name: string,
+  tags: string[],
+): Promise<{ status: string; name: string }> {
+  return fetch('/api/v1/collections', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ name, tags }),
+  }).then((res) => parseJSONOrThrow<{ status: string; name: string }>(res))
+}
+
+export function removeCollection(name: string): Promise<{ status: string }> {
+  return fetch(`/api/v1/collections/${encodeURIComponent(name)}`, { method: 'DELETE' }).then(
+    (res) => parseJSONOrThrow<{ status: string }>(res),
+  )
+}
+
+export function updateCollection(
+  name: string,
+  patch: { newName?: string; tags?: string[] },
+): Promise<{ status: string; name: string }> {
+  return fetch(`/api/v1/collections/${encodeURIComponent(name)}`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ new_name: patch.newName, tags: patch.tags }),
+  }).then((res) => parseJSONOrThrow<{ status: string; name: string }>(res))
+}
+
+export function addTermToCollection(
+  collectionName: string,
+  termName: string,
+): Promise<{ status: string }> {
+  return fetch(
+    `/api/v1/collections/${encodeURIComponent(collectionName)}/terms/${encodeURIComponent(termName)}`,
+    { method: 'POST' },
+  ).then((res) => parseJSONOrThrow<{ status: string }>(res))
+}
+
+export function removeTermFromCollection(
+  collectionName: string,
+  termName: string,
+): Promise<{ status: string }> {
+  return fetch(
+    `/api/v1/collections/${encodeURIComponent(collectionName)}/terms/${encodeURIComponent(termName)}`,
+    { method: 'DELETE' },
+  ).then((res) => parseJSONOrThrow<{ status: string }>(res))
+}

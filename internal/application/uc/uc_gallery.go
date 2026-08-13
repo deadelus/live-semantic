@@ -16,7 +16,7 @@ import (
 // photo within a gallery entry — just enough (an ID) for a REST caller to
 // build a thumbnail URL (GetGalleryThumbnail) and to target RemoveGalleryImage.
 type GalleryImageInfo struct {
-	ID string
+	ID string `json:"id"`
 }
 
 // GalleryEntryInfo is the read-only, embedding-free view of a gallery
@@ -29,10 +29,10 @@ type GalleryImageInfo struct {
 // thumbnail grid and offer per-photo removal (v2 of the delete flow,
 // alongside whole-entry removal).
 type GalleryEntryInfo struct {
-	Name      string
-	Enabled   bool
-	Images    []GalleryImageInfo
-	CocoClass string
+	Name      string             `json:"name"`
+	Enabled   bool               `json:"enabled"`
+	Images    []GalleryImageInfo `json:"images"`
+	CocoClass string             `json:"cocoClass,omitempty"`
 }
 
 // CollectionInfo is the read-only view of a Collection returned to a REST
@@ -43,9 +43,9 @@ type GalleryEntryInfo struct {
 // infrastructure/storage type, so the two layers can evolve
 // independently.
 type CollectionInfo struct {
-	Name  string
-	Tags  []string
-	Terms []string
+	Name  string   `json:"name"`
+	Tags  []string `json:"tags"`
+	Terms []string `json:"terms"`
 }
 
 // thumbnailMaxDimension bounds a stored reference photo's thumbnail —
