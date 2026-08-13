@@ -1,9 +1,13 @@
 import { useEffect, useRef, useState } from 'react'
 import {
   addGalleryImage,
+  getRewindBoxes,
+  getRewindRange,
   getSession,
+  rewindImageURL,
   startSessionRecognition,
   stopSessionRecognition,
+  type RewindBox,
   type SessionInfo,
 } from './api'
 import { VideoStream, type NormalizedRect } from './VideoStream'
@@ -55,6 +59,17 @@ export function LiveView({ session, onBack }: LiveViewProps) {
   const imgRef = useRef<HTMLImageElement | null>(null)
   const [selection, setSelection] = useState<{ rect: NormalizedRect; label: string } | null>(null)
   const [labelSaving, setLabelSaving] = useState(false)
+
+  // Pause/reprise + retour en arrière (docs/gui/spec.md § 1.5bis,
+  // TODO.md § H1) — added 2026-08-13. Pausing never stops the real
+  // flow/detection running server-side (explicit product requirement),
+  // it only stops *this component* from displaying newly arrived WS
+  // frames, and offers stepping back into what the backend's
+  // RingBufferOutput already buffered instead.
+  const [paused, setPaused] = useState(false)
+  const [rewindRangeMs, setRewindRangeMs] = useState(0)
+  const [rewindOffsetMs, setRewindOffsetMs] = useState(0)
+  const [rewindBoxes, setRewindBoxes] = useState<RewindBox[]>([])
 
   useEffect(() => {
     const poll = () => {
@@ -129,6 +144,36 @@ export function LiveView({ session, onBack }: LiveViewProps) {
     }
   }
 
+  const handlePause = async () => {
+    try {
+      const { rangeMs } = await getRewindRange(session.id)
+      setRewindRangeMs(rangeMs)
+      setRewindOffsetMs(0)
+      setPaused(true)
+    } catch {
+      pushError('Impossible de figer le flux — rien de mis en mémoire pour cette source.')
+    }
+  }
+
+  const handleResumeLive = () => {
+    setPaused(false)
+    setRewindOffsetMs(0)
+    setRewindBoxes([])
+  }
+
+  // Refetch the buffered boxes for the current offset whenever it (or
+  // pause state) changes — the <img> src itself (rewindImageURL) doesn't
+  // need a matching effect, its URL already encodes the offset and the
+  // browser refetches on src change.
+  useEffect(() => {
+    if (!paused) return
+    getRewindBoxes(session.id, rewindOffsetMs)
+      .then((r) => setRewindBoxes(r.boxes))
+      .catch(() => {
+        /* a transient miss (e.g. offset just past the buffered range) — keep the last boxes shown */
+      })
+  }, [paused, rewindOffsetMs, session.id])
+
   const handleBoxClick = (box: OverlayBox) => {
     setSelection({ rect: { x1: box.x1, y1: box.y1, x2: box.x2, y2: box.y2 }, label: box.label })
   }
@@ -163,15 +208,44 @@ export function LiveView({ session, onBack }: LiveViewProps) {
           {session.source.kind === 'local' ? `Caméra ${session.source.device ?? 0}` : 'Caméra du navigateur'} ·{' '}
           {session.id}
         </span>
+        {paused ? (
+          <Button variant="primary" onClick={handleResumeLive}>
+            ▶ Retour au direct
+          </Button>
+        ) : (
+          <Button variant="secondary" onClick={handlePause}>
+            ⏸ Pause
+          </Button>
+        )}
         <div className="ls-topbar__spacer" />
         <StatusBadge status={hasError ? 'error' : connected ? 'connected' : 'disconnected'} />
       </div>
 
+      {paused && (
+        <div className="ls-rewind-bar">
+          <span className="ls-rewind-bar__label">
+            −{(rewindOffsetMs / 1000).toFixed(1)}s
+          </span>
+          <input
+            className="ls-rewind-bar__slider"
+            type="range"
+            min={0}
+            max={Math.max(rewindRangeMs, 1)}
+            step={100}
+            value={rewindOffsetMs}
+            onChange={(e) => setRewindOffsetMs(Number(e.target.value))}
+          />
+          <span className="ls-rewind-bar__label">
+            {(rewindRangeMs / 1000).toFixed(1)}s disponibles
+          </span>
+        </div>
+      )}
+
       <main className="ls-main">
         <div className="ls-video-wrap">
           <VideoStream
-            frameURL={frameURL}
-            boxes={boxes}
+            frameURL={paused ? rewindImageURL(session.id, rewindOffsetMs) : frameURL}
+            boxes={paused ? rewindBoxes : boxes}
             connected={connected}
             imgRef={imgRef}
             onBoxClick={handleBoxClick}

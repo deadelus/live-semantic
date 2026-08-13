@@ -31,6 +31,16 @@ import (
 
 const (
 	defaultWebPort = 8080
+
+	// rewindBufferDuration is how far back a session's Vue live can
+	// rewind (TODO.md § H1 "Pause/reprise + buffer de rewind",
+	// docs/gui/spec.md § 1.5bis) — a fixed constant for now, not yet a
+	// flag/user-configurable setting (nothing has needed one so far,
+	// same position as most other constants in this composition root).
+	// Cost is roughly (this value in seconds) × (detection cycle rate) ×
+	// (~30-80KB/frame JPEG, docs/gui/spec.md's own estimate) per active
+	// session — 30s is a starting point, not a measured/validated default.
+	rewindBufferDuration = 30 * time.Second
 )
 
 func main() {
@@ -220,7 +230,7 @@ func main() {
 		serverPort := determinePort(*port, defaultWebPort)
 		sessionManager := session.NewManager(
 			sessionInputFactory,
-			func() streamer.OutputStream { return output.NewWebSocketOutput() },
+			sessionOutputFactory,
 			engine.Logger(),
 			notifier,
 			objectDetector,
@@ -343,6 +353,23 @@ func sessionInputFactory(src session.Source) (streamer.InputStream, error) {
 	default:
 		return nil, fmt.Errorf("unknown session source kind %q", src.Kind)
 	}
+}
+
+// sessionOutputFactory builds the concrete streamer.OutputStream for a
+// session.Manager session — a fresh output.WebSocketOutput wrapped in
+// output.RingBufferOutput for rewind support (TODO.md § H1 "Pause/reprise
+// + buffer de rewind", added 2026-08-13). The error path is defensive,
+// not expected: output.NewWebSocketOutput() always implements
+// streamer.BoxAwareOutputStream (var _ assertion in websocket.go), so
+// NewRingBufferOutput here can never actually fail — falling back to the
+// unwrapped output rather than panicking if that ever stops being true.
+func sessionOutputFactory() streamer.OutputStream {
+	ws := output.NewWebSocketOutput()
+	rb, err := output.NewRingBufferOutput(ws, rewindBufferDuration)
+	if err != nil {
+		return ws
+	}
+	return rb
 }
 
 // startWebServer starts the unified REST + WebSocket backend (H1,

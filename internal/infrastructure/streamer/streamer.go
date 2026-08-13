@@ -3,7 +3,11 @@
 // sinks) — implemented by implementation/streamer/{input,output}.
 package streamer
 
-import "live-semantic/internal/domain/entities"
+import (
+	"time"
+
+	"live-semantic/internal/domain/entities"
+)
 
 // InputStream is the port for a source of video frames (camera, file,
 // browser ingest). Initialize sets up the stream, Start reads frames in
@@ -58,6 +62,39 @@ type BoxData struct {
 	// doesn't guarantee is stable frame to frame.
 	TrackID        string
 	X1, Y1, X2, Y2 float32
+}
+
+// RewindEntry is one buffered instant a Rewindable OutputStream can hand
+// back — an already-JPEG-encoded, undrawn frame (same "undrawn + separate
+// boxes" shape as Render/RenderBoxes, docs/adr/clip-backend.md § 32) plus
+// the boxes that were current at that instant and how long ago it was
+// captured (relative to when At was called, not an absolute timestamp —
+// callers only ever reason in "how far back", matching the GUI's own
+// "retour en arrière de N secondes" framing, docs/gui/spec.md § 1.5bis).
+type RewindEntry struct {
+	JPEG   []byte
+	Boxes  []BoxData
+	AgeAgo time.Duration
+}
+
+// Rewindable is an optional capability an OutputStream may implement
+// (checked via type assertion, same pattern as BoxAwareOutputStream) —
+// pause/reprise + retour en arrière on the GUI's Vue live (docs/gui/spec.md
+// § 1.5bis/3.2, TODO.md § H1 "Pause/reprise + buffer de rewind"), added
+// 2026-08-13. The live detection/tracking pipeline itself never pauses —
+// this only lets a client *look back* at recent already-rendered frames
+// without interrupting it, per the explicit product requirement ("le flux
+// réel qui continue tourner en arrière-plan").
+type Rewindable interface {
+	// RewindAt returns the buffered frame closest to offset time ago
+	// (e.g. offset=5s -> "what did this flow look like 5 seconds ago") —
+	// ok is false if nothing has been buffered yet, or offset exceeds
+	// RewindRange().
+	RewindAt(offset time.Duration) (RewindEntry, bool)
+	// RewindRange reports how far back rewinding is currently possible —
+	// grows from zero right after a session starts up to the
+	// implementation's configured retention window.
+	RewindRange() time.Duration
 }
 
 // BoxAwareOutputStream is an optional capability an OutputStream may
