@@ -1,12 +1,20 @@
 import { useEffect, useRef, useState } from 'react'
-import { getSession, startSessionRecognition, stopSessionRecognition, type SessionInfo } from './api'
-import { VideoStream } from './VideoStream'
+import {
+  addGalleryImage,
+  getSession,
+  startSessionRecognition,
+  stopSessionRecognition,
+  type SessionInfo,
+} from './api'
+import { VideoStream, type NormalizedRect } from './VideoStream'
 import { BrowserCamera } from './BrowserCamera'
 import { Button } from './components/Button'
 import { StatusBadge } from './components/StatusBadge'
 import { colorForID } from './components/VideoOverlayBox'
+import type { OverlayBox } from './components/VideoOverlayBox'
 import { useVideoStream } from './useVideoStream'
 import { useToast } from './toast/ToastProvider'
+import { cropFrame } from './cropFrame'
 import './App.css'
 
 interface LiveViewProps {
@@ -37,6 +45,16 @@ export function LiveView({ session, onBack }: LiveViewProps) {
 
   const browserCamera = useRef<BrowserCamera | null>(null)
   const { frameURL, boxes, connected } = useVideoStream(session.id)
+
+  // Sélection runtime + labellisation (docs/gui/mockups/ screen 1d,
+  // TODO.md § H1) — added 2026-08-13. selection is either an existing
+  // box the user clicked (rect + a suggested label from the detection
+  // itself) or a hand-drawn region (rect only, empty label) — see
+  // VideoStream's onBoxClick/onRegionSelect. imgRef gives cropFrame a
+  // live DOM handle on the currently-displayed frame, no extra fetch.
+  const imgRef = useRef<HTMLImageElement | null>(null)
+  const [selection, setSelection] = useState<{ rect: NormalizedRect; label: string } | null>(null)
+  const [labelSaving, setLabelSaving] = useState(false)
 
   useEffect(() => {
     const poll = () => {
@@ -111,6 +129,30 @@ export function LiveView({ session, onBack }: LiveViewProps) {
     }
   }
 
+  const handleBoxClick = (box: OverlayBox) => {
+    setSelection({ rect: { x1: box.x1, y1: box.y1, x2: box.x2, y2: box.y2 }, label: box.label })
+  }
+
+  const handleRegionSelect = (rect: NormalizedRect) => {
+    setSelection({ rect, label: '' })
+  }
+
+  const handleConfirmSelection = async () => {
+    if (!selection || !imgRef.current) return
+    const name = selection.label.trim()
+    if (!name) return
+    setLabelSaving(true)
+    try {
+      const blob = await cropFrame(imgRef.current, selection.rect)
+      await addGalleryImage(name, blob)
+      setSelection(null)
+    } catch {
+      pushError("Impossible d'ajouter ce Terme à la Bibliothèque.")
+    } finally {
+      setLabelSaving(false)
+    }
+  }
+
   return (
     <>
       <div className="ls-subbar">
@@ -126,7 +168,43 @@ export function LiveView({ session, onBack }: LiveViewProps) {
       </div>
 
       <main className="ls-main">
-        <VideoStream frameURL={frameURL} boxes={boxes} connected={connected} />
+        <div className="ls-video-wrap">
+          <VideoStream
+            frameURL={frameURL}
+            boxes={boxes}
+            connected={connected}
+            imgRef={imgRef}
+            onBoxClick={handleBoxClick}
+            onRegionSelect={handleRegionSelect}
+          />
+
+          {selection && (
+            <div className="ls-label-form">
+              <span className="ls-label-form__title">Ajouter à la Bibliothèque</span>
+              <input
+                className="ls-input"
+                autoFocus
+                type="text"
+                value={selection.label}
+                onChange={(e) => setSelection({ ...selection, label: e.target.value })}
+                onKeyDown={(e) => e.key === 'Enter' && handleConfirmSelection()}
+                placeholder="Nom du Terme…"
+              />
+              <div className="ls-label-form__actions">
+                <Button variant="neutral" onClick={() => setSelection(null)} disabled={labelSaving}>
+                  Annuler
+                </Button>
+                <Button
+                  variant="primary"
+                  onClick={handleConfirmSelection}
+                  disabled={labelSaving || !selection.label.trim()}
+                >
+                  Ajouter
+                </Button>
+              </div>
+            </div>
+          )}
+        </div>
 
         <aside className="ls-panel">
           <section className="ls-panel__section">

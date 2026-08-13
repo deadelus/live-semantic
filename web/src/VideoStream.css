@@ -17,6 +17,13 @@
   display: block;
 }
 
+.ls-video__draw-rect {
+  position: absolute;
+  border: 2px dashed var(--color-purple);
+  background: rgba(199, 125, 255, 0.12);
+  pointer-events: none;
+}
+
 .ls-video__placeholder {
   position: absolute;
   inset: 0;
