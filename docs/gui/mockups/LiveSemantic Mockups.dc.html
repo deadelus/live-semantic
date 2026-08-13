@@ -17,6 +17,1031 @@ a{color:#4d9ef8;text-decoration:none}a:hover{color:#7bb8ff}
 @keyframes lsPulse{0%,100%{opacity:1}50%{opacity:.35}}
 </style>
 </helmet>
+<section id="t4" style="padding:40px 44px 8px">
+  <div style="display:flex;align-items:baseline;gap:10px;margin:0 0 14px">
+    <a href="#t4" style="font:700 10px 'Space Mono',monospace;padding:3px 7px;background:#e7eaee;color:#0b0d10;border-radius:4px">4</a>
+    <span style="font:600 14px 'Archivo',sans-serif;color:#e7eaee">Bibliothèque — Collections › Termes (YOLO/COCO + CLIP), correctifs A–D</span>
+  </div>
+  <div style="max-width:860px;background:#14171b;border:1px solid rgba(255,255,255,.08);border-radius:8px;padding:16px 18px;margin:0 0 26px;color:#9aa3ad;font-size:12.5px;line-height:1.55">
+    <div style="color:#e7eaee;font-weight:600;margin-bottom:6px">Modèle appliqué</div>
+    Collection (nom + tags simples, sans « # ») › Terme (texte encodé en vecteur CLIP, classe COCO liée optionnelle <span style="font:700 9px 'Space Mono',monospace;padding:2px 5px;border-radius:3px;background:rgba(77,158,248,.16);color:#8fc1fa">COCO</span>, <b style="color:#e7eaee">1…N photos requises</b>). Le vecteur texte du Terme doit être lié à au moins un vecteur image — un Terme sans photo n'existe pas (lier texte à texte n'a pas de sens). Tags gérés uniquement via combobox (réutiliser ou « Créer »). L'autocomplétion caméra (<a href="#4e">4e</a>) propose Classes COCO › Ma galerie › texte libre grisé en dernier recours. Les classes COCO sont le vocabulaire fermé anglais du modèle actif (« person », « sports ball »…).
+  </div>
+  <div style="display:flex;flex-wrap:wrap;gap:30px;align-items:flex-start">
+
+    <!-- ===== 4a Liste des Collections ===== -->
+    <div id="4a" style="flex:none;display:flex;flex-direction:column;gap:9px;scroll-margin-top:16px">
+      <div style="display:flex;align-items:baseline;gap:8px;font:400 11px 'Archivo',sans-serif;color:rgba(255,255,255,.55)"><a href="#4a" style="font:700 10.5px 'Space Mono',monospace;padding:3px 7px;background:rgba(255,255,255,.12);color:#e7eaee;border-radius:5px">4a</a>Bibliothèque — liste des Collections en cards, vignette de couverture, filtre par tag</div>
+      <div data-screen-label="4a Liste Collections" style="width:1180px;height:740px;background:#14171b;color:#e7eaee;font-size:13px;border:1px solid rgba(255,255,255,.1);border-radius:10px;overflow:hidden;display:flex;flex-direction:column;box-shadow:0 2px 14px rgba(0,0,0,.5)">
+        <div style="display:flex;align-items:center;gap:14px;height:46px;padding:0 14px;background:#0e1114;border-bottom:1px solid rgba(255,255,255,.07);flex:none">
+          <div style="display:flex;align-items:center;gap:7px;font-weight:700;font-size:14px"><span style="width:9px;height:9px;border-radius:50%;background:#4d9ef8;display:inline-block"></span>LiveSemantic</div>
+          <div style="display:flex;gap:4px;align-self:flex-end">
+            <div style="padding:8px 16px 9px;color:#9aa3ad;font-size:12.5px">Sources</div>
+            <div style="padding:8px 16px 9px;background:#14171b;border:1px solid rgba(255,255,255,.09);border-bottom:none;border-radius:7px 7px 0 0;font-weight:600;font-size:12.5px">Bibliothèque</div>
+            <div style="padding:8px 16px 9px;color:#9aa3ad;font-size:12.5px;display:flex;align-items:center;gap:7px"><span style="width:6px;height:6px;border-radius:50%;background:#2ec27e;display:inline-block"></span>Entrée principale<span style="color:#5b636d">×</span></div>
+          </div>
+          <div style="flex:1"></div>
+          <div style="padding:6px 12px;border:1px solid rgba(255,255,255,.14);border-radius:6px;font-size:12px;color:#c8cdd4">Journal</div>
+          <div style="padding:6px 14px;background:#c77dff;color:#0b0d10;border-radius:6px;font-weight:600;font-size:12.5px">+ Nouvelle Collection</div>
+        </div>
+        <div style="display:flex;align-items:center;gap:12px;height:44px;padding:0 16px;border-bottom:1px solid rgba(255,255,255,.06);flex:none">
+          <div style="width:250px;padding:6px 11px;border:1px solid rgba(255,255,255,.1);border-radius:6px;color:#5b636d;font-size:12px">Rechercher une Collection…</div>
+          <div style="display:flex;gap:5px;align-items:center">
+            <span style="font:400 9.5px 'Space Mono',monospace;color:#5b636d">tags :</span>
+            <span style="padding:3px 10px;border-radius:10px;background:rgba(199,125,255,.18);color:#dcb5ff;font-size:11px">football ×</span>
+            <span style="padding:3px 10px;border-radius:10px;border:1px solid rgba(255,255,255,.12);color:#9aa3ad;font-size:11px">2026</span>
+            <span style="padding:3px 10px;border-radius:10px;border:1px solid rgba(255,255,255,.12);color:#9aa3ad;font-size:11px">entrepôt</span>
+            <span style="padding:3px 10px;border-radius:10px;border:1px solid rgba(255,255,255,.12);color:#9aa3ad;font-size:11px">sécurité</span>
+          </div>
+          <div style="flex:1"></div>
+          <span style="font:400 11px 'Space Mono',monospace;color:#5b636d">5 Collections · 14 Termes</span>
+        </div>
+        <div style="flex:1;padding:16px;display:flex;flex-wrap:wrap;gap:14px;align-content:flex-start;overflow:hidden">
+          <sc-for list="{{ colls4 }}" as="c" hint-placeholder-count="4">
+            <div style="width:272px;background:#1b1f24;border:1px solid rgba(255,255,255,.08);border-radius:8px;overflow:hidden;opacity:{{ c.dim }}">
+              <div style="position:relative;height:110px;background:{{ c.coverBg }};display:flex;align-items:center;justify-content:center">
+                <sc-if value="{{ c.generic }}" hint-placeholder-val="{{ false }}"><span style="width:40px;height:40px;border-radius:9px;border:2px solid rgba(255,255,255,.14);display:flex;align-items:center;justify-content:center;color:#5b636d;font-size:19px">▣</span></sc-if>
+                <sc-if value="{{ c.cover }}" hint-placeholder-val="{{ true }}"><span style="position:absolute;inset:12px 90px 12px 12px;border:2px solid {{ c.coverC }};border-radius:4px"></span><span style="position:absolute;bottom:8px;right:9px;font:400 8.5px 'Space Mono',monospace;color:#7d8791;background:rgba(11,13,16,.7);padding:2px 6px;border-radius:3px">couverture : 1ʳᵉ photo</span></sc-if>
+              </div>
+              <div style="padding:10px 12px;display:flex;flex-direction:column;gap:7px">
+                <div style="display:flex;align-items:center;gap:8px">
+                  <span style="font-weight:700;font-size:13px;flex:1">{{ c.name }}</span>
+                  <span style="font:400 10.5px 'Space Mono',monospace;color:#9aa3ad">{{ c.count }} Termes</span>
+                </div>
+                <div style="display:flex;gap:5px;flex-wrap:wrap">
+                  <sc-for list="{{ c.tags }}" as="tg" hint-placeholder-count="2">
+                    <span style="padding:2px 8px;border-radius:9px;background:rgba(199,125,255,.1);color:#c9a0ec;font-size:10px">{{ tg }}</span>
+                  </sc-for>
+                </div>
+              </div>
+            </div>
+          </sc-for>
+          <!-- collection vide -->
+          <div style="width:272px;background:#1b1f24;border:1px solid rgba(255,255,255,.08);border-radius:8px;overflow:hidden">
+            <div style="height:110px;background:#171b20;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:5px;color:#5b636d">
+              <span style="font-size:18px">◌</span><span style="font-size:11px">Aucun Terme pour l'instant</span>
+            </div>
+            <div style="padding:10px 12px;display:flex;flex-direction:column;gap:7px">
+              <div style="display:flex;align-items:center;gap:8px"><span style="font-weight:700;font-size:13px;flex:1">Chantier est</span><span style="font:400 10.5px 'Space Mono',monospace;color:#5b636d">0 Terme</span></div>
+              <span style="align-self:flex-start;padding:4px 11px;border:1px solid rgba(199,125,255,.5);color:#c9a0ec;border-radius:5px;font-size:11px">+ Premier Terme</span>
+            </div>
+          </div>
+        </div>
+        <div style="height:30px;flex:none;border-top:1px solid rgba(255,255,255,.07);background:#0e1114;display:flex;align-items:center;gap:16px;padding:0 14px;font:400 10.5px 'Space Mono',monospace;color:#5b636d">
+          <span>filtre « football » actif · 2 collections estompées</span><div style="flex:1"></div><span style="color:#9aa3ad">Journal des événements ▴</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- ===== 4b Détail Collection ===== -->
+    <div id="4b" style="flex:none;display:flex;flex-direction:column;gap:9px;scroll-margin-top:16px">
+      <div style="display:flex;align-items:baseline;gap:8px;font:400 11px 'Archivo',sans-serif;color:rgba(255,255,255,.55)"><a href="#4b" style="font:700 10.5px 'Space Mono',monospace;padding:3px 7px;background:rgba(255,255,255,.12);color:#e7eaee;border-radius:5px">4b</a>Détail Collection — Termes avec vignettes empilées + badges COCO, combobox tags ouverte</div>
+      <div data-screen-label="4b Détail Collection" style="width:1180px;height:740px;background:#14171b;color:#e7eaee;font-size:13px;border:1px solid rgba(255,255,255,.1);border-radius:10px;overflow:hidden;display:flex;flex-direction:column;box-shadow:0 2px 14px rgba(0,0,0,.5)">
+        <div style="display:flex;align-items:center;gap:14px;height:46px;padding:0 14px;background:#0e1114;border-bottom:1px solid rgba(255,255,255,.07);flex:none">
+          <div style="display:flex;align-items:center;gap:7px;font-weight:700;font-size:14px"><span style="width:9px;height:9px;border-radius:50%;background:#4d9ef8;display:inline-block"></span>LiveSemantic</div>
+          <div style="display:flex;gap:4px;align-self:flex-end">
+            <div style="padding:8px 16px 9px;color:#9aa3ad;font-size:12.5px">Sources</div>
+            <div style="padding:8px 16px 9px;background:#14171b;border:1px solid rgba(255,255,255,.09);border-bottom:none;border-radius:7px 7px 0 0;font-weight:600;font-size:12.5px">Bibliothèque</div>
+          </div>
+          <div style="flex:1"></div>
+          <div style="padding:6px 12px;border:1px solid rgba(255,255,255,.14);border-radius:6px;font-size:12px;color:#c8cdd4">Journal</div>
+        </div>
+        <div style="display:flex;align-items:center;gap:10px;height:44px;padding:0 16px;border-bottom:1px solid rgba(255,255,255,.06);flex:none">
+          <span style="font-size:12px;color:#8fc1fa">‹ Collections</span>
+          <span style="color:#5b636d">/</span>
+          <span style="font-weight:700;font-size:13.5px">Manchester Team</span>
+          <span style="font:400 10.5px 'Space Mono',monospace;color:#5b636d">3 Termes</span>
+          <div style="flex:1"></div>
+          <span style="padding:6px 13px;border:1px solid rgba(228,87,79,.5);border-radius:6px;color:#f08a84;font-size:12px">Supprimer la Collection</span>
+          <span style="padding:6px 14px;background:#4d9ef8;color:#0b0d10;border-radius:6px;font-weight:700;font-size:12px">+ Nouveau Terme</span>
+        </div>
+        <div style="flex:1;display:flex;min-height:0">
+          <div style="flex:1;padding:16px 18px;display:flex;flex-direction:column;gap:9px;min-width:0">
+            <div style="font:400 9.5px 'Space Mono',monospace;color:#5b636d;text-transform:uppercase">Termes</div>
+            <sc-for list="{{ coll4Terms }}" as="ct" hint-placeholder-count="3">
+              <div style="display:flex;align-items:center;gap:12px;padding:11px 14px;background:#1b1f24;border:1px solid rgba(255,255,255,.08);border-radius:8px">
+                <span style="position:relative;width:52px;height:38px;flex:none">
+                  <sc-if value="{{ ct.noPhoto }}" hint-placeholder-val="{{ false }}"><span style="position:absolute;inset:0;border:1px dashed rgba(255,255,255,.16);border-radius:5px;display:flex;align-items:center;justify-content:center;color:#5b636d;font:400 8.5px 'Space Mono',monospace">texte</span></sc-if>
+                  <sc-for list="{{ ct.stack }}" as="st" hint-placeholder-count="2">
+                    <span style="position:absolute;left:{{ st.x }};top:{{ st.y }};width:38px;height:30px;border-radius:4px;background:repeating-linear-gradient(135deg,#22272d 0 6px,#1c2127 6px 12px);border:1.5px solid {{ ct.color }};box-shadow:0 1px 3px rgba(0,0,0,.5)"></span>
+                  </sc-for>
+                </span>
+                <span style="flex:1;min-width:0;display:flex;flex-direction:column;gap:3px">
+                  <span style="font-weight:600;font-size:12.5px">{{ ct.label }}</span>
+                  <span style="font:400 10px 'Space Mono',monospace;color:#5b636d">{{ ct.meta }}</span>
+                </span>
+                <sc-if value="{{ ct.coco }}" hint-placeholder-val="{{ false }}">
+                  <span style="display:flex;align-items:center;gap:5px;padding:3px 9px;border-radius:5px;background:rgba(77,158,248,.12);border:1px solid rgba(77,158,248,.35)"><span style="font:700 8px 'Space Mono',monospace;color:#8fc1fa">COCO</span><span style="font:400 10.5px 'Space Mono',monospace;color:#c8cdd4">{{ ct.coco }}</span></span>
+                </sc-if>
+                <sc-if value="{{ ct.warn }}" hint-placeholder-val="{{ false }}">
+                  <span style="font-size:10.5px;color:#eab566;background:rgba(232,161,60,.08);border:1px solid rgba(232,161,60,.3);padding:3px 9px;border-radius:5px;max-width:230px;line-height:1.35">⚠ {{ ct.warn }}</span>
+                </sc-if>
+                <span style="padding:4px 10px;border:1px solid rgba(255,255,255,.12);color:#9aa3ad;border-radius:5px;font-size:11.5px">Éditer</span>
+                <span style="color:#5b636d;font-size:14px" title="Retirer de la collection">×</span>
+              </div>
+            </sc-for>
+            <div style="margin-top:auto;font-size:11.5px;color:#5b636d;line-height:1.5;border-top:1px solid rgba(255,255,255,.07);padding-top:11px">Retirer un Terme ne le supprime pas de la bibliothèque. Le badge COCO indique que le Terme n'est évalué que sur les boîtes de cette classe.</div>
+          </div>
+          <!-- panneau réglages collection -->
+          <div style="width:320px;flex:none;border-left:1px solid rgba(255,255,255,.08);background:#161a1f;padding:16px;display:flex;flex-direction:column;gap:13px">
+            <span style="font-weight:600;font-size:12.5px">Réglages de la Collection</span>
+            <div style="display:flex;flex-direction:column;gap:6px">
+              <span style="font:400 9.5px 'Space Mono',monospace;color:#5b636d;text-transform:uppercase">Nom</span>
+              <div style="padding:8px 11px;border:1px solid rgba(255,255,255,.12);border-radius:6px;background:#12151a;font-size:12.5px;font-weight:600">Manchester Team</div>
+            </div>
+            <div style="display:flex;flex-direction:column;gap:6px">
+              <span style="font:400 9.5px 'Space Mono',monospace;color:#5b636d;text-transform:uppercase">Tags</span>
+              <div style="display:flex;gap:5px;flex-wrap:wrap;padding:7px 9px;border:1px solid #4d9ef8;border-radius:7px 7px 0 0;background:#12151a;box-shadow:0 0 0 3px rgba(77,158,248,.15)">
+                <span style="padding:2px 9px;border-radius:9px;background:rgba(199,125,255,.14);color:#dcb5ff;font-size:11px">football ×</span>
+                <span style="padding:2px 9px;border-radius:9px;background:rgba(199,125,255,.14);color:#dcb5ff;font-size:11px">2026 ×</span>
+                <span style="font-size:12px;color:#e7eaee">sé<span style="display:inline-block;width:1px;height:12px;background:#4d9ef8;margin-left:1px;vertical-align:-2px;animation:lsPulse 1s infinite"></span></span>
+              </div>
+              <div style="border:1px solid rgba(255,255,255,.14);border-top:none;border-radius:0 0 7px 7px;background:#1b1f24;margin-top:-6px;overflow:hidden">
+                <div style="padding:7px 11px;font-size:12px;color:#e7eaee;background:rgba(77,158,248,.12)"><span style="color:#8fc1fa;font-weight:700">sé</span>curité <span style="font:400 9px 'Space Mono',monospace;color:#5b636d;float:right">2 collections</span></div>
+                <div style="padding:7px 11px;font-size:12px;color:#c8cdd4">saison-<span style="color:#8fc1fa;font-weight:700">sè</span>che <span style="font:400 9px 'Space Mono',monospace;color:#5b636d;float:right">1 collection</span></div>
+                <div style="padding:7px 11px;font-size:12px;color:#c9a0ec;border-top:1px solid rgba(255,255,255,.07)">+ Créer « sé »</div>
+              </div>
+              <span style="font-size:10.5px;color:#5b636d;line-height:1.45">Un tag est toujours réutilisé ou créé ici — pas de gestion séparée des tags.</span>
+            </div>
+            <div style="margin-top:auto;border-top:1px solid rgba(255,255,255,.07);padding-top:11px;font-size:11.5px;color:#5b636d;line-height:1.5">Tags plats, sans « # », partagés entre Collections pour le filtrage transversal.</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ===== 4c Éditeur de Terme ===== -->
+    <div id="4c" style="flex:none;display:flex;flex-direction:column;gap:9px;scroll-margin-top:16px">
+      <div style="display:flex;align-items:baseline;gap:8px;font:400 11px 'Archivo',sans-serif;color:rgba(255,255,255,.55)"><a href="#4c" style="font:700 10.5px 'Space Mono',monospace;padding:3px 7px;background:rgba(255,255,255,.12);color:#e7eaee;border-radius:5px">4c</a>Éditeur de Terme — nom, sélecteur classe COCO, galerie de photos (état peuplé)</div>
+      <div data-screen-label="4c Éditeur de Terme" style="width:1180px;height:600px;background:#14171b;color:#e7eaee;font-size:13px;border:1px solid rgba(255,255,255,.1);border-radius:10px;overflow:hidden;position:relative;box-shadow:0 2px 14px rgba(0,0,0,.5)">
+        <div style="position:absolute;inset:0;background:rgba(8,10,13,.55)"></div>
+        <div style="position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);width:640px;background:#1b1f24;border:1px solid rgba(255,255,255,.14);border-radius:11px;box-shadow:0 16px 48px rgba(0,0,0,.65);display:flex;flex-direction:column">
+          <div style="display:flex;align-items:center;justify-content:space-between;padding:15px 18px;border-bottom:1px solid rgba(255,255,255,.08)">
+            <span style="font-weight:700;font-size:14px">Éditer le Terme</span><span style="color:#5b636d;font-size:15px">×</span>
+          </div>
+          <div style="padding:16px 18px;display:flex;flex-direction:column;gap:14px">
+            <div style="display:flex;gap:14px">
+              <div style="flex:1;display:flex;flex-direction:column;gap:6px">
+                <span style="font:400 9.5px 'Space Mono',monospace;color:#5b636d;text-transform:uppercase">Terme <span style="color:#e4574f">*</span></span>
+                <div style="padding:8px 11px;border:1px solid rgba(255,255,255,.12);border-radius:6px;background:#12151a;font-size:12.5px;font-weight:600">maillot numéro 10 de Dupont</div>
+                <span style="font-size:10.5px;color:#5b636d;line-height:1.45">Encodé en vecteur texte CLIP — lié aux vecteurs image des photos ci-dessous.</span>
+              </div>
+              <div style="width:220px;display:flex;flex-direction:column;gap:6px">
+                <span style="font:400 9.5px 'Space Mono',monospace;color:#5b636d;text-transform:uppercase">Classe COCO liée <span style="color:#5b636d;text-transform:none">(optionnel)</span></span>
+                <div style="display:flex;align-items:center;gap:6px;padding:8px 11px;border:1px solid rgba(77,158,248,.5);border-radius:6px;background:#12151a">
+                  <span style="font:700 8px 'Space Mono',monospace;color:#8fc1fa">COCO</span>
+                  <span style="font:400 12px 'Space Mono',monospace;color:#e7eaee;flex:1">person</span>
+                  <span style="color:#5b636d;font-size:12px">×</span>
+                </div>
+                <span style="font-size:10.5px;color:#5b636d;line-height:1.45">Évalué uniquement sur les boîtes « person » — plus rapide, plus précis.</span>
+              </div>
+            </div>
+            <div style="display:flex;flex-direction:column;gap:7px">
+              <div style="display:flex;align-items:baseline;gap:8px"><span style="font:400 9.5px 'Space Mono',monospace;color:#5b636d;text-transform:uppercase">Photos de référence <span style="color:#e4574f">*</span></span><span style="font:400 10px 'Space Mono',monospace;color:#5b636d">3 · minimum 1</span></div>
+              <div style="display:flex;gap:9px">
+                <sc-for list="{{ term4Photos }}" as="p" hint-placeholder-count="3">
+                  <div style="position:relative;width:112px;height:80px;background:repeating-linear-gradient(135deg,#22272d 0 8px,#1c2127 8px 16px);border:1px solid rgba(255,255,255,.09);border-radius:7px">
+                    <span style="position:absolute;inset:9px;border:2px {{ p.stroke }} #c77dff;border-radius:3px"></span>
+                    <span style="position:absolute;top:5px;right:6px;width:16px;height:16px;border-radius:4px;background:rgba(11,13,16,.8);color:#f08a84;font-size:11px;display:flex;align-items:center;justify-content:center;border:1px solid rgba(228,87,79,.4)">×</span>
+                    <span style="position:absolute;left:6px;bottom:5px;font:400 8px 'Space Mono',monospace;color:#7d8791;background:rgba(11,13,16,.7);padding:1px 5px;border-radius:3px">{{ p.src }}</span>
+                  </div>
+                </sc-for>
+                <div style="width:112px;height:80px;border:1px dashed rgba(255,255,255,.16);border-radius:7px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3px;color:#5b636d;font-size:10.5px;text-align:center;line-height:1.3"><span style="font-size:14px">⇪</span>déposer ou<br>parcourir (multi)</div>
+              </div>
+              <span style="font-size:10.5px;color:#5b636d">× retire une photo individuellement — retirer la dernière équivaut à supprimer le Terme (confirmation demandée).</span>
+            </div>
+          </div>
+          <div style="display:flex;align-items:center;gap:9px;padding:13px 18px;border-top:1px solid rgba(255,255,255,.08)">
+            <span style="font-size:11px;color:#5b636d">Dans : <span style="color:#c9a0ec">Manchester Team</span>, <span style="color:#c9a0ec">Adversaires</span></span>
+            <div style="flex:1"></div>
+            <span style="padding:7px 14px;border:1px solid rgba(255,255,255,.14);border-radius:6px;color:#9aa3ad;font-size:12.5px">Annuler</span>
+            <span style="padding:7px 16px;background:#4d9ef8;color:#0b0d10;border-radius:6px;font-weight:700;font-size:12.5px">Enregistrer</span>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ===== 4d Planche d'états ===== -->
+    <div id="4d" style="flex:none;display:flex;flex-direction:column;gap:9px;scroll-margin-top:16px">
+      <div style="display:flex;align-items:baseline;gap:8px;font:400 11px 'Archivo',sans-serif;color:rgba(255,255,255,.55)"><a href="#4d" style="font:700 10.5px 'Space Mono',monospace;padding:3px 7px;background:rgba(255,255,255,.12);color:#e7eaee;border-radius:5px">4d</a>Planche d'états — formulaire de Terme et combobox (sombre + rangée claire)</div>
+      <div data-screen-label="4d Planche d'états" style="width:1180px;background:#14171b;border:1px solid rgba(255,255,255,.1);border-radius:10px;padding:20px 22px;display:flex;flex-direction:column;gap:16px;color:#e7eaee;font-size:13px">
+        <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:14px">
+          <!-- vide -->
+          <div style="background:#161a1f;border:1px solid rgba(255,255,255,.08);border-radius:9px;padding:12px;display:flex;flex-direction:column;gap:7px">
+            <span style="font:400 9.5px 'Space Mono',monospace;color:#5b636d;text-transform:uppercase">1 · Terme manquant — bloquant</span>
+            <div style="padding:8px 11px;border:1px solid rgba(228,87,79,.55);border-radius:6px;background:#12151a;font-size:12.5px;color:#5b636d">Terme…</div>
+            <span style="font-size:10.5px;color:#f08a84">Le Terme est requis — c'est le texte que CLIP encode (vecteur texte).</span>
+            <span style="align-self:flex-start;padding:6px 14px;background:rgba(255,255,255,.06);color:#5b636d;border-radius:6px;font-weight:700;font-size:12px">Enregistrer</span>
+          </div>
+          <!-- aucune photo -->
+          <div style="background:#161a1f;border:1px solid rgba(255,255,255,.08);border-radius:9px;padding:12px;display:flex;flex-direction:column;gap:7px">
+            <span style="font:400 9.5px 'Space Mono',monospace;color:#5b636d;text-transform:uppercase">2 · Aucune photo — bloquant</span>
+            <div style="padding:8px 11px;border:1px solid rgba(255,255,255,.12);border-radius:6px;background:#12151a;font-size:12.5px;font-weight:600">maillot numéro 10 de Dupont</div>
+            <div style="height:46px;border:1px dashed rgba(228,87,79,.5);border-radius:6px;display:flex;align-items:center;justify-content:center;color:#f08a84;font-size:10.5px">⇪ au moins 1 photo de référence requise</div>
+            <span style="font-size:10.5px;color:#f08a84;line-height:1.4">Le Terme est un vecteur texte CLIP — il doit être lié à au moins un vecteur image (photo).</span>
+            <span style="align-self:flex-start;padding:6px 14px;background:rgba(255,255,255,.06);color:#5b636d;border-radius:6px;font-weight:700;font-size:12px">Enregistrer</span>
+          </div>
+          <!-- 1 photo valide -->
+          <div style="background:#161a1f;border:1px solid rgba(255,255,255,.08);border-radius:9px;padding:12px;display:flex;flex-direction:column;gap:7px">
+            <span style="font:400 9.5px 'Space Mono',monospace;color:#5b636d;text-transform:uppercase">3 · 1 photo — valide</span>
+            <div style="padding:8px 11px;border:1px solid rgba(255,255,255,.12);border-radius:6px;background:#12151a;font-size:12.5px;font-weight:600">maillot numéro 10 de Dupont</div>
+            <div style="display:flex;gap:8px;align-items:center">
+              <div style="position:relative;width:76px;height:54px;background:repeating-linear-gradient(135deg,#22272d 0 8px,#1c2127 8px 16px);border-radius:6px"><span style="position:absolute;inset:6px;border:2px solid #c77dff;border-radius:3px"></span></div>
+              <span style="font-size:10.5px;color:#5b636d;line-height:1.4;flex:1">Le minimum est atteint — d'autres photos affinent le vecteur.</span>
+            </div>
+            <span style="align-self:flex-start;padding:6px 14px;background:#4d9ef8;color:#0b0d10;border-radius:6px;font-weight:700;font-size:12px">Enregistrer</span>
+          </div>
+          <!-- coco ok -->
+          <div style="background:#161a1f;border:1px solid rgba(255,255,255,.08);border-radius:9px;padding:12px;display:flex;flex-direction:column;gap:7px">
+            <span style="font:400 9.5px 'Space Mono',monospace;color:#5b636d;text-transform:uppercase">4 · Sélecteur COCO — autocomplete « ba »</span>
+            <div style="padding:8px 11px;border:1px solid #4d9ef8;border-radius:7px 7px 0 0;background:#12151a;font:400 12px 'Space Mono',monospace;color:#e7eaee;box-shadow:0 0 0 3px rgba(77,158,248,.15)">ba</div>
+            <div style="border:1px solid rgba(255,255,255,.14);border-top:none;border-radius:0 0 7px 7px;background:#1b1f24;margin-top:-7px;overflow:hidden">
+              <sc-for list="{{ cocoSugg }}" as="cs" hint-placeholder-count="3">
+                <div style="display:flex;align-items:center;gap:7px;padding:6px 11px;font:400 11.5px 'Space Mono',monospace;color:#c8cdd4;background:{{ cs.bg }}"><span style="font:700 8px 'Space Mono',monospace;color:#8fc1fa">COCO</span>{{ cs.pre }}<span style="color:#8fc1fa;font-weight:700">ba</span>{{ cs.post }}</div>
+              </sc-for>
+            </div>
+            <span style="font-size:10.5px;color:#5b636d">Vocabulaire fermé du modèle actif — 80 classes génériques anglaises.</span>
+          </div>
+          <!-- coco no match -->
+          <div style="background:#161a1f;border:1px solid rgba(255,255,255,.08);border-radius:9px;padding:12px;display:flex;flex-direction:column;gap:7px">
+            <span style="font:400 9.5px 'Space Mono',monospace;color:#5b636d;text-transform:uppercase">5 · COCO sans correspondance — warning</span>
+            <div style="padding:8px 11px;border:1px solid #e8a13c;border-radius:6px;background:#12151a;font:400 12px 'Space Mono',monospace;color:#e7eaee;box-shadow:0 0 0 3px rgba(232,161,60,.14)">maillot</div>
+            <span style="font-size:10.5px;color:#eab566;background:rgba(232,161,60,.08);border:1px solid rgba(232,161,60,.3);padding:5px 9px;border-radius:5px;line-height:1.45">⚠ Aucune classe du modèle actif ne correspond — sans classe détectable, rien ne sera détecté pour ce Terme.</span>
+            <div style="display:flex;gap:6px">
+              <span style="padding:4px 10px;border:1px solid rgba(232,161,60,.45);color:#eab566;border-radius:5px;font-size:10.5px">Changer de modèle</span>
+              <span style="padding:4px 10px;border:1px solid rgba(232,161,60,.45);color:#eab566;border-radius:5px;font-size:10.5px">Fine-tuner le modèle actuel</span>
+            </div>
+          </div>
+          <!-- 1 photo -->
+          <div style="background:#161a1f;border:1px solid rgba(255,255,255,.08);border-radius:9px;padding:12px;display:flex;flex-direction:column;gap:7px">
+            <span style="font:400 9.5px 'Space Mono',monospace;color:#5b636d;text-transform:uppercase">6 · Terme avec 1 photo / plusieurs — × au survol</span>
+            <div style="display:flex;gap:8px">
+              <div style="position:relative;width:86px;height:62px;background:repeating-linear-gradient(135deg,#22272d 0 8px,#1c2127 8px 16px);border-radius:6px"><span style="position:absolute;inset:7px;border:2px solid #e8a13c;border-radius:3px"></span></div>
+              <div style="position:relative;width:86px;height:62px;background:repeating-linear-gradient(135deg,#22272d 0 8px,#1c2127 8px 16px);border-radius:6px;outline:2px solid rgba(255,255,255,.25)"><span style="position:absolute;inset:7px;border:2px solid #e8a13c;border-radius:3px"></span><span style="position:absolute;inset:0;background:rgba(11,13,16,.45);border-radius:6px;display:flex;align-items:center;justify-content:center"><span style="width:20px;height:20px;border-radius:5px;background:rgba(228,87,79,.9);color:#fff;font-size:12px;display:flex;align-items:center;justify-content:center">×</span></span><span style="position:absolute;bottom:-16px;left:0;right:0;text-align:center;font:400 8.5px 'Space Mono',monospace;color:#5b636d">survol</span></div>
+              <div style="width:86px;height:62px;border:1px dashed rgba(255,255,255,.16);border-radius:6px;display:flex;align-items:center;justify-content:center;color:#5b636d;font-size:11px">+</div>
+            </div>
+            <span style="font-size:10.5px;color:#5b636d;margin-top:12px">Suppression photo par photo ; retirer la dernière = supprimer le Terme (confirmation).</span>
+          </div>
+        </div>
+        <!-- rangée claire -->
+        <div style="display:flex;gap:14px;background:#eef0f2;border-radius:9px;padding:14px">
+          <div style="flex:1;background:#fff;border:1px solid rgba(0,0,0,.1);border-radius:9px;padding:12px;display:flex;flex-direction:column;gap:7px">
+            <span style="font:400 9.5px 'Space Mono',monospace;color:#98a1ab;text-transform:uppercase">Clair · aucune photo — bloquant</span>
+            <div style="padding:8px 11px;border:1px solid rgba(0,0,0,.14);border-radius:6px;background:#fff;font-size:12.5px;color:#1c2126;font-weight:600">maillot numéro 10 de Dupont</div>
+            <div style="height:40px;border:1px dashed rgba(204,64,56,.5);border-radius:6px;display:flex;align-items:center;justify-content:center;color:#cc4038;font-size:10.5px">⇪ au moins 1 photo requise</div>
+          </div>
+          <div style="flex:1;background:#fff;border:1px solid rgba(0,0,0,.1);border-radius:9px;padding:12px;display:flex;flex-direction:column;gap:7px">
+            <span style="font:400 9.5px 'Space Mono',monospace;color:#98a1ab;text-transform:uppercase">Clair · combobox tags + « Créer »</span>
+            <div style="display:flex;gap:5px;flex-wrap:wrap;padding:7px 9px;border:1px solid #2b7de0;border-radius:7px 7px 0 0;background:#fff;box-shadow:0 0 0 3px rgba(43,125,224,.12)">
+              <span style="padding:2px 9px;border-radius:9px;background:rgba(155,81,224,.1);color:#6d2fa5;font-size:11px">football ×</span>
+              <span style="font-size:12px;color:#1c2126">sé</span>
+            </div>
+            <div style="border:1px solid rgba(0,0,0,.14);border-top:none;border-radius:0 0 7px 7px;background:#fff;margin-top:-7px;overflow:hidden">
+              <div style="padding:6px 11px;font-size:12px;color:#1c2126;background:rgba(43,125,224,.08)"><span style="color:#2b6cc0;font-weight:700">sé</span>curité</div>
+              <div style="padding:6px 11px;font-size:12px;color:#8c3fd0;border-top:1px solid rgba(0,0,0,.07)">+ Créer « sé »</div>
+            </div>
+          </div>
+          <div style="flex:1;background:#fff;border:1px solid rgba(0,0,0,.1);border-radius:9px;padding:12px;display:flex;flex-direction:column;gap:7px">
+            <span style="font:400 9.5px 'Space Mono',monospace;color:#98a1ab;text-transform:uppercase">Clair · badge COCO dans une liste</span>
+            <div style="display:flex;align-items:center;gap:10px;padding:9px 11px;background:#f5f6f8;border:1px solid rgba(0,0,0,.09);border-radius:7px">
+              <span style="width:34px;height:26px;border-radius:4px;background:repeating-linear-gradient(135deg,#242930 0 6px,#1e232a 6px 12px);border:1.5px solid #8c3fd0"></span>
+              <span style="flex:1;font-size:12.5px;color:#1c2126;font-weight:600">Maillot 10</span>
+              <span style="display:flex;align-items:center;gap:5px;padding:3px 9px;border-radius:5px;background:rgba(43,125,224,.08);border:1px solid rgba(43,125,224,.3)"><span style="font:700 8px 'Space Mono',monospace;color:#2b6cc0">COCO</span><span style="font:400 10.5px 'Space Mono',monospace;color:#3c454f">person</span></span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ===== 4e Barre de filtre caméra ===== -->
+    <div id="4e" style="flex:none;display:flex;flex-direction:column;gap:9px;scroll-margin-top:16px">
+      <div style="display:flex;align-items:baseline;gap:8px;font:400 11px 'Archivo',sans-serif;color:rgba(255,255,255,.55)"><a href="#4e" style="font:700 10.5px 'Space Mono',monospace;padding:3px 7px;background:rgba(255,255,255,.12);color:#e7eaee;border-radius:5px">4e</a>Barre de filtre caméra — Classes COCO › Ma galerie › texte libre en dernier recours</div>
+      <div data-screen-label="4e Filtre caméra" style="width:1180px;background:#14171b;border:1px solid rgba(255,255,255,.1);border-radius:10px;padding:20px 22px;display:flex;gap:18px;color:#e7eaee;font-size:13px">
+        <div style="flex:1;display:flex;flex-direction:column;gap:8px">
+          <span style="font:400 9.5px 'Space Mono',monospace;color:#5b636d;text-transform:uppercase">Résultats dans les deux groupes — « ball »</span>
+          <div style="background:#161a1f;border:1px solid rgba(255,255,255,.08);border-radius:9px;padding:12px">
+            <div style="padding:8px 11px;border:1px solid #4d9ef8;border-radius:7px 7px 0 0;background:#12151a;font-size:12.5px;color:#e7eaee;box-shadow:0 0 0 3px rgba(77,158,248,.15)">ball<span style="display:inline-block;width:1px;height:13px;background:#4d9ef8;margin-left:2px;vertical-align:-2px;animation:lsPulse 1s infinite"></span></div>
+            <div style="border:1px solid rgba(255,255,255,.14);border-top:none;border-radius:0 0 7px 7px;background:#1b1f24;overflow:hidden">
+              <div style="display:flex;align-items:center;gap:7px;padding:7px 11px 4px;font:700 8.5px 'Space Mono',monospace;color:#8fc1fa;text-transform:uppercase"><span style="width:8px;height:8px;border-radius:2px;background:#4d9ef8"></span>Classes COCO</div>
+              <div style="display:flex;align-items:center;gap:8px;padding:6px 11px 6px 26px;font:400 12px 'Space Mono',monospace;background:rgba(77,158,248,.12)"><span style="flex:1;color:#e7eaee">sports <span style="color:#8fc1fa;font-weight:700">ball</span></span><span style="font:400 9px 'Space Mono',monospace;color:#5b636d">classe native</span></div>
+              <div style="display:flex;align-items:center;gap:8px;padding:6px 11px 6px 26px;font:400 12px 'Space Mono',monospace"><span style="flex:1;color:#c8cdd4">base<span style="color:#8fc1fa;font-weight:700">ball</span> bat</span><span style="font:400 9px 'Space Mono',monospace;color:#5b636d">classe native</span></div>
+              <div style="display:flex;align-items:center;gap:7px;padding:7px 11px 4px;font:700 8.5px 'Space Mono',monospace;color:#eab566;text-transform:uppercase"><span style="width:8px;height:8px;border-radius:2px;background:#e8a13c"></span>Ma galerie</div>
+              <div style="display:flex;align-items:center;gap:8px;padding:5px 11px 5px 26px;font-size:12.5px"><span style="width:22px;height:22px;border-radius:4px;background:repeating-linear-gradient(135deg,#22272d 0 5px,#1c2127 5px 10px);border:1.5px solid #e8a13c;flex:none"></span><span style="flex:1;color:#e7eaee"><span style="color:#eab566;font-weight:700">ball</span>on du club</span><span style="font:400 9.5px 'Space Mono',monospace;color:#5b636d">2 photos · COCO : sports ball</span></div>
+              <div style="padding:7px 11px;border-top:1px solid rgba(255,255,255,.07);font-size:11px;color:#5b636d">↑↓ naviguer · ↵ ajouter aux filtres actifs</div>
+            </div>
+          </div>
+        </div>
+        <div style="flex:1;display:flex;flex-direction:column;gap:8px">
+          <span style="font:400 9.5px 'Space Mono',monospace;color:#5b636d;text-transform:uppercase">Aucune correspondance — texte libre en dernier recours</span>
+          <div style="background:#161a1f;border:1px solid rgba(255,255,255,.08);border-radius:9px;padding:12px">
+            <div style="padding:8px 11px;border:1px solid #4d9ef8;border-radius:7px 7px 0 0;background:#12151a;font-size:12.5px;color:#e7eaee;box-shadow:0 0 0 3px rgba(77,158,248,.15)">gilet réfléchissant orange</div>
+            <div style="border:1px solid rgba(255,255,255,.14);border-top:none;border-radius:0 0 7px 7px;background:#1b1f24;overflow:hidden">
+              <div style="padding:8px 11px;font-size:11.5px;color:#5b636d">Rien dans les classes COCO ni dans Ma galerie.</div>
+              <div style="display:flex;align-items:center;gap:8px;padding:7px 11px;border-top:1px dashed rgba(255,255,255,.1);opacity:.75">
+                <span style="font:700 8px 'Space Mono',monospace;padding:2px 5px;border-radius:3px;background:rgba(255,255,255,.08);color:#9aa3ad">TEXTE LIBRE</span>
+                <span style="flex:1;font-size:12px;color:#9aa3ad">Utiliser « gilet réfléchissant orange » en texte libre</span>
+              </div>
+              <div style="padding:6px 11px 8px;font-size:10px;color:#5b636d;line-height:1.4">Mode moins fiable — CLIP compare sans classe ni photo de référence, sans garantie de résultat.</div>
+            </div>
+          </div>
+        </div>
+        <div style="flex:.8;display:flex;flex-direction:column;gap:8px">
+          <span style="font:400 9.5px 'Space Mono',monospace;color:#98a1ab;text-transform:uppercase">Clair · résultats</span>
+          <div style="background:#eef0f2;border-radius:9px;padding:12px">
+            <div style="background:#fff;border:1px solid rgba(0,0,0,.1);border-radius:9px;padding:10px">
+              <div style="padding:7px 10px;border:1px solid #2b7de0;border-radius:7px 7px 0 0;background:#fff;font-size:12px;color:#1c2126;box-shadow:0 0 0 3px rgba(43,125,224,.12)">ball</div>
+              <div style="border:1px solid rgba(0,0,0,.14);border-top:none;border-radius:0 0 7px 7px;background:#fff;overflow:hidden">
+                <div style="display:flex;align-items:center;gap:7px;padding:6px 10px 3px;font:700 8.5px 'Space Mono',monospace;color:#2b6cc0;text-transform:uppercase"><span style="width:8px;height:8px;border-radius:2px;background:#2b7de0"></span>Classes COCO</div>
+                <div style="padding:5px 10px 5px 24px;font:400 11.5px 'Space Mono',monospace;color:#1c2126;background:rgba(43,125,224,.08)">sports <span style="color:#2b6cc0;font-weight:700">ball</span></div>
+                <div style="display:flex;align-items:center;gap:7px;padding:6px 10px 3px;font:700 8.5px 'Space Mono',monospace;color:#a66d15;text-transform:uppercase"><span style="width:8px;height:8px;border-radius:2px;background:#c07f1f"></span>Ma galerie</div>
+                <div style="display:flex;align-items:center;gap:7px;padding:4px 10px 6px 24px;font-size:12px;color:#1c2126"><span style="width:18px;height:18px;border-radius:3px;background:repeating-linear-gradient(135deg,#242930 0 5px,#1e232a 5px 10px);border:1.5px solid #c07f1f"></span><span style="color:#a66d15;font-weight:700">ball</span>on du club</div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+  </div>
+</section>
+<section id="t3" style="padding:40px 44px 8px">
+  <div style="display:flex;align-items:baseline;gap:10px;margin:0 0 14px">
+    <a href="#t3" style="font:700 10px 'Space Mono',monospace;padding:3px 7px;background:#e7eaee;color:#0b0d10;border-radius:4px">3</a>
+    <span style="font:600 14px 'Archivo',sans-serif;color:#e7eaee">Révision du modèle — Terme = nom + photos optionnelles, Collections avec tags, autocomplétion v2</span>
+  </div>
+  <div style="max-width:860px;background:#14171b;border:1px solid rgba(255,255,255,.08);border-radius:8px;padding:16px 18px;margin:0 0 26px;color:#9aa3ad;font-size:12.5px;line-height:1.55">
+    <div style="color:#e7eaee;font-weight:600;margin-bottom:6px">Ce qui change vs section 2</div>
+    Plus trois types de terme : un seul concept <span style="font:700 9px 'Space Mono',monospace;padding:2px 5px;border-radius:3px;background:rgba(232,161,60,.16);color:#eab566">TERME</span> = nom (étiquette humaine) + 1…N photos qui portent le sens (vecteurs image CLIP). L'onglet « Galerie » devient « Termes ». Les <span style="font:700 9px 'Space Mono',monospace;padding:2px 5px;border-radius:3px;background:rgba(199,125,255,.16);color:#c77dff">COLLECTIONS</span> portent des tags plats (jamais d'imbrication) et partagent leurs Termes sans duplication. <span style="font:700 9px 'Space Mono',monospace;padding:2px 5px;border-radius:3px;background:rgba(77,158,248,.16);color:#8fc1fa">MODÈLE</span> reste les termes natifs de l'IA. Deux suppressions distinctes : × sur une vignette retire cette photo ; « Supprimer le Terme » retire tout. Les écrans <a href="#2a">2a</a>–<a href="#2e">2e</a> restent comme historique ; <a href="#3a">3a</a>–<a href="#3d">3d</a> les remplacent conceptuellement.
+  </div>
+  <div style="display:flex;flex-wrap:wrap;gap:30px;align-items:flex-start">
+
+    <!-- ===== 3a Onglet Termes ===== -->
+    <div id="3a" style="flex:none;display:flex;flex-direction:column;gap:9px;scroll-margin-top:16px">
+      <div style="display:flex;align-items:baseline;gap:8px;font:400 11px 'Archivo',sans-serif;color:rgba(255,255,255,.55)"><a href="#3a" style="font:700 10.5px 'Space Mono',monospace;padding:3px 7px;background:rgba(255,255,255,.12);color:#e7eaee;border-radius:5px">3a</a>Onglet Termes — grille de vignettes par Terme, 0 à N photos, suppressions distinctes (sombre)</div>
+      <div data-screen-label="3a Onglet Termes" style="width:1180px;height:740px;background:#14171b;color:#e7eaee;font-size:13px;border:1px solid rgba(255,255,255,.1);border-radius:10px;overflow:hidden;display:flex;flex-direction:column;box-shadow:0 2px 14px rgba(0,0,0,.5)">
+        <div style="display:flex;align-items:center;gap:14px;height:46px;padding:0 14px;background:#0e1114;border-bottom:1px solid rgba(255,255,255,.07);flex:none">
+          <div style="display:flex;align-items:center;gap:7px;font-weight:700;font-size:14px"><span style="width:9px;height:9px;border-radius:50%;background:#4d9ef8;display:inline-block"></span>LiveSemantic</div>
+          <div style="display:flex;gap:4px;align-self:flex-end">
+            <div style="padding:8px 16px 9px;color:#9aa3ad;font-size:12.5px">Sources</div>
+            <div style="padding:8px 16px 9px;background:#14171b;border:1px solid rgba(255,255,255,.09);border-bottom:none;border-radius:7px 7px 0 0;font-weight:600;font-size:12.5px">Termes</div>
+            <div style="padding:8px 16px 9px;color:#9aa3ad;font-size:12.5px">Collections</div>
+            <div style="padding:8px 16px 9px;color:#9aa3ad;font-size:12.5px;display:flex;align-items:center;gap:7px"><span style="width:6px;height:6px;border-radius:50%;background:#2ec27e;display:inline-block"></span>Entrée principale<span style="color:#5b636d">×</span></div>
+          </div>
+          <div style="flex:1"></div>
+          <div style="padding:6px 12px;border:1px solid rgba(255,255,255,.14);border-radius:6px;font-size:12px;color:#c8cdd4">Journal</div>
+          <div style="padding:6px 14px;background:#4d9ef8;color:#0b0d10;border-radius:6px;font-weight:600;font-size:12.5px">+ Nouveau Terme</div>
+        </div>
+        <div style="display:flex;align-items:center;gap:12px;height:44px;padding:0 16px;border-bottom:1px solid rgba(255,255,255,.06);flex:none">
+          <div style="width:250px;padding:6px 11px;border:1px solid rgba(255,255,255,.1);border-radius:6px;color:#5b636d;font-size:12px">Rechercher un Terme…</div>
+          <span style="font:400 11px 'Space Mono',monospace;color:#5b636d">4 Termes · 6 photos</span>
+          <div style="flex:1"></div>
+          <span style="font:400 11px 'Space Mono',monospace;color:#5b636d">tri : récents ▾</span>
+        </div>
+        <div style="flex:1;overflow:hidden;padding:14px 16px;display:flex;flex-direction:column;gap:15px">
+          <sc-for list="{{ terms3 }}" as="tm" hint-placeholder-count="3">
+            <div style="display:flex;flex-direction:column;gap:8px">
+              <div style="display:flex;align-items:center;gap:9px">
+                <span style="width:10px;height:10px;border-radius:3px;background:{{ tm.color }}"></span>
+                <span style="font-weight:700;font-size:13.5px">{{ tm.name }}</span>
+                <span style="font:700 8.5px 'Space Mono',monospace;padding:2px 5px;border-radius:3px;background:rgba(232,161,60,.16);color:#eab566">TERME</span>
+                <span style="font:400 10.5px 'Space Mono',monospace;color:#5b636d">{{ tm.meta }}</span>
+                <div style="flex:1;border-top:1px solid rgba(255,255,255,.06)"></div>
+                <span style="font-size:11px;color:#9aa3ad">Renommer</span>
+                <span style="font-size:11px;color:#f08a84;border:1px solid rgba(228,87,79,.4);padding:3px 9px;border-radius:5px">Supprimer le Terme{{ tm.delMeta }}</span>
+              </div>
+              <div style="display:flex;gap:9px;align-items:stretch">
+                <sc-for list="{{ tm.photos }}" as="p" hint-placeholder-count="2">
+                  <div style="position:relative;width:118px;height:84px;background:repeating-linear-gradient(135deg,#22272d 0 8px,#1c2127 8px 16px);border:1px solid rgba(255,255,255,.09);border-radius:7px;overflow:hidden">
+                    <span style="position:absolute;inset:9px;border:2px {{ p.stroke }} {{ tm.color }};border-radius:3px"></span>
+                    <span style="position:absolute;top:5px;right:6px;width:16px;height:16px;border-radius:4px;background:rgba(11,13,16,.8);color:#f08a84;font-size:11px;display:flex;align-items:center;justify-content:center;border:1px solid rgba(228,87,79,.4)">×</span>
+                    <span style="position:absolute;left:6px;bottom:5px;font:400 8px 'Space Mono',monospace;color:#7d8791;background:rgba(11,13,16,.7);padding:1px 5px;border-radius:3px">{{ p.src }}</span>
+                  </div>
+                </sc-for>
+                <sc-if value="{{ tm.empty }}" hint-placeholder-val="{{ false }}">
+                  <div style="display:flex;align-items:center;gap:9px;padding:0 14px;height:84px;border:1px dashed rgba(228,87,79,.45);border-radius:7px;background:rgba(228,87,79,.04)">
+                    <span style="font-size:11.5px;color:#f08a84;max-width:250px;line-height:1.45">Aucune photo — Terme incomplet. Au moins 1 photo de référence est requise (vecteur image CLIP).</span>
+                  </div>
+                </sc-if>
+                <div style="width:118px;height:84px;border:1px dashed rgba(255,255,255,.16);border-radius:7px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3px;color:#5b636d;font-size:11px"><span style="font-size:15px">+</span>ajouter une photo</div>
+              </div>
+            </div>
+          </sc-for>
+        </div>
+        <div style="height:30px;flex:none;border-top:1px solid rgba(255,255,255,.07);background:#0e1114;display:flex;align-items:center;gap:16px;padding:0 14px;font:400 10.5px 'Space Mono',monospace;color:#5b636d">
+          <span>× sur une vignette : retire cette photo seulement</span><div style="flex:1"></div><span style="color:#9aa3ad">Journal des événements ▴</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- ===== 3b Collections + tags ===== -->
+    <div id="3b" style="flex:none;display:flex;flex-direction:column;gap:9px;scroll-margin-top:16px">
+      <div style="display:flex;align-items:baseline;gap:8px;font:400 11px 'Archivo',sans-serif;color:rgba(255,255,255,.55)"><a href="#3b" style="font:700 10.5px 'Space Mono',monospace;padding:3px 7px;background:rgba(255,255,255,.12);color:#e7eaee;border-radius:5px">3b</a>Onglet Collections — tags libres, filtre par tag, Termes partagés sans duplication (sombre)</div>
+      <div data-screen-label="3b Collections avec tags" style="width:1180px;height:740px;background:#14171b;color:#e7eaee;font-size:13px;border:1px solid rgba(255,255,255,.1);border-radius:10px;overflow:hidden;display:flex;flex-direction:column;box-shadow:0 2px 14px rgba(0,0,0,.5)">
+        <div style="display:flex;align-items:center;gap:14px;height:46px;padding:0 14px;background:#0e1114;border-bottom:1px solid rgba(255,255,255,.07);flex:none">
+          <div style="display:flex;align-items:center;gap:7px;font-weight:700;font-size:14px"><span style="width:9px;height:9px;border-radius:50%;background:#4d9ef8;display:inline-block"></span>LiveSemantic</div>
+          <div style="display:flex;gap:4px;align-self:flex-end">
+            <div style="padding:8px 16px 9px;color:#9aa3ad;font-size:12.5px">Sources</div>
+            <div style="padding:8px 16px 9px;color:#9aa3ad;font-size:12.5px">Termes</div>
+            <div style="padding:8px 16px 9px;background:#14171b;border:1px solid rgba(255,255,255,.09);border-bottom:none;border-radius:7px 7px 0 0;font-weight:600;font-size:12.5px">Collections</div>
+          </div>
+          <div style="flex:1"></div>
+          <div style="padding:6px 12px;border:1px solid rgba(255,255,255,.14);border-radius:6px;font-size:12px;color:#c8cdd4">Journal</div>
+          <div style="padding:6px 14px;background:#c77dff;color:#0b0d10;border-radius:6px;font-weight:600;font-size:12.5px">+ Nouvelle collection</div>
+        </div>
+        <div style="flex:1;display:flex;min-height:0">
+          <div style="width:340px;flex:none;border-right:1px solid rgba(255,255,255,.08);display:flex;flex-direction:column;padding:14px;gap:8px">
+            <div style="padding:6px 11px;border:1px solid rgba(255,255,255,.1);border-radius:6px;color:#5b636d;font-size:12px">Rechercher une collection…</div>
+            <div style="display:flex;gap:5px;flex-wrap:wrap;padding:2px 0 4px">
+              <span style="font:400 9.5px 'Space Mono',monospace;color:#5b636d;align-self:center">tags :</span>
+              <span style="padding:3px 10px;border-radius:10px;background:rgba(199,125,255,.18);color:#dcb5ff;font-size:11px">football ×</span>
+              <span style="padding:3px 10px;border-radius:10px;border:1px solid rgba(255,255,255,.12);color:#9aa3ad;font-size:11px">2026</span>
+              <span style="padding:3px 10px;border-radius:10px;border:1px solid rgba(255,255,255,.12);color:#9aa3ad;font-size:11px">entrepôt</span>
+              <span style="padding:3px 10px;border-radius:10px;border:1px solid rgba(255,255,255,.12);color:#9aa3ad;font-size:11px">sécurité</span>
+            </div>
+            <sc-for list="{{ colls3 }}" as="c" hint-placeholder-count="3">
+              <div style="display:flex;flex-direction:column;gap:6px;padding:11px 12px;background:{{ c.bg }};border:1px solid {{ c.border }};border-radius:8px;opacity:{{ c.dim }}">
+                <div style="display:flex;align-items:center;gap:8px">
+                  <span style="font:700 8.5px 'Space Mono',monospace;padding:2px 5px;border-radius:3px;background:rgba(199,125,255,.16);color:#c77dff">C</span>
+                  <span style="font-weight:700;font-size:12.5px;flex:1">{{ c.name }}</span>
+                  <span style="font:400 10.5px 'Space Mono',monospace;color:#9aa3ad">{{ c.count }} Termes</span>
+                </div>
+                <div style="display:flex;gap:5px;align-items:center;flex-wrap:wrap">
+                  <sc-for list="{{ c.tags }}" as="tg" hint-placeholder-count="2">
+                    <span style="padding:2px 8px;border-radius:9px;background:rgba(199,125,255,.1);color:#c9a0ec;font-size:10px">#{{ tg }}</span>
+                  </sc-for>
+                </div>
+              </div>
+            </sc-for>
+            <span style="font-size:10.5px;color:#5b636d;line-height:1.45;margin-top:2px">Filtre « football » actif — 2 collections masquées. Les tags sont plats : une collection ne contient jamais d'autre collection.</span>
+          </div>
+          <div style="flex:1;padding:18px 20px;display:flex;flex-direction:column;gap:13px;min-width:0">
+            <div style="display:flex;align-items:center;gap:12px">
+              <div style="flex:1;padding:9px 12px;border:1px solid rgba(255,255,255,.12);border-radius:7px;background:#12151a;font-weight:700;font-size:14px">Manchester Team</div>
+              <span style="padding:7px 13px;border:1px solid rgba(228,87,79,.5);border-radius:6px;color:#f08a84;font-size:12px">Supprimer</span>
+              <span style="padding:7px 15px;background:#c77dff;color:#0b0d10;border-radius:6px;font-weight:700;font-size:12px">Activer sur la vue courante</span>
+            </div>
+            <div style="display:flex;align-items:center;gap:7px">
+              <span style="font:400 9.5px 'Space Mono',monospace;color:#5b636d;text-transform:uppercase">Tags</span>
+              <span style="padding:3px 10px;border-radius:10px;background:rgba(199,125,255,.14);color:#dcb5ff;font-size:11px">#football ×</span>
+              <span style="padding:3px 10px;border-radius:10px;background:rgba(199,125,255,.14);color:#dcb5ff;font-size:11px">#2026 ×</span>
+              <span style="padding:3px 10px;border-radius:10px;border:1px dashed rgba(255,255,255,.18);color:#5b636d;font-size:11px">+ tag</span>
+            </div>
+            <div style="font:400 9.5px 'Space Mono',monospace;color:#5b636d;text-transform:uppercase">Termes de la collection — 3</div>
+            <div style="display:flex;flex-direction:column;gap:8px">
+              <sc-for list="{{ coll3Terms }}" as="ct" hint-placeholder-count="3">
+                <div style="display:flex;align-items:center;gap:10px;padding:9px 12px;background:#1b1f24;border:1px solid rgba(255,255,255,.08);border-radius:8px">
+                  <sc-if value="{{ ct.thumbs }}" hint-placeholder-val="{{ false }}">
+                    <span style="display:flex;gap:3px;flex:none">
+                      <sc-for list="{{ ct.thumbs }}" as="th" hint-placeholder-count="2">
+                        <span style="width:24px;height:24px;border-radius:4px;background:repeating-linear-gradient(135deg,#22272d 0 6px,#1c2127 6px 12px);border:1.5px solid {{ ct.color }}"></span>
+                      </sc-for>
+                    </span>
+                  </sc-if>
+                  <span style="font:700 8.5px 'Space Mono',monospace;padding:2px 5px;border-radius:3px;background:rgba(232,161,60,.16);color:#eab566">T</span>
+                  <span style="flex:1;font-size:12.5px">{{ ct.label }}</span>
+                  <span style="font:400 10px 'Space Mono',monospace;color:#5b636d">{{ ct.meta }}</span>
+                  <span style="color:#5b636d;font-size:14px" title="Retirer de la collection">×</span>
+                </div>
+              </sc-for>
+            </div>
+            <div style="padding:9px 12px;border:1px dashed rgba(199,125,255,.4);border-radius:8px;color:#9aa3ad;font-size:12.5px;background:rgba(199,125,255,.04)">+ Ajouter un Terme — recherche parmi les Termes existants et les termes du modèle…</div>
+            <div style="margin-top:auto;border-top:1px solid rgba(255,255,255,.07);padding-top:12px;font-size:11.5px;color:#5b636d;line-height:1.5">Retirer un Terme d'ici ne le supprime pas : il reste dans l'onglet Termes et dans ses autres collections. « aussi dans… » signale le partage.</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ===== 3c Vue live autocomplétion v2 ===== -->
+    <div id="3c" style="flex:none;display:flex;flex-direction:column;gap:9px;scroll-margin-top:16px">
+      <div style="display:flex;align-items:baseline;gap:8px;font:400 11px 'Archivo',sans-serif;color:rgba(255,255,255,.55)"><a href="#3c" style="font:700 10.5px 'Space Mono',monospace;padding:3px 7px;background:rgba(255,255,255,.12);color:#e7eaee;border-radius:5px">3c</a>Vue live — autocomplétion v2 « mail » : Termes avec vignettes, Collections avec tags (sombre)</div>
+      <div data-screen-label="3c Vue live autocomplétion v2" style="width:1180px;height:740px;background:#14171b;color:#e7eaee;font-size:13px;border:1px solid rgba(255,255,255,.1);border-radius:10px;overflow:hidden;display:flex;flex-direction:column;box-shadow:0 2px 14px rgba(0,0,0,.5)">
+        <div style="display:flex;align-items:center;gap:14px;height:46px;padding:0 14px;background:#0e1114;border-bottom:1px solid rgba(255,255,255,.07);flex:none">
+          <div style="display:flex;align-items:center;gap:7px;font-weight:700;font-size:14px"><span style="width:9px;height:9px;border-radius:50%;background:#4d9ef8;display:inline-block"></span>LiveSemantic</div>
+          <div style="display:flex;gap:4px;align-self:flex-end">
+            <div style="padding:8px 16px 9px;color:#9aa3ad;font-size:12.5px">Sources</div>
+            <div style="padding:8px 16px 9px;color:#9aa3ad;font-size:12.5px">Termes</div>
+            <div style="padding:8px 16px 9px;color:#9aa3ad;font-size:12.5px">Collections</div>
+            <div style="padding:8px 16px 9px;background:#14171b;border:1px solid rgba(255,255,255,.09);border-bottom:none;border-radius:7px 7px 0 0;font-weight:600;font-size:12.5px;display:flex;align-items:center;gap:7px"><span style="width:6px;height:6px;border-radius:50%;background:#2ec27e;display:inline-block;animation:lsPulse 2s infinite"></span>Entrée principale<span style="color:#5b636d">×</span></div>
+          </div>
+          <div style="flex:1"></div>
+          <div style="padding:6px 12px;border:1px solid rgba(255,255,255,.14);border-radius:6px;font-size:12px;color:#c8cdd4">Journal</div>
+        </div>
+        <div style="flex:1;display:flex;min-height:0">
+          <div style="flex:1;display:flex;flex-direction:column;min-width:0">
+            <div style="flex:1;position:relative;background:repeating-linear-gradient(135deg,#171b20 0 12px,#13161b 12px 24px);margin:12px;border-radius:8px;overflow:hidden">
+              <span style="position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);font:400 11px 'Space Mono',monospace;color:#454e58">[ flux vidéo — jamais recouvert par les suggestions ]</span>
+              <div style="position:absolute;left:16%;top:28%;width:12%;height:42%;border:2px solid #4d9ef8;border-radius:3px"><span style="position:absolute;top:-22px;left:-2px;font:700 10.5px 'Space Mono',monospace;background:#4d9ef8;color:#0b0d10;padding:2px 7px;border-radius:4px;white-space:nowrap">personne 0.84</span></div>
+              <div style="position:absolute;left:55%;top:52%;width:13%;height:32%;border:2px solid #c77dff;border-radius:3px"><span style="position:absolute;top:-22px;left:-2px;font:700 10.5px 'Space Mono',monospace;background:#c77dff;color:#0b0d10;padding:2px 7px;border-radius:4px;white-space:nowrap">Maillot 10 0.77</span></div>
+            </div>
+            <div style="flex:none;margin:0 12px 12px;background:#1b1f24;border:1px solid rgba(255,255,255,.08);border-radius:8px;padding:10px 14px;display:flex;align-items:center;gap:8px">
+              <div style="padding:6px 12px;border:1px solid rgba(255,255,255,.14);border-radius:6px;font:400 11.5px 'Space Mono',monospace;color:#c8cdd4">−10 s</div>
+              <div style="padding:6px 16px;background:#e7eaee;color:#0b0d10;border-radius:6px;font-weight:700;font-size:12px">Pause</div>
+              <div style="display:flex;align-items:center;gap:6px;padding:6px 12px;border-radius:6px;background:rgba(46,194,126,.14);color:#5fd79f;font-weight:700;font-size:11px"><span style="width:7px;height:7px;border-radius:50%;background:#2ec27e;display:inline-block;animation:lsPulse 1.6s infinite"></span>EN DIRECT</div>
+              <div style="flex:1"></div>
+              <span style="font:400 10px 'Space Mono',monospace;color:#5b636d">24 fps · 96 ms</span>
+            </div>
+          </div>
+          <div style="width:300px;flex:none;border-left:1px solid rgba(255,255,255,.08);background:#161a1f;display:flex;flex-direction:column;overflow:hidden">
+            <div style="display:flex;align-items:center;justify-content:space-between;padding:13px 16px 9px"><span style="font-weight:600;font-size:12.5px">Filtres sémantiques</span><span style="color:#5b636d;font-size:12px">Replier ▸</span></div>
+            <div style="padding:0 16px 12px;display:flex;flex-direction:column">
+              <div style="padding:8px 11px;border:1px solid #4d9ef8;border-radius:7px 7px 0 0;background:#12151a;font-size:12.5px;color:#e7eaee;box-shadow:0 0 0 3px rgba(77,158,248,.15)">mail<span style="display:inline-block;width:1px;height:13px;background:#4d9ef8;margin-left:2px;vertical-align:-2px;animation:lsPulse 1s infinite"></span></div>
+              <div style="border:1px solid rgba(255,255,255,.14);border-top:none;border-radius:0 0 7px 7px;background:#1b1f24;box-shadow:0 10px 26px rgba(0,0,0,.55);display:flex;flex-direction:column;overflow:hidden">
+                <sc-for list="{{ sugg3 }}" as="sg" hint-placeholder-count="3">
+                  <div style="display:flex;flex-direction:column">
+                    <div style="display:flex;align-items:center;gap:7px;padding:7px 11px 4px;font:700 8.5px 'Space Mono',monospace;color:{{ sg.fg }};text-transform:uppercase"><span style="width:8px;height:8px;border-radius:2px;background:{{ sg.dot }}"></span>{{ sg.cat }}</div>
+                    <sc-for list="{{ sg.items }}" as="it" hint-placeholder-count="2">
+                      <div style="display:flex;align-items:center;gap:8px;padding:5px 11px 5px 26px;font-size:12.5px;background:{{ it.bg }}">
+                        <sc-if value="{{ it.thumb }}" hint-placeholder-val="{{ false }}"><span style="width:22px;height:22px;border-radius:4px;background:repeating-linear-gradient(135deg,#22272d 0 5px,#1c2127 5px 10px);border:1.5px solid {{ sg.dot }};flex:none"></span></sc-if>
+                        <span style="flex:1;color:#e7eaee">{{ it.hl1 }}<span style="color:{{ sg.fg }};font-weight:700">mail</span>{{ it.hl2 }}</span>
+                        <span style="font:400 9.5px 'Space Mono',monospace;color:#5b636d;text-align:right">{{ it.meta }}</span>
+                      </div>
+                    </sc-for>
+                  </div>
+                </sc-for>
+                <div style="padding:7px 11px;border-top:1px solid rgba(255,255,255,.07);font-size:11px;color:#5b636d">↵ ajouter « mail » comme texte libre · ↑↓ naviguer</div>
+              </div>
+            </div>
+            <div style="padding:0 16px 12px;display:flex;flex-direction:column;gap:7px;border-bottom:1px solid rgba(255,255,255,.07)">
+              <span style="font:400 9.5px 'Space Mono',monospace;color:#5b636d;text-transform:uppercase">Filtres actifs — 4</span>
+              <div style="display:flex;align-items:center;gap:9px;padding:8px 10px;background:#1b1f24;border:1px solid rgba(255,255,255,.08);border-radius:7px">
+                <span style="font:700 8.5px 'Space Mono',monospace;padding:2px 5px;border-radius:3px;background:rgba(77,158,248,.16);color:#8fc1fa">M</span>
+                <span style="flex:1;font-size:12.5px">personne</span>
+                <span style="font:400 10.5px 'Space Mono',monospace;color:#9aa3ad">≥ 0.58</span>
+                <span style="width:26px;height:15px;border-radius:8px;background:#4d9ef8;position:relative;display:inline-block"><span style="position:absolute;top:2px;left:13px;width:11px;height:11px;border-radius:50%;background:#e7eaee"></span></span>
+              </div>
+              <div style="border:1px solid rgba(199,125,255,.35);border-radius:8px;overflow:hidden">
+                <div style="display:flex;align-items:center;gap:8px;padding:7px 10px;background:rgba(199,125,255,.1)">
+                  <span style="font:700 8.5px 'Space Mono',monospace;padding:2px 5px;border-radius:3px;background:rgba(199,125,255,.2);color:#c77dff">C</span>
+                  <span style="flex:1;font-size:12px;font-weight:700;color:#dcb5ff">Manchester Team · 3 Termes</span>
+                  <span style="width:26px;height:15px;border-radius:8px;background:#c77dff;position:relative;display:inline-block"><span style="position:absolute;top:2px;left:13px;width:11px;height:11px;border-radius:50%;background:#e7eaee"></span></span>
+                  <span style="color:#5b636d;font-size:13px">×</span>
+                </div>
+                <sc-for list="{{ active3 }}" as="at" hint-placeholder-count="3">
+                  <div style="display:flex;align-items:center;gap:8px;padding:6px 10px 6px 14px;border-top:1px solid rgba(199,125,255,.12);font-size:12px">
+                    <sc-if value="{{ at.thumb }}" hint-placeholder-val="{{ false }}"><span style="width:18px;height:18px;border-radius:3px;background:repeating-linear-gradient(135deg,#22272d 0 5px,#1c2127 5px 10px);border:1.5px solid #e8a13c;flex:none"></span></sc-if>
+                    <span style="font:700 8px 'Space Mono',monospace;padding:2px 4px;border-radius:3px;background:rgba(232,161,60,.16);color:#eab566">T</span>
+                    <span style="flex:1;color:#c8cdd4">{{ at.label }}</span>
+                    <span style="font:400 10px 'Space Mono',monospace;color:{{ at.scoreC }}">{{ at.score }}</span>
+                  </div>
+                </sc-for>
+              </div>
+            </div>
+            <div style="padding:11px 16px;color:#9aa3ad;font-size:12.5px;display:flex;justify-content:space-between;border-bottom:1px solid rgba(255,255,255,.07)"><span>Seuil &amp; retour direct</span><span>▸</span></div>
+            <div style="padding:11px 16px;color:#9aa3ad;font-size:12.5px;display:flex;justify-content:space-between"><span>Avancés</span><span>▸</span></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ===== 3d États clair ===== -->
+    <div id="3d" style="flex:none;display:flex;flex-direction:column;gap:9px;scroll-margin-top:16px">
+      <div style="display:flex;align-items:baseline;gap:8px;font:400 11px 'Archivo',sans-serif;color:rgba(255,255,255,.55)"><a href="#3d" style="font:700 10.5px 'Space Mono',monospace;padding:3px 7px;background:rgba(255,255,255,.12);color:#e7eaee;border-radius:5px">3d</a>Variante claire — Terme avec vignettes, autocomplétion v2, aucun résultat</div>
+      <div data-screen-label="3d Variantes claires v2" style="width:1180px;background:#eef0f2;border:1px solid rgba(0,0,0,.12);border-radius:10px;padding:20px 22px;display:flex;gap:18px;box-shadow:0 2px 14px rgba(0,0,0,.35)">
+        <!-- terme clair -->
+        <div style="flex:1.2;display:flex;flex-direction:column;gap:8px">
+          <span style="font:400 9.5px 'Space Mono',monospace;color:#98a1ab;text-transform:uppercase">Entrée de Terme (onglet Termes)</span>
+          <div style="background:#fff;border:1px solid rgba(0,0,0,.1);border-radius:9px;padding:13px 14px;display:flex;flex-direction:column;gap:9px">
+            <div style="display:flex;align-items:center;gap:8px">
+              <span style="width:10px;height:10px;border-radius:3px;background:#8c3fd0"></span>
+              <span style="font-weight:700;font-size:13px;color:#1c2126">Maillot 10</span>
+              <span style="font:700 8.5px 'Space Mono',monospace;padding:2px 5px;border-radius:3px;background:rgba(192,127,31,.14);color:#a66d15">TERME</span>
+              <span style="flex:1"></span>
+              <span style="font-size:10.5px;color:#cc4038;border:1px solid rgba(204,64,56,.4);padding:2px 8px;border-radius:5px">Supprimer le Terme (3 photos)</span>
+            </div>
+            <div style="display:flex;gap:8px">
+              <div style="position:relative;width:96px;height:70px;background:repeating-linear-gradient(135deg,#242930 0 8px,#1e232a 8px 16px);border-radius:6px"><span style="position:absolute;inset:8px;border:2px solid #8c3fd0;border-radius:3px"></span><span style="position:absolute;top:4px;right:5px;width:15px;height:15px;border-radius:4px;background:#fff;color:#cc4038;font-size:10px;display:flex;align-items:center;justify-content:center;border:1px solid rgba(204,64,56,.4)">×</span></div>
+              <div style="position:relative;width:96px;height:70px;background:repeating-linear-gradient(135deg,#242930 0 8px,#1e232a 8px 16px);border-radius:6px"><span style="position:absolute;inset:8px;border:2px solid #8c3fd0;border-radius:3px"></span><span style="position:absolute;top:4px;right:5px;width:15px;height:15px;border-radius:4px;background:#fff;color:#cc4038;font-size:10px;display:flex;align-items:center;justify-content:center;border:1px solid rgba(204,64,56,.4)">×</span></div>
+              <div style="position:relative;width:96px;height:70px;background:repeating-linear-gradient(135deg,#242930 0 8px,#1e232a 8px 16px);border-radius:6px"><span style="position:absolute;inset:8px;border:2px dashed #8c3fd0;border-radius:3px"></span><span style="position:absolute;top:4px;right:5px;width:15px;height:15px;border-radius:4px;background:#fff;color:#cc4038;font-size:10px;display:flex;align-items:center;justify-content:center;border:1px solid rgba(204,64,56,.4)">×</span></div>
+              <div style="width:96px;height:70px;border:1px dashed rgba(0,0,0,.22);border-radius:6px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;color:#98a1ab;font-size:10px"><span style="font-size:13px">+</span>photo</div>
+            </div>
+            <span style="font-size:10.5px;color:#98a1ab;line-height:1.4">Les photos portent le sens (vecteurs image CLIP) — le nom n'est qu'une étiquette. × retire une photo ; le bouton rouge supprime tout.</span>
+          </div>
+        </div>
+        <!-- autocomplete clair -->
+        <div style="flex:1;display:flex;flex-direction:column;gap:8px">
+          <span style="font:400 9.5px 'Space Mono',monospace;color:#98a1ab;text-transform:uppercase">Autocomplétion — « mail »</span>
+          <div style="background:#fff;border:1px solid rgba(0,0,0,.1);border-radius:9px;padding:12px">
+            <div style="padding:8px 11px;border:1px solid #2b7de0;border-radius:7px 7px 0 0;background:#fff;font-size:12.5px;color:#1c2126;box-shadow:0 0 0 3px rgba(43,125,224,.12)">mail</div>
+            <div style="border:1px solid rgba(0,0,0,.14);border-top:none;border-radius:0 0 7px 7px;background:#fff;overflow:hidden">
+              <sc-for list="{{ sugg3 }}" as="sg" hint-placeholder-count="3">
+                <div style="display:flex;flex-direction:column">
+                  <div style="display:flex;align-items:center;gap:7px;padding:7px 11px 4px;font:700 8.5px 'Space Mono',monospace;color:{{ sg.fgL }};text-transform:uppercase"><span style="width:8px;height:8px;border-radius:2px;background:{{ sg.fgL }}"></span>{{ sg.cat }}</div>
+                  <sc-for list="{{ sg.items }}" as="it" hint-placeholder-count="2">
+                    <div style="display:flex;align-items:center;gap:8px;padding:5px 11px 5px 26px;font-size:12px;background:{{ it.bgL }}">
+                      <sc-if value="{{ it.thumb }}" hint-placeholder-val="{{ false }}"><span style="width:20px;height:20px;border-radius:4px;background:repeating-linear-gradient(135deg,#242930 0 5px,#1e232a 5px 10px);border:1.5px solid {{ sg.fgL }};flex:none"></span></sc-if>
+                      <span style="flex:1;color:#1c2126">{{ it.hl1 }}<span style="color:{{ sg.fgL }};font-weight:700">mail</span>{{ it.hl2 }}</span>
+                      <span style="font:400 9px 'Space Mono',monospace;color:#98a1ab;text-align:right">{{ it.meta }}</span>
+                    </div>
+                  </sc-for>
+                </div>
+              </sc-for>
+            </div>
+          </div>
+        </div>
+        <!-- aucun résultat clair -->
+        <div style="flex:.9;display:flex;flex-direction:column;gap:8px">
+          <span style="font:400 9.5px 'Space Mono',monospace;color:#98a1ab;text-transform:uppercase">Aucun résultat — « zamboni »</span>
+          <div style="background:#fff;border:1px solid rgba(0,0,0,.1);border-radius:9px;padding:12px">
+            <div style="padding:8px 11px;border:1px solid #2b7de0;border-radius:7px 7px 0 0;background:#fff;font-size:12.5px;color:#1c2126;box-shadow:0 0 0 3px rgba(43,125,224,.12)">zamboni</div>
+            <div style="border:1px solid rgba(0,0,0,.14);border-top:none;border-radius:0 0 7px 7px;background:#fff;padding:12px 11px;display:flex;flex-direction:column;gap:9px">
+              <span style="font-size:12px;color:#5f6a75">Aucune correspondance dans le modèle, les Termes ou les collections.</span>
+              <span style="align-self:flex-start;padding:6px 12px;background:#2b7de0;color:#fff;border-radius:6px;font-weight:700;font-size:11.5px">↵ Ajouter « zamboni » comme texte libre</span>
+              <span style="font-size:10.5px;color:#98a1ab;line-height:1.45">Requête ponctuelle, pas un Terme — pour créer un Terme, ajoutez des photos dans l'onglet Termes.</span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+  </div>
+</section>
+<section id="t2" style="padding:40px 44px 8px">
+  <div style="display:flex;align-items:baseline;gap:10px;margin:0 0 14px">
+    <a href="#t2" style="font:700 10px 'Space Mono',monospace;padding:3px 7px;background:#e7eaee;color:#0b0d10;border-radius:4px">2</a>
+    <span style="font:600 14px 'Archivo',sans-serif;color:#e7eaee">Ajouts — modale de source, galerie de références, collections, autocomplétion</span>
+  </div>
+  <div style="max-width:860px;background:#14171b;border:1px solid rgba(255,255,255,.08);border-radius:8px;padding:16px 18px;margin:0 0 26px;color:#9aa3ad;font-size:12.5px;line-height:1.55">
+    <div style="color:#e7eaee;font-weight:600;margin-bottom:6px">Parti pris</div>
+    Trois types de termes, chacun avec son étiquette : <span style="font:700 9px 'Space Mono',monospace;padding:2px 5px;border-radius:3px;background:rgba(77,158,248,.16);color:#8fc1fa">MODÈLE</span> <span style="font:700 9px 'Space Mono',monospace;padding:2px 5px;border-radius:3px;background:rgba(255,255,255,.08);color:#9aa3ad">TEXTE</span> <span style="font:700 9px 'Space Mono',monospace;padding:2px 5px;border-radius:3px;background:rgba(232,161,60,.16);color:#eab566">GALERIE</span> — et les collections en violet <span style="font:700 9px 'Space Mono',monospace;padding:2px 5px;border-radius:3px;background:rgba(199,125,255,.16);color:#c77dff">COLLECTION</span>. Galerie et Collections deviennent des onglets permanents à côté de Sources. Le dropdown d'autocomplétion vit entièrement dans le volet droit (300 px) : il ne recouvre jamais la vidéo. Un terme venu d'une collection reste groupé sous l'en-tête de sa collection dans la liste des filtres actifs (réponse à la question ouverte : oui, on distingue).
+  </div>
+  <div style="display:flex;flex-wrap:wrap;gap:30px;align-items:flex-start">
+
+    <!-- ===== 2a Modale ajout de source ===== -->
+    <div id="2a" style="flex:none;display:flex;flex-direction:column;gap:9px;scroll-margin-top:16px">
+      <div style="display:flex;align-items:baseline;gap:8px;font:400 11px 'Archivo',sans-serif;color:rgba(255,255,255,.55)"><a href="#2a" style="font:700 10.5px 'Space Mono',monospace;padding:3px 7px;background:rgba(255,255,255,.12);color:#e7eaee;border-radius:5px">2a</a>Modale « Ajouter une source » — tout type de flux ou d'image (sombre)</div>
+      <div data-screen-label="2a Modale ajout source" style="width:1180px;height:740px;background:#14171b;color:#e7eaee;font-size:13px;border:1px solid rgba(255,255,255,.1);border-radius:10px;overflow:hidden;position:relative;box-shadow:0 2px 14px rgba(0,0,0,.5)">
+        <!-- fond estompé -->
+        <div style="position:absolute;inset:0;display:flex;flex-direction:column;filter:blur(1px);opacity:.45">
+          <div style="height:46px;background:#0e1114;border-bottom:1px solid rgba(255,255,255,.07)"></div>
+          <div style="flex:1;padding:16px;display:flex;flex-wrap:wrap;gap:14px;align-content:flex-start">
+            <sc-for list="{{ tiles }}" as="t" hint-placeholder-count="6">
+              <div style="width:272px;height:190px;background:#1b1f24;border:1px solid rgba(255,255,255,.08);border-radius:8px"></div>
+            </sc-for>
+          </div>
+        </div>
+        <div style="position:absolute;inset:0;background:rgba(8,10,13,.55)"></div>
+        <!-- modale -->
+        <div style="position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);width:560px;background:#1b1f24;border:1px solid rgba(255,255,255,.14);border-radius:11px;box-shadow:0 16px 48px rgba(0,0,0,.65);display:flex;flex-direction:column">
+          <div style="display:flex;align-items:center;justify-content:space-between;padding:15px 18px;border-bottom:1px solid rgba(255,255,255,.08)">
+            <span style="font-weight:700;font-size:14px">Ajouter une source</span><span style="color:#5b636d;font-size:15px">×</span>
+          </div>
+          <div style="padding:16px 18px;display:flex;flex-direction:column;gap:14px">
+            <div style="display:flex;flex-direction:column;gap:7px">
+              <span style="font:400 9.5px 'Space Mono',monospace;color:#5b636d;text-transform:uppercase">Type de source</span>
+              <div style="display:grid;grid-template-columns:repeat(5,1fr);gap:7px">
+                <div style="padding:10px 4px;border:1px solid #4d9ef8;background:rgba(77,158,248,.12);border-radius:7px;text-align:center;display:flex;flex-direction:column;gap:4px"><span style="font-size:15px">⌁</span><span style="font-size:11px;font-weight:600;color:#8fc1fa">Flux RTSP</span></div>
+                <div style="padding:10px 4px;border:1px solid rgba(255,255,255,.12);border-radius:7px;text-align:center;display:flex;flex-direction:column;gap:4px;color:#9aa3ad"><span style="font-size:15px">◉</span><span style="font-size:11px">Webcam</span></div>
+                <div style="padding:10px 4px;border:1px solid rgba(255,255,255,.12);border-radius:7px;text-align:center;display:flex;flex-direction:column;gap:4px;color:#9aa3ad"><span style="font-size:15px">▶</span><span style="font-size:11px">Lien vidéo</span></div>
+                <div style="padding:10px 4px;border:1px solid rgba(255,255,255,.12);border-radius:7px;text-align:center;display:flex;flex-direction:column;gap:4px;color:#9aa3ad"><span style="font-size:15px">▤</span><span style="font-size:11px">Fichier</span></div>
+                <div style="padding:10px 4px;border:1px solid rgba(255,255,255,.12);border-radius:7px;text-align:center;display:flex;flex-direction:column;gap:4px;color:#9aa3ad"><span style="font-size:15px">▣</span><span style="font-size:11px">Photo</span></div>
+              </div>
+              <span style="font-size:10.5px;color:#5b636d">Lien vidéo : YouTube, HLS, MJPEG… Photo : image fixe analysée une fois.</span>
+            </div>
+            <div style="display:flex;flex-direction:column;gap:6px">
+              <span style="font:400 9.5px 'Space Mono',monospace;color:#5b636d;text-transform:uppercase">Adresse du flux</span>
+              <div style="padding:8px 11px;border:1px solid rgba(77,158,248,.6);border-radius:6px;background:#12151a;font:400 12px 'Space Mono',monospace;color:#e7eaee">rtsp://192.168.1.64:554/stream1<span style="display:inline-block;width:1px;height:13px;background:#4d9ef8;margin-left:2px;vertical-align:-2px;animation:lsPulse 1s infinite"></span></div>
+            </div>
+            <div style="display:flex;gap:12px">
+              <div style="flex:1;display:flex;flex-direction:column;gap:6px">
+                <span style="font:400 9.5px 'Space Mono',monospace;color:#5b636d;text-transform:uppercase">Nom</span>
+                <div style="padding:8px 11px;border:1px solid rgba(255,255,255,.12);border-radius:6px;background:#12151a;font-size:12.5px;color:#e7eaee">Quai sud</div>
+              </div>
+              <div style="width:170px;display:flex;flex-direction:column;gap:6px">
+                <span style="font:400 9.5px 'Space Mono',monospace;color:#5b636d;text-transform:uppercase">Identifiants</span>
+                <div style="padding:8px 11px;border:1px solid rgba(255,255,255,.12);border-radius:6px;background:#12151a;font-size:12.5px;color:#5b636d">Facultatif ▾</div>
+              </div>
+            </div>
+            <div style="display:flex;gap:12px;align-items:stretch">
+              <div style="flex:1;position:relative;height:104px;background:repeating-linear-gradient(135deg,#171b20 0 10px,#13161b 10px 20px);border:1px solid rgba(255,255,255,.08);border-radius:7px;display:flex;align-items:center;justify-content:center">
+                <span style="font:400 10.5px 'Space Mono',monospace;color:#525b66">[ aperçu du test de connexion ]</span>
+                <span style="position:absolute;top:7px;left:8px;display:flex;align-items:center;gap:6px;padding:3px 9px;border-radius:10px;background:rgba(46,194,126,.13);color:#5fd79f;font-size:10.5px"><span style="width:6px;height:6px;border-radius:50%;background:#2ec27e"></span>Flux joignable · 1920×1080 · H.264</span>
+              </div>
+              <div style="width:150px;display:flex;flex-direction:column;gap:7px;justify-content:flex-end">
+                <span style="text-align:center;padding:7px 0;border:1px solid rgba(255,255,255,.14);border-radius:6px;color:#c8cdd4;font-size:12px">Tester la connexion</span>
+              </div>
+            </div>
+          </div>
+          <div style="display:flex;justify-content:flex-end;gap:9px;padding:13px 18px;border-top:1px solid rgba(255,255,255,.08)">
+            <span style="padding:7px 14px;border:1px solid rgba(255,255,255,.14);border-radius:6px;color:#9aa3ad;font-size:12.5px">Annuler</span>
+            <span style="padding:7px 16px;background:#4d9ef8;color:#0b0d10;border-radius:6px;font-weight:700;font-size:12.5px">Ajouter la source</span>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ===== 2b Galerie de références (page) ===== -->
+    <div id="2b" style="flex:none;display:flex;flex-direction:column;gap:9px;scroll-margin-top:16px">
+      <div style="display:flex;align-items:baseline;gap:8px;font:400 11px 'Archivo',sans-serif;color:rgba(255,255,255,.55)"><a href="#2b" style="font:700 10.5px 'Space Mono',monospace;padding:3px 7px;background:rgba(255,255,255,.12);color:#e7eaee;border-radius:5px">2b</a>Onglet Galerie — références groupées par terme (sombre)</div>
+      <div data-screen-label="2b Galerie de références" style="width:1180px;height:740px;background:#14171b;color:#e7eaee;font-size:13px;border:1px solid rgba(255,255,255,.1);border-radius:10px;overflow:hidden;display:flex;flex-direction:column;box-shadow:0 2px 14px rgba(0,0,0,.5)">
+        <div style="display:flex;align-items:center;gap:14px;height:46px;padding:0 14px;background:#0e1114;border-bottom:1px solid rgba(255,255,255,.07);flex:none">
+          <div style="display:flex;align-items:center;gap:7px;font-weight:700;font-size:14px"><span style="width:9px;height:9px;border-radius:50%;background:#4d9ef8;display:inline-block"></span>LiveSemantic</div>
+          <div style="display:flex;gap:4px;align-self:flex-end">
+            <div style="padding:8px 16px 9px;color:#9aa3ad;font-size:12.5px">Sources</div>
+            <div style="padding:8px 16px 9px;background:#14171b;border:1px solid rgba(255,255,255,.09);border-bottom:none;border-radius:7px 7px 0 0;font-weight:600;font-size:12.5px">Galerie</div>
+            <div style="padding:8px 16px 9px;color:#9aa3ad;font-size:12.5px">Collections</div>
+            <div style="padding:8px 16px 9px;color:#9aa3ad;font-size:12.5px;display:flex;align-items:center;gap:7px"><span style="width:6px;height:6px;border-radius:50%;background:#2ec27e;display:inline-block"></span>Entrée principale<span style="color:#5b636d">×</span></div>
+          </div>
+          <div style="flex:1"></div>
+          <div style="padding:6px 12px;border:1px solid rgba(255,255,255,.14);border-radius:6px;font-size:12px;color:#c8cdd4">Journal</div>
+          <div style="padding:6px 14px;background:#4d9ef8;color:#0b0d10;border-radius:6px;font-weight:600;font-size:12.5px">+ Importer une photo</div>
+        </div>
+        <div style="display:flex;align-items:center;gap:12px;height:44px;padding:0 16px;border-bottom:1px solid rgba(255,255,255,.06);flex:none">
+          <div style="width:250px;padding:6px 11px;border:1px solid rgba(255,255,255,.1);border-radius:6px;color:#5b636d;font-size:12px">Rechercher un terme ou une référence…</div>
+          <div style="display:flex;gap:5px;font-size:11px">
+            <span style="padding:4px 11px;border-radius:11px;background:rgba(77,158,248,.18);color:#8fc1fa">Toutes · 7</span>
+            <span style="padding:4px 11px;border-radius:11px;border:1px solid rgba(255,255,255,.12);color:#9aa3ad">Sélections à l'écran · 4</span>
+            <span style="padding:4px 11px;border-radius:11px;border:1px solid rgba(255,255,255,.12);color:#9aa3ad">Photos importées · 3</span>
+          </div>
+          <div style="flex:1"></div>
+          <span style="font:400 11px 'Space Mono',monospace;color:#5b636d">tri : récentes ▾</span>
+        </div>
+        <div style="flex:1;overflow:hidden;padding:14px 16px;display:flex;flex-direction:column;gap:16px">
+          <sc-for list="{{ galTerms }}" as="gt" hint-placeholder-count="3">
+            <div style="display:flex;flex-direction:column;gap:9px">
+              <div style="display:flex;align-items:center;gap:9px">
+                <span style="width:10px;height:10px;border-radius:3px;background:{{ gt.color }}"></span>
+                <span style="font-weight:700;font-size:13.5px">{{ gt.term }}</span>
+                <span style="font:700 8.5px 'Space Mono',monospace;padding:2px 5px;border-radius:3px;background:rgba(232,161,60,.16);color:#eab566">GALERIE</span>
+                <span style="font:400 10.5px 'Space Mono',monospace;color:#5b636d">{{ gt.meta }}</span>
+                <div style="flex:1;border-top:1px solid rgba(255,255,255,.06)"></div>
+                <span style="font-size:11px;color:#5b636d">Renommer · Supprimer le terme</span>
+              </div>
+              <div style="display:flex;gap:10px">
+                <sc-for list="{{ gt.refs }}" as="r" hint-placeholder-count="3">
+                  <div style="width:190px;background:#1b1f24;border:1px solid rgba(255,255,255,.08);border-radius:8px;overflow:hidden">
+                    <div style="position:relative;height:92px;background:repeating-linear-gradient(135deg,#22272d 0 8px,#1c2127 8px 16px)">
+                      <span style="position:absolute;inset:10px;border:2px {{ r.stroke }} {{ gt.color }};border-radius:3px"></span>
+                      <span style="position:absolute;top:6px;right:7px;font:700 8px 'Space Mono',monospace;background:rgba(11,13,16,.7);color:#9aa3ad;padding:2px 5px;border-radius:3px">{{ r.kind }}</span>
+                    </div>
+                    <div style="padding:7px 10px;display:flex;flex-direction:column;gap:2px">
+                      <span style="font-size:11.5px;font-weight:600">{{ r.name }}</span>
+                      <span style="font:400 9px 'Space Mono',monospace;color:#5b636d">{{ r.src }}</span>
+                    </div>
+                  </div>
+                </sc-for>
+                <div style="width:190px;min-height:132px;border:1px dashed rgba(255,255,255,.16);border-radius:8px;display:flex;align-items:center;justify-content:center;color:#5b636d;font-size:11.5px">+ Ajouter une référence</div>
+              </div>
+            </div>
+          </sc-for>
+        </div>
+        <div style="height:30px;flex:none;border-top:1px solid rgba(255,255,255,.07);background:#0e1114;display:flex;align-items:center;gap:16px;padding:0 14px;font:400 10.5px 'Space Mono',monospace;color:#5b636d">
+          <span>7 références · 3 termes</span><div style="flex:1"></div><span style="color:#9aa3ad">Journal des événements ▴</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- ===== 2c Collections ===== -->
+    <div id="2c" style="flex:none;display:flex;flex-direction:column;gap:9px;scroll-margin-top:16px">
+      <div style="display:flex;align-items:baseline;gap:8px;font:400 11px 'Archivo',sans-serif;color:rgba(255,255,255,.55)"><a href="#2c" style="font:700 10.5px 'Space Mono',monospace;padding:3px 7px;background:rgba(255,255,255,.12);color:#e7eaee;border-radius:5px">2c</a>Onglet Collections — liste + édition de la composition (sombre)</div>
+      <div data-screen-label="2c Collections" style="width:1180px;height:740px;background:#14171b;color:#e7eaee;font-size:13px;border:1px solid rgba(255,255,255,.1);border-radius:10px;overflow:hidden;display:flex;flex-direction:column;box-shadow:0 2px 14px rgba(0,0,0,.5)">
+        <div style="display:flex;align-items:center;gap:14px;height:46px;padding:0 14px;background:#0e1114;border-bottom:1px solid rgba(255,255,255,.07);flex:none">
+          <div style="display:flex;align-items:center;gap:7px;font-weight:700;font-size:14px"><span style="width:9px;height:9px;border-radius:50%;background:#4d9ef8;display:inline-block"></span>LiveSemantic</div>
+          <div style="display:flex;gap:4px;align-self:flex-end">
+            <div style="padding:8px 16px 9px;color:#9aa3ad;font-size:12.5px">Sources</div>
+            <div style="padding:8px 16px 9px;color:#9aa3ad;font-size:12.5px">Galerie</div>
+            <div style="padding:8px 16px 9px;background:#14171b;border:1px solid rgba(255,255,255,.09);border-bottom:none;border-radius:7px 7px 0 0;font-weight:600;font-size:12.5px">Collections</div>
+          </div>
+          <div style="flex:1"></div>
+          <div style="padding:6px 12px;border:1px solid rgba(255,255,255,.14);border-radius:6px;font-size:12px;color:#c8cdd4">Journal</div>
+          <div style="padding:6px 14px;background:#c77dff;color:#0b0d10;border-radius:6px;font-weight:600;font-size:12.5px">+ Nouvelle collection</div>
+        </div>
+        <div style="flex:1;display:flex;min-height:0">
+          <!-- liste -->
+          <div style="width:340px;flex:none;border-right:1px solid rgba(255,255,255,.08);display:flex;flex-direction:column;padding:14px;gap:8px">
+            <div style="padding:6px 11px;border:1px solid rgba(255,255,255,.1);border-radius:6px;color:#5b636d;font-size:12px;margin-bottom:4px">Rechercher une collection…</div>
+            <sc-for list="{{ colls }}" as="c" hint-placeholder-count="3">
+              <div style="display:flex;flex-direction:column;gap:6px;padding:11px 12px;background:{{ c.bg }};border:1px solid {{ c.border }};border-radius:8px">
+                <div style="display:flex;align-items:center;gap:8px">
+                  <span style="font:700 8.5px 'Space Mono',monospace;padding:2px 5px;border-radius:3px;background:rgba(199,125,255,.16);color:#c77dff">C</span>
+                  <span style="font-weight:700;font-size:12.5px;flex:1">{{ c.name }}</span>
+                  <span style="font:400 10.5px 'Space Mono',monospace;color:#9aa3ad">{{ c.count }} termes</span>
+                </div>
+                <div style="display:flex;gap:5px;align-items:center">
+                  <sc-for list="{{ c.badges }}" as="b" hint-placeholder-count="3">
+                    <span style="font:700 8px 'Space Mono',monospace;padding:2px 5px;border-radius:3px;background:{{ b.bg }};color:{{ b.fg }}">{{ b.k }}</span>
+                  </sc-for>
+                  <span style="flex:1"></span>
+                  <span style="font-size:10.5px;color:{{ c.stateC }}">{{ c.state }}</span>
+                </div>
+              </div>
+            </sc-for>
+          </div>
+          <!-- éditeur -->
+          <div style="flex:1;padding:18px 20px;display:flex;flex-direction:column;gap:14px;min-width:0">
+            <div style="display:flex;align-items:center;gap:12px">
+              <div style="flex:1;padding:9px 12px;border:1px solid rgba(255,255,255,.12);border-radius:7px;background:#12151a;font-weight:700;font-size:14px">Football</div>
+              <span style="padding:7px 13px;border:1px solid rgba(255,255,255,.14);border-radius:6px;color:#9aa3ad;font-size:12px">Renommer</span>
+              <span style="padding:7px 13px;border:1px solid rgba(228,87,79,.5);border-radius:6px;color:#f08a84;font-size:12px">Supprimer</span>
+              <span style="padding:7px 15px;background:#c77dff;color:#0b0d10;border-radius:6px;font-weight:700;font-size:12px">Activer sur la vue courante</span>
+            </div>
+            <div style="font:400 9.5px 'Space Mono',monospace;color:#5b636d;text-transform:uppercase">Composition — 3 termes</div>
+            <div style="display:flex;flex-direction:column;gap:8px">
+              <sc-for list="{{ collTerms }}" as="ct" hint-placeholder-count="3">
+                <div style="display:flex;align-items:center;gap:10px;padding:10px 12px;background:#1b1f24;border:1px solid rgba(255,255,255,.08);border-radius:8px">
+                  <sc-if value="{{ ct.thumb }}" hint-placeholder-val="{{ false }}"><span style="width:26px;height:26px;border-radius:5px;background:repeating-linear-gradient(135deg,#22272d 0 6px,#1c2127 6px 12px);border:2px solid #e8a13c;flex:none"></span></sc-if>
+                  <span style="font:700 8.5px 'Space Mono',monospace;padding:2px 5px;border-radius:3px;background:{{ ct.bg }};color:{{ ct.fg }}">{{ ct.kind }}</span>
+                  <span style="flex:1;font-size:12.5px">{{ ct.label }}</span>
+                  <span style="font:400 10px 'Space Mono',monospace;color:#5b636d">{{ ct.meta }}</span>
+                  <span style="color:#5b636d;font-size:14px">×</span>
+                </div>
+              </sc-for>
+            </div>
+            <div style="display:flex;flex-direction:column;gap:7px;margin-top:2px">
+              <div style="padding:9px 12px;border:1px dashed rgba(199,125,255,.4);border-radius:8px;color:#9aa3ad;font-size:12.5px;background:rgba(199,125,255,.04)">+ Ajouter un terme — tapez pour chercher parmi modèle, texte libre et galerie…</div>
+              <span style="font-size:10.5px;color:#5b636d;line-height:1.45">Le même champ d'autocomplétion que la Vue live (<a href="#2d">2d</a>), sans la catégorie Collections.</span>
+            </div>
+            <div style="margin-top:auto;border-top:1px solid rgba(255,255,255,.07);padding-top:12px;font-size:11.5px;color:#5b636d;line-height:1.5">Activer une collection ajoute tous ses termes d'un coup dans les filtres actifs de l'onglet en cours. La collection reste modifiable ici sans affecter les sessions passées.</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ===== 2d Vue live + autocomplétion ===== -->
+    <div id="2d" style="flex:none;display:flex;flex-direction:column;gap:9px;scroll-margin-top:16px">
+      <div style="display:flex;align-items:baseline;gap:8px;font:400 11px 'Archivo',sans-serif;color:rgba(255,255,255,.55)"><a href="#2d" style="font:700 10.5px 'Space Mono',monospace;padding:3px 7px;background:rgba(255,255,255,.12);color:#e7eaee;border-radius:5px">2d</a>Vue live — autocomplétion ouverte, saisie « sac » ; filtres actifs avec groupe collection (sombre)</div>
+      <div data-screen-label="2d Vue live autocomplétion" style="width:1180px;height:740px;background:#14171b;color:#e7eaee;font-size:13px;border:1px solid rgba(255,255,255,.1);border-radius:10px;overflow:hidden;display:flex;flex-direction:column;box-shadow:0 2px 14px rgba(0,0,0,.5)">
+        <div style="display:flex;align-items:center;gap:14px;height:46px;padding:0 14px;background:#0e1114;border-bottom:1px solid rgba(255,255,255,.07);flex:none">
+          <div style="display:flex;align-items:center;gap:7px;font-weight:700;font-size:14px"><span style="width:9px;height:9px;border-radius:50%;background:#4d9ef8;display:inline-block"></span>LiveSemantic</div>
+          <div style="display:flex;gap:4px;align-self:flex-end">
+            <div style="padding:8px 16px 9px;color:#9aa3ad;font-size:12.5px">Sources</div>
+            <div style="padding:8px 16px 9px;color:#9aa3ad;font-size:12.5px">Galerie</div>
+            <div style="padding:8px 16px 9px;color:#9aa3ad;font-size:12.5px">Collections</div>
+            <div style="padding:8px 16px 9px;background:#14171b;border:1px solid rgba(255,255,255,.09);border-bottom:none;border-radius:7px 7px 0 0;font-weight:600;font-size:12.5px;display:flex;align-items:center;gap:7px"><span style="width:6px;height:6px;border-radius:50%;background:#2ec27e;display:inline-block;animation:lsPulse 2s infinite"></span>Entrée principale<span style="color:#5b636d">×</span></div>
+          </div>
+          <div style="flex:1"></div>
+          <div style="padding:6px 12px;border:1px solid rgba(255,255,255,.14);border-radius:6px;font-size:12px;color:#c8cdd4">Journal</div>
+        </div>
+        <div style="flex:1;display:flex;min-height:0">
+          <div style="flex:1;display:flex;flex-direction:column;min-width:0">
+            <div style="flex:1;position:relative;background:repeating-linear-gradient(135deg,#171b20 0 12px,#13161b 12px 24px);margin:12px;border-radius:8px;overflow:hidden">
+              <span style="position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);font:400 11px 'Space Mono',monospace;color:#454e58">[ flux vidéo — jamais recouvert par les suggestions ]</span>
+              <div style="position:absolute;left:16%;top:28%;width:12%;height:42%;border:2px solid #4d9ef8;border-radius:3px"><span style="position:absolute;top:-22px;left:-2px;font:700 10.5px 'Space Mono',monospace;background:#4d9ef8;color:#0b0d10;padding:2px 7px;border-radius:4px;white-space:nowrap">personne 0.84</span></div>
+              <div style="position:absolute;left:55%;top:58%;width:11%;height:24%;border:2px solid #c77dff;border-radius:3px"><span style="position:absolute;top:-22px;left:-2px;font:700 10.5px 'Space Mono',monospace;background:#c77dff;color:#0b0d10;padding:2px 7px;border-radius:4px;white-space:nowrap">ballon de sport 0.71</span></div>
+            </div>
+            <div style="flex:none;margin:0 12px 12px;background:#1b1f24;border:1px solid rgba(255,255,255,.08);border-radius:8px;padding:10px 14px;display:flex;align-items:center;gap:8px">
+              <div style="padding:6px 12px;border:1px solid rgba(255,255,255,.14);border-radius:6px;font:400 11.5px 'Space Mono',monospace;color:#c8cdd4">−10 s</div>
+              <div style="padding:6px 16px;background:#e7eaee;color:#0b0d10;border-radius:6px;font-weight:700;font-size:12px">Pause</div>
+              <div style="display:flex;align-items:center;gap:6px;padding:6px 12px;border-radius:6px;background:rgba(46,194,126,.14);color:#5fd79f;font-weight:700;font-size:11px"><span style="width:7px;height:7px;border-radius:50%;background:#2ec27e;display:inline-block;animation:lsPulse 1.6s infinite"></span>EN DIRECT</div>
+              <div style="flex:1"></div>
+              <span style="font:400 10px 'Space Mono',monospace;color:#5b636d">24 fps · 96 ms</span>
+            </div>
+          </div>
+          <!-- volet droit -->
+          <div style="width:300px;flex:none;border-left:1px solid rgba(255,255,255,.08);background:#161a1f;display:flex;flex-direction:column;overflow:hidden">
+            <div style="display:flex;align-items:center;justify-content:space-between;padding:13px 16px 9px"><span style="font-weight:600;font-size:12.5px">Filtres sémantiques</span><span style="color:#5b636d;font-size:12px">Replier ▸</span></div>
+            <!-- champ + dropdown -->
+            <div style="padding:0 16px 12px;display:flex;flex-direction:column;gap:0">
+              <div style="padding:8px 11px;border:1px solid #4d9ef8;border-radius:7px 7px 0 0;background:#12151a;font-size:12.5px;color:#e7eaee;box-shadow:0 0 0 3px rgba(77,158,248,.15)">sac<span style="display:inline-block;width:1px;height:13px;background:#4d9ef8;margin-left:2px;vertical-align:-2px;animation:lsPulse 1s infinite"></span></div>
+              <div style="border:1px solid rgba(255,255,255,.14);border-top:none;border-radius:0 0 7px 7px;background:#1b1f24;box-shadow:0 10px 26px rgba(0,0,0,.55);display:flex;flex-direction:column;overflow:hidden">
+                <sc-for list="{{ suggGroups }}" as="sg" hint-placeholder-count="3">
+                  <div style="display:flex;flex-direction:column">
+                    <div style="display:flex;align-items:center;gap:7px;padding:7px 11px 4px;font:700 8.5px 'Space Mono',monospace;color:{{ sg.fg }};text-transform:uppercase"><span style="width:8px;height:8px;border-radius:2px;background:{{ sg.dot }}"></span>{{ sg.cat }}</div>
+                    <sc-for list="{{ sg.items }}" as="it" hint-placeholder-count="2">
+                      <div style="display:flex;align-items:center;gap:8px;padding:6px 11px 6px 26px;font-size:12.5px;background:{{ it.bg }}">
+                        <span style="flex:1;color:#e7eaee">{{ it.hl1 }}<span style="color:{{ sg.fg }};font-weight:700">sac</span>{{ it.hl2 }}</span>
+                        <span style="font:400 9.5px 'Space Mono',monospace;color:#5b636d">{{ it.meta }}</span>
+                      </div>
+                    </sc-for>
+                  </div>
+                </sc-for>
+                <div style="padding:7px 11px;border-top:1px solid rgba(255,255,255,.07);font-size:11px;color:#5b636d">↵ ajouter « sac » comme texte libre · ↑↓ naviguer</div>
+              </div>
+            </div>
+            <!-- filtres actifs -->
+            <div style="padding:0 16px 12px;display:flex;flex-direction:column;gap:7px;border-bottom:1px solid rgba(255,255,255,.07)">
+              <span style="font:400 9.5px 'Space Mono',monospace;color:#5b636d;text-transform:uppercase">Filtres actifs — 4</span>
+              <div style="display:flex;align-items:center;gap:9px;padding:8px 10px;background:#1b1f24;border:1px solid rgba(255,255,255,.08);border-radius:7px">
+                <span style="font:700 8.5px 'Space Mono',monospace;padding:2px 5px;border-radius:3px;background:rgba(77,158,248,.16);color:#8fc1fa">M</span>
+                <span style="flex:1;font-size:12.5px">personne</span>
+                <span style="font:400 10.5px 'Space Mono',monospace;color:#9aa3ad">≥ 0.58</span>
+                <span style="width:26px;height:15px;border-radius:8px;background:#4d9ef8;position:relative;display:inline-block"><span style="position:absolute;top:2px;left:13px;width:11px;height:11px;border-radius:50%;background:#e7eaee"></span></span>
+              </div>
+              <!-- groupe collection -->
+              <div style="border:1px solid rgba(199,125,255,.35);border-radius:8px;overflow:hidden">
+                <div style="display:flex;align-items:center;gap:8px;padding:7px 10px;background:rgba(199,125,255,.1)">
+                  <span style="font:700 8.5px 'Space Mono',monospace;padding:2px 5px;border-radius:3px;background:rgba(199,125,255,.2);color:#c77dff">C</span>
+                  <span style="flex:1;font-size:12px;font-weight:700;color:#dcb5ff">Football · 3 termes</span>
+                  <span style="width:26px;height:15px;border-radius:8px;background:#c77dff;position:relative;display:inline-block"><span style="position:absolute;top:2px;left:13px;width:11px;height:11px;border-radius:50%;background:#e7eaee"></span></span>
+                  <span style="color:#5b636d;font-size:13px">×</span>
+                </div>
+                <sc-for list="{{ activeCollTerms }}" as="at" hint-placeholder-count="3">
+                  <div style="display:flex;align-items:center;gap:8px;padding:6px 10px 6px 14px;border-top:1px solid rgba(199,125,255,.12);font-size:12px">
+                    <span style="font:700 8px 'Space Mono',monospace;padding:2px 4px;border-radius:3px;background:{{ at.bg }};color:{{ at.fg }}">{{ at.kind }}</span>
+                    <span style="flex:1;color:#c8cdd4">{{ at.label }}</span>
+                    <span style="font:400 10px 'Space Mono',monospace;color:{{ at.scoreC }}">{{ at.score }}</span>
+                  </div>
+                </sc-for>
+              </div>
+            </div>
+            <div style="padding:11px 16px;color:#9aa3ad;font-size:12.5px;display:flex;justify-content:space-between;border-bottom:1px solid rgba(255,255,255,.07)"><span>Seuil &amp; retour direct</span><span>▸</span></div>
+            <div style="padding:11px 16px;color:#9aa3ad;font-size:12.5px;display:flex;justify-content:space-between"><span>Avancés</span><span>▸</span></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ===== 2e États du champ ===== -->
+    <div id="2e" style="flex:none;display:flex;flex-direction:column;gap:9px;scroll-margin-top:16px">
+      <div style="display:flex;align-items:baseline;gap:8px;font:400 11px 'Archivo',sans-serif;color:rgba(255,255,255,.55)"><a href="#2e" style="font:700 10.5px 'Space Mono',monospace;padding:3px 7px;background:rgba(255,255,255,.12);color:#e7eaee;border-radius:5px">2e</a>Champ filtre — 3 états, sombre et clair</div>
+      <div data-screen-label="2e États autocomplétion" style="width:1180px;background:#14171b;border:1px solid rgba(255,255,255,.1);border-radius:10px;padding:20px 22px;display:flex;flex-direction:column;gap:18px">
+        <div style="display:flex;gap:18px">
+          <!-- focus -->
+          <div style="flex:1;display:flex;flex-direction:column;gap:8px">
+            <span style="font:400 9.5px 'Space Mono',monospace;color:#5b636d;text-transform:uppercase">1 · Focus, champ vide</span>
+            <div style="background:#161a1f;border:1px solid rgba(255,255,255,.08);border-radius:9px;padding:12px">
+              <div style="padding:8px 11px;border:1px solid #4d9ef8;border-radius:7px 7px 0 0;background:#12151a;font-size:12.5px;color:#5b636d;box-shadow:0 0 0 3px rgba(77,158,248,.15)">Chercher ou décrire un objet…<span style="display:inline-block;width:1px;height:13px;background:#4d9ef8;margin-left:2px;vertical-align:-2px;animation:lsPulse 1s infinite"></span></div>
+              <div style="border:1px solid rgba(255,255,255,.14);border-top:none;border-radius:0 0 7px 7px;background:#1b1f24;padding:9px 11px;display:flex;flex-direction:column;gap:7px">
+                <span style="font:700 8.5px 'Space Mono',monospace;color:#5b636d;text-transform:uppercase">Récents</span>
+                <span style="font-size:12px;color:#c8cdd4">sac abandonné <span style="font:700 8px 'Space Mono',monospace;padding:1px 4px;border-radius:3px;background:rgba(232,161,60,.16);color:#eab566">G</span></span>
+                <span style="font-size:12px;color:#c8cdd4">Football <span style="font:700 8px 'Space Mono',monospace;padding:1px 4px;border-radius:3px;background:rgba(199,125,255,.16);color:#c77dff">C</span></span>
+                <span style="font-size:10.5px;color:#5b636d;border-top:1px solid rgba(255,255,255,.07);padding-top:7px">Tapez un mot — ou décrivez librement (« un homme avec un gilet orange »)</span>
+              </div>
+            </div>
+          </div>
+          <!-- résultats -->
+          <div style="flex:1;display:flex;flex-direction:column;gap:8px">
+            <span style="font:400 9.5px 'Space Mono',monospace;color:#5b636d;text-transform:uppercase">2 · Résultats groupés — « sac »</span>
+            <div style="background:#161a1f;border:1px solid rgba(255,255,255,.08);border-radius:9px;padding:12px">
+              <div style="padding:8px 11px;border:1px solid #4d9ef8;border-radius:7px 7px 0 0;background:#12151a;font-size:12.5px;color:#e7eaee;box-shadow:0 0 0 3px rgba(77,158,248,.15)">sac</div>
+              <div style="border:1px solid rgba(255,255,255,.14);border-top:none;border-radius:0 0 7px 7px;background:#1b1f24;overflow:hidden">
+                <sc-for list="{{ suggGroups }}" as="sg" hint-placeholder-count="3">
+                  <div style="display:flex;flex-direction:column">
+                    <div style="display:flex;align-items:center;gap:7px;padding:7px 11px 4px;font:700 8.5px 'Space Mono',monospace;color:{{ sg.fg }};text-transform:uppercase"><span style="width:8px;height:8px;border-radius:2px;background:{{ sg.dot }}"></span>{{ sg.cat }}</div>
+                    <sc-for list="{{ sg.items }}" as="it" hint-placeholder-count="2">
+                      <div style="display:flex;align-items:center;gap:8px;padding:6px 11px 6px 26px;font-size:12px;background:{{ it.bg }}">
+                        <span style="flex:1;color:#e7eaee">{{ it.hl1 }}<span style="color:{{ sg.fg }};font-weight:700">sac</span>{{ it.hl2 }}</span>
+                        <span style="font:400 9px 'Space Mono',monospace;color:#5b636d">{{ it.meta }}</span>
+                      </div>
+                    </sc-for>
+                  </div>
+                </sc-for>
+              </div>
+            </div>
+          </div>
+          <!-- aucun résultat -->
+          <div style="flex:1;display:flex;flex-direction:column;gap:8px">
+            <span style="font:400 9.5px 'Space Mono',monospace;color:#5b636d;text-transform:uppercase">3 · Aucun résultat — « zambonis »</span>
+            <div style="background:#161a1f;border:1px solid rgba(255,255,255,.08);border-radius:9px;padding:12px">
+              <div style="padding:8px 11px;border:1px solid #4d9ef8;border-radius:7px 7px 0 0;background:#12151a;font-size:12.5px;color:#e7eaee;box-shadow:0 0 0 3px rgba(77,158,248,.15)">zambonis</div>
+              <div style="border:1px solid rgba(255,255,255,.14);border-top:none;border-radius:0 0 7px 7px;background:#1b1f24;padding:12px 11px;display:flex;flex-direction:column;gap:9px">
+                <span style="font-size:12px;color:#9aa3ad">Aucune correspondance dans le modèle, la galerie ou les collections.</span>
+                <span style="align-self:flex-start;padding:6px 12px;background:#4d9ef8;color:#0b0d10;border-radius:6px;font-weight:700;font-size:11.5px">↵ Ajouter « zambonis » comme texte libre</span>
+                <span style="font-size:10.5px;color:#5b636d">Le texte libre est envoyé tel quel à l'encodeur sémantique — pas besoin d'un terme connu.</span>
+              </div>
+            </div>
+          </div>
+        </div>
+        <!-- rangée claire -->
+        <div style="display:flex;gap:18px;background:#eef0f2;border-radius:9px;padding:16px">
+          <div style="flex:1;display:flex;flex-direction:column;gap:8px">
+            <span style="font:400 9.5px 'Space Mono',monospace;color:#98a1ab;text-transform:uppercase">Clair · résultats groupés</span>
+            <div style="background:#ffffff;border:1px solid rgba(0,0,0,.1);border-radius:9px;padding:12px">
+              <div style="padding:8px 11px;border:1px solid #2b7de0;border-radius:7px 7px 0 0;background:#fff;font-size:12.5px;color:#1c2126;box-shadow:0 0 0 3px rgba(43,125,224,.12)">sac</div>
+              <div style="border:1px solid rgba(0,0,0,.14);border-top:none;border-radius:0 0 7px 7px;background:#fff;overflow:hidden">
+                <sc-for list="{{ suggGroups }}" as="sg" hint-placeholder-count="3">
+                  <div style="display:flex;flex-direction:column">
+                    <div style="display:flex;align-items:center;gap:7px;padding:7px 11px 4px;font:700 8.5px 'Space Mono',monospace;color:{{ sg.fgL }};text-transform:uppercase"><span style="width:8px;height:8px;border-radius:2px;background:{{ sg.fgL }}"></span>{{ sg.cat }}</div>
+                    <sc-for list="{{ sg.items }}" as="it" hint-placeholder-count="2">
+                      <div style="display:flex;align-items:center;gap:8px;padding:6px 11px 6px 26px;font-size:12px;background:{{ it.bgL }}">
+                        <span style="flex:1;color:#1c2126">{{ it.hl1 }}<span style="color:{{ sg.fgL }};font-weight:700">sac</span>{{ it.hl2 }}</span>
+                        <span style="font:400 9px 'Space Mono',monospace;color:#98a1ab">{{ it.meta }}</span>
+                      </div>
+                    </sc-for>
+                  </div>
+                </sc-for>
+              </div>
+            </div>
+          </div>
+          <div style="flex:1;display:flex;flex-direction:column;gap:8px">
+            <span style="font:400 9.5px 'Space Mono',monospace;color:#98a1ab;text-transform:uppercase">Clair · groupe collection dans les filtres actifs</span>
+            <div style="background:#ffffff;border:1px solid rgba(0,0,0,.1);border-radius:9px;padding:12px;display:flex;flex-direction:column;gap:7px">
+              <div style="display:flex;align-items:center;gap:9px;padding:8px 10px;background:#f5f6f8;border:1px solid rgba(0,0,0,.09);border-radius:7px">
+                <span style="font:700 8.5px 'Space Mono',monospace;padding:2px 5px;border-radius:3px;background:rgba(43,125,224,.12);color:#2b6cc0">M</span>
+                <span style="flex:1;font-size:12.5px;color:#1c2126">personne</span>
+                <span style="font:400 10.5px 'Space Mono',monospace;color:#5f6a75">≥ 0.58</span>
+                <span style="width:26px;height:15px;border-radius:8px;background:#2b7de0;position:relative;display:inline-block"><span style="position:absolute;top:2px;left:13px;width:11px;height:11px;border-radius:50%;background:#fff"></span></span>
+              </div>
+              <div style="border:1px solid rgba(155,81,224,.35);border-radius:8px;overflow:hidden">
+                <div style="display:flex;align-items:center;gap:8px;padding:7px 10px;background:rgba(155,81,224,.08)">
+                  <span style="font:700 8.5px 'Space Mono',monospace;padding:2px 5px;border-radius:3px;background:rgba(155,81,224,.14);color:#8c3fd0">C</span>
+                  <span style="flex:1;font-size:12px;font-weight:700;color:#6d2fa5">Football · 3 termes</span>
+                  <span style="width:26px;height:15px;border-radius:8px;background:#8c3fd0;position:relative;display:inline-block"><span style="position:absolute;top:2px;left:13px;width:11px;height:11px;border-radius:50%;background:#fff"></span></span>
+                  <span style="color:#98a1ab;font-size:13px">×</span>
+                </div>
+                <sc-for list="{{ activeCollTerms }}" as="at" hint-placeholder-count="3">
+                  <div style="display:flex;align-items:center;gap:8px;padding:6px 10px 6px 14px;border-top:1px solid rgba(155,81,224,.12);font-size:12px">
+                    <span style="font:700 8px 'Space Mono',monospace;padding:2px 4px;border-radius:3px;background:{{ at.bgL }};color:{{ at.fgL }}">{{ at.kind }}</span>
+                    <span style="flex:1;color:#3c454f">{{ at.label }}</span>
+                    <span style="font:400 10px 'Space Mono',monospace;color:#98a1ab">{{ at.score }}</span>
+                  </div>
+                </sc-for>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+  </div>
+</section>
 <section id="t1" style="padding:40px 44px 48px">
   <div style="display:flex;align-items:baseline;gap:10px;margin:0 0 14px">
     <a href="#t1" style="font:700 10px 'Space Mono',monospace;padding:3px 7px;background:#e7eaee;color:#0b0d10;border-radius:4px">1</a>
@@ -674,7 +1699,105 @@ class Component extends DCLogic {
         {n:'03', cap:'Reprise à l\u2019endroit choisi, ou « Revenir au direct » en un clic.', rgt:'8px', chip:'EN DIRECT', arrow:false}
       ]}
     ];
-    return {tiles, filters, gallery, detections, events, spark, sparkSm, thrLine: Math.round(thr * boxH) + 5, thrLineS: Math.round(thr * 34) + 4, flows};
+    const M = {bg:'rgba(77,158,248,.16)', fg:'#8fc1fa', bgL:'rgba(43,125,224,.12)', fgL:'#2b6cc0'};
+    const T = {bg:'rgba(255,255,255,.08)', fg:'#9aa3ad', bgL:'rgba(0,0,0,.07)', fgL:'#5f6a75'};
+    const G = {bg:'rgba(232,161,60,.16)', fg:'#eab566', bgL:'rgba(192,127,31,.14)', fgL:'#a66d15'};
+    const galTerms = [
+      {term:'sac abandonné', color:'#e8a13c', meta:'3 références · utilisé dans 1 collection', refs:[
+        {name:'Sélection — quai', src:'Quai de chargement · 12/08', kind:'SÉLECTION', stroke:'dashed'},
+        {name:'Sélection — hall', src:'Hall — archive.mp4 · 09/08', kind:'SÉLECTION', stroke:'dashed'},
+        {name:'photo-sac-01.jpg', src:'importée · 02/08', kind:'PHOTO', stroke:'solid'}]},
+      {term:'maillot du club X', color:'#c77dff', meta:'2 références · utilisé dans « Football »', refs:[
+        {name:'maillot-dom.jpg', src:'importée · 11/08', kind:'PHOTO', stroke:'solid'},
+        {name:'maillot-ext.jpg', src:'importée · 11/08', kind:'PHOTO', stroke:'solid'}]},
+      {term:'chariot élévateur', color:'#2ec27e', meta:'2 références', refs:[
+        {name:'Sélection — entrée', src:'Entrée principale · 13/08', kind:'SÉLECTION', stroke:'dashed'},
+        {name:'Sélection — quai', src:'Quai de chargement · 05/08', kind:'SÉLECTION', stroke:'dashed'}]}
+    ];
+    const colls = [
+      {name:'Football', count:3, state:'sélectionnée', stateC:'#c77dff', bg:'rgba(199,125,255,.08)', border:'rgba(199,125,255,.45)',
+       badges:[{k:'M', ...M},{k:'T', ...T},{k:'G', ...G}]},
+      {name:'Sécurité entrepôt', count:4, state:'active sur 2 vues', stateC:'#5fd79f', bg:'#1b1f24', border:'rgba(255,255,255,.08)',
+       badges:[{k:'M', ...M},{k:'M', ...M},{k:'G', ...G},{k:'T', ...T}]},
+      {name:'Quai — véhicules', count:2, state:'inactive', stateC:'#5b636d', bg:'#1b1f24', border:'rgba(255,255,255,.08)',
+       badges:[{k:'M', ...M},{k:'G', ...G}]}
+    ];
+    const collTerms = [
+      {kind:'M', label:'ballon de sport', meta:'terme natif du modèle', thumb:false, ...M},
+      {kind:'T', label:'gardien de but', meta:'texte libre', thumb:false, ...T},
+      {kind:'G', label:'maillot du club X', meta:'2 références en galerie', thumb:true, ...G}
+    ];
+    const suggGroups = [
+      {cat:'Modèle', dot:'#4d9ef8', fg:'#8fc1fa', fgL:'#2b6cc0', items:[
+        {hl1:'', hl2:' à dos', meta:'terme natif', bg:'rgba(77,158,248,.12)', bgL:'rgba(43,125,224,.08)'},
+        {hl1:'', hl2:' de sport', meta:'terme natif', bg:'transparent', bgL:'transparent'}]},
+      {cat:'Galerie', dot:'#e8a13c', fg:'#eab566', fgL:'#a66d15', items:[
+        {hl1:'', hl2:' abandonné', meta:'3 réf.', bg:'transparent', bgL:'transparent'}]},
+      {cat:'Collections', dot:'#c77dff', fg:'#c77dff', fgL:'#8c3fd0', items:[
+        {hl1:'Sécurité entrepôt — contient « ', hl2:' à dos »', meta:'4 termes', bg:'transparent', bgL:'transparent'}]}
+    ];
+    const activeCollTerms = [
+      {kind:'M', label:'ballon de sport', score:'0.71', scoreC:'#c77dff', ...M},
+      {kind:'T', label:'gardien de but', score:'—', scoreC:'#5b636d', ...T},
+      {kind:'G', label:'maillot du club X', score:'—', scoreC:'#5b636d', ...G}
+    ];
+    const colls4 = [
+      {name:'Manchester Team', count:3, tags:['football','2026'], cover:true, generic:false, coverC:'#c77dff', coverBg:'repeating-linear-gradient(135deg,#22272d 0 9px,#1c2127 9px 18px)', dim:'1'},
+      {name:'Adversaires', count:2, tags:['football'], cover:true, generic:false, coverC:'#e8a13c', coverBg:'repeating-linear-gradient(135deg,#22272d 0 9px,#1c2127 9px 18px)', dim:'1'},
+      {name:'Arbitres', count:2, tags:['football'], cover:false, generic:true, coverC:'', coverBg:'#171b20', dim:'1'},
+      {name:'Sécurité entrepôt', count:4, tags:['entrepôt','sécurité'], cover:true, generic:false, coverC:'#2ec27e', coverBg:'repeating-linear-gradient(135deg,#22272d 0 9px,#1c2127 9px 18px)', dim:'.38'},
+      {name:'Quai — véhicules', count:3, tags:['entrepôt'], cover:false, generic:true, coverC:'', coverBg:'#171b20', dim:'.38'}
+    ];
+    const coll4Terms = [
+      {label:'maillot numéro 10 de Dupont', color:'#c77dff', meta:'3 photos · aussi dans « Adversaires »', coco:'person', hint:false, noPhoto:false, stack:[{x:'0px',y:'8px'},{x:'6px',y:'4px'},{x:'12px',y:'0px'}]},
+      {label:'gardien', color:'#4d9ef8', meta:'1 photo', coco:'person', hint:false, noPhoto:false, stack:[{x:'7px',y:'4px'}]},
+      {label:'ballon du club', color:'#e8a13c', meta:'2 photos', coco:'sports ball', hint:false, noPhoto:false, stack:[{x:'3px',y:'6px'},{x:'10px',y:'0px'}]},
+      {label:'écusson brodé or', color:'#2ec27e', meta:'1 photo · aucune classe COCO', coco:false, warn:'Reconnu par aucune classe du modèle actif — Terme inutilisable tel quel', noPhoto:false, stack:[{x:'7px',y:'4px'}]}
+    ];
+    const cocoSugg = [
+      {pre:'sports ', post:'ll', bg:'rgba(77,158,248,.12)'},
+      {pre:'', post:'seball bat', bg:'transparent'},
+      {pre:'', post:'seball glove', bg:'transparent'}
+    ];
+    const term4Photos = [
+      {src:'importée 11/08', stroke:'solid'},
+      {src:'importée 11/08', stroke:'solid'},
+      {src:'sélection 13/08', stroke:'dashed'}
+    ];
+    const terms3 = [
+      {name:'Maillot 10', color:'#c77dff', meta:'3 photos · dans 2 collections', delMeta:' (3 photos)', empty:false, photos:[
+        {src:'importée 11/08', stroke:'solid'},{src:'importée 11/08', stroke:'solid'},{src:'sélection 13/08', stroke:'dashed'}]},
+      {name:'gardien', color:'#4d9ef8', meta:'0 photo — incomplet · dans « Manchester Team »', delMeta:'', empty:true, photos:[]},
+      {name:'sac abandonné', color:'#e8a13c', meta:'2 photos · dans 1 collection', delMeta:' (2 photos)', empty:false, photos:[
+        {src:'sélection 12/08', stroke:'dashed'},{src:'importée 02/08', stroke:'solid'}]},
+      {name:'chariot élévateur', color:'#2ec27e', meta:'1 photo', delMeta:' (1 photo)', empty:false, photos:[
+        {src:'sélection 05/08', stroke:'dashed'}]}
+    ];
+    const colls3 = [
+      {name:'Manchester Team', count:3, tags:['football','2026'], bg:'rgba(199,125,255,.08)', border:'rgba(199,125,255,.45)', dim:'1'},
+      {name:'Adversaires', count:2, tags:['football'], bg:'#1b1f24', border:'rgba(255,255,255,.08)', dim:'1'},
+      {name:'Sécurité entrepôt', count:4, tags:['entrepôt','sécurité'], bg:'#1b1f24', border:'rgba(255,255,255,.08)', dim:'.38'}
+    ];
+    const coll3Terms = [
+      {label:'Maillot 10', color:'#c77dff', meta:'3 photos · aussi dans « Adversaires »', thumbs:[1,2,3]},
+      {label:'gardien', color:'#4d9ef8', meta:'1 photo', thumbs:[1]},
+      {label:'sac abandonné', color:'#e8a13c', meta:'2 photos', thumbs:[1,2]}
+    ];
+    const sugg3 = [
+      {cat:'Modèle', dot:'#4d9ef8', fg:'#8fc1fa', fgL:'#2b6cc0', items:[
+        {hl1:'', hl2:'lot de sport', meta:'terme natif', thumb:false, bg:'rgba(77,158,248,.12)', bgL:'rgba(43,125,224,.08)'}]},
+      {cat:'Termes', dot:'#e8a13c', fg:'#eab566', fgL:'#a66d15', items:[
+        {hl1:'', hl2:'lot 10', meta:'3 photos', thumb:true, bg:'transparent', bgL:'transparent'},
+        {hl1:'', hl2:'lot rouge', meta:'1 photo', thumb:true, bg:'transparent', bgL:'transparent'}]},
+      {cat:'Collections', dot:'#c77dff', fg:'#c77dff', fgL:'#8c3fd0', items:[
+        {hl1:'Manchester Team — « ', hl2:'lot 10 »', meta:'3 Termes · #football', thumb:false, bg:'transparent', bgL:'transparent'}]}
+    ];
+    const active3 = [
+      {label:'Maillot 10', score:'0.77', scoreC:'#c77dff', thumb:true},
+      {label:'gardien', score:'—', scoreC:'#5b636d', thumb:false},
+      {label:'sac abandonné', score:'—', scoreC:'#5b636d', thumb:true}
+    ];
+    return {tiles, filters, gallery, detections, events, spark, sparkSm, thrLine: Math.round(thr * boxH) + 5, thrLineS: Math.round(thr * 34) + 4, flows, galTerms, colls, collTerms, suggGroups, activeCollTerms, terms3, colls3, coll3Terms, sugg3, active3, colls4, coll4Terms, cocoSugg, term4Photos};
   }
 }
 </script>

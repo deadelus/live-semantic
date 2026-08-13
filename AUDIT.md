@@ -2,6 +2,44 @@
 
 Date : 2026-08-04. Repo : `deadelus/live-semantic` (GitHub, **public**, confirmé via API). Mission en lecture seule — aucun fichier de code n'a été modifié pour produire cet audit (seuls `overview.md`, `di-architecture-example.md` — renommage de l'ancien `todo.md` — et les trois livrables `AUDIT.md`/`TODO.md`/`MIGRATION.md` ont été touchés, à la demande explicite préalable de l'utilisateur, hors périmètre de cette mission).
 
+> ## ⚠️ Mise à jour de recadrage — 2026-08-13
+>
+> **Tout ce qui suit ce bloc est un instantané figé au 2026-08-04, conservé
+> tel quel comme trace historique — il ne décrit plus l'état du repo.**
+> Ne pas s'y fier pour juger de l'avancement actuel : voir
+> `docs/gui/spec.md` (mis à jour le 2026-08-13) et le code lui-même
+> (`internal/`, `cmd/`, `web/`) pour l'état réel.
+>
+> Ce qui a changé depuis, en bref :
+> - **Restructuration `src/` → `cmd/`+`internal/` faite** (décision G) —
+>   la structure décrite ci-dessous (`src/domain`, `src/infrastructure`,
+>   etc.) n'existe plus, voir `internal/{domain,application,infrastructure,
+>   implementation,transport}` + `cmd/livesemantic`.
+> - **`main` n'est plus en retard** : les branches de feature citées ici
+>   (`realtime-uc`, `feat/ochestrator`, `feat/displayer`) ont soit été
+>   mergées soit abandonnées ; tout le travail se fait maintenant par
+>   PR mergées sur `main` (voir `git log`).
+> - **API web (gin) et WebSocket (gorilla) sont câblées** sur la logique
+>   métier depuis le 2026-08-10 — le constat "zéro appel à
+>   `RecognitionUseCase`" ci-dessous (Étape 2, "Les transports
+>   partagent-ils vraiment la même logique métier ?") est **obsolète**.
+>   S'y ajoute depuis le 2026-08-12 un vrai multi-flux (`session.Manager`)
+>   et une galerie de références CRUD (`/api/v1/gallery`).
+> - Un frontend web (`web/`, React + Vite + TypeScript) existe, basculé le
+>   2026-08-13 sur l'API multi-flux (`/api/v1/sessions/*`,
+>   `/ws/sessions/:id`) — un seul flux affiché pour l'instant (pas encore
+>   de vue liste/mosaïque multi-source), et sans UI pour la galerie.
+> - Le prototype de segmentation `stash@{0}` évoqué ci-dessous (§ Étape 1,
+>   décision A) n'a **pas** été récupéré à ce jour — toujours à trancher
+>   si la cascade YOLO→crop→CLIP (§ A) en a besoin.
+> - Couverture de tests largement étoffée depuis (`go test ./internal/...
+>   -race` propre sur tout le dépôt) — le constat "couverture quasi
+>   nulle" ci-dessous ne tient plus.
+>
+> Les décisions H (topologie de déploiement) évoquée en bas de ce document
+> a été tranchée le 2026-08-10 (un seul backend Go, deux façades UI via
+> Wails) — voir `docs/gui/spec.md` § 0.
+
 ---
 
 ## Étape 1 — Inventaire des branches
