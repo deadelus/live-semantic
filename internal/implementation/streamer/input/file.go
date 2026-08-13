@@ -72,7 +72,11 @@ func (fi *FileInput) Initialize() error {
 
 // Start implements streamer.InputStream.Start for FileInput. Unlike
 // CameraInput, frames are never mirrored — a recorded file or an IP
-// camera's own feed must be shown as-is.
+// camera's own feed must be shown as-is. treatEndAsError=false: reaching
+// the end of a file/stream while still "running" is the expected way
+// this adapter stops (see the type's own doc comment on the known
+// no-reconnect gap for RTSP) — captureLoop's onFrame-error path still
+// propagates real errors from further down the pipeline.
 func (fi *FileInput) Start(frameActionCallback func(*entities.Frame) (*entities.Frame, error)) error {
 	defer fi.Cleanup()
 
@@ -80,8 +84,7 @@ func (fi *FileInput) Start(frameActionCallback func(*entities.Frame) (*entities.
 		return fmt.Errorf("file input not initialized")
 	}
 	fi.running = true
-	captureLoop(fi.capture, false, func() bool { return fi.running }, frameActionCallback)
-	return nil
+	return captureLoop(fi.capture, false, false, func() bool { return fi.running }, frameActionCallback)
 }
 
 // Stop implements streamer.InputStream.Stop for FileInput.

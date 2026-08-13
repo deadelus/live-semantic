@@ -108,8 +108,19 @@ func (uc *UseCase) Recognize(ctx context.Context, req dto.RecognitionRequest) (d
 		uc.mu.Unlock()
 	}()
 
-	streamingInput.Initialize()
-	uc.streamingOutput.Initialize()
+	// Errors checked from 2026-08-13 on — used to be discarded (`Initialize()`
+	// called for effect only), which silently hid real failures like a
+	// camera device already held by another process/browser tab (same
+	// physical webcam requested by a "local" and a "browser" session at
+	// once — a real case that surfaced this). Failing fast here means the
+	// caller (recognitionController/sessionController) gets a real error
+	// message instead of a session that reports success with zero frames.
+	if err := streamingInput.Initialize(); err != nil {
+		return dto.Failure[dto.RecognitionResponse]("failed to initialize input stream: " + err.Error()), err
+	}
+	if err := uc.streamingOutput.Initialize(); err != nil {
+		return dto.Failure[dto.RecognitionResponse]("failed to initialize output stream: " + err.Error()), err
+	}
 
 	// ctx is watched for the *entire* call, not just checked once above —
 	// found 2026-08-12 while auditing ctx usage across every uc method: it
@@ -159,7 +170,7 @@ func (uc *UseCase) Recognize(ctx context.Context, req dto.RecognitionRequest) (d
 	frameCount := 0
 	lastFrameAt := time.Now()
 
-	streamingInput.Start(func(frame *entities.Frame) (*entities.Frame, error) {
+	startErr := streamingInput.Start(func(frame *entities.Frame) (*entities.Frame, error) {
 		frameStart := time.Now()
 		// Proxy for real achieved FPS: includes camera capture wait, which
 		// happens in the input stream's loop before this callback runs and
@@ -292,6 +303,16 @@ func (uc *UseCase) Recognize(ctx context.Context, req dto.RecognitionRequest) (d
 	uc.streamingOutput.Stop()
 	close(frameChan)
 	<-detectionDone
+
+	// startErr's return value used to be discarded entirely — this used
+	// to be the last (and worst) link in the same silent-failure chain as
+	// the Initialize() checks above: even if the input stream died mid-
+	// session (see captureLoop's doc comment), Recognize still reported
+	// dto.Success unconditionally.
+	if startErr != nil {
+		uc.logger.Error("Input stream ended with an error", map[string]interface{}{"error": startErr.Error()})
+		return dto.Failure[dto.RecognitionResponse](startErr.Error()), startErr
+	}
 
 	fmt.Println("Recognition completed successfully.")
 	return dto.Success(dto.RecognitionResponse{}), nil
