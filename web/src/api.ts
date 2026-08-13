@@ -121,6 +121,23 @@ export interface GalleryEntry {
   cocoClass?: string
 }
 
+// addGalleryImage uploads one reference photo under name (docs/gui/mockups/
+// screen 1d, TODO.md § H1 "Sélection runtime + labellisation") — mirrors
+// galleryController.add's multipart contract exactly (name field + image
+// file field). Calling this again with a name that already has photos
+// *appends* another one rather than erroring (server-side behavior,
+// gallery.go's own doc comment) — a caller doesn't need to distinguish
+// "new Term" from "add another photo to an existing Term", both are this
+// same call.
+export function addGalleryImage(name: string, image: Blob): Promise<{ status: string; name: string }> {
+  const form = new FormData()
+  form.append('name', name)
+  form.append('image', image, 'crop.jpg')
+  return fetch('/api/v1/gallery', { method: 'POST', body: form }).then((res) =>
+    parseJSONOrThrow<{ status: string; name: string }>(res),
+  )
+}
+
 export function listGallery(): Promise<{ entries: GalleryEntry[] }> {
   return fetch('/api/v1/gallery').then((res) => parseJSONOrThrow<{ entries: GalleryEntry[] }>(res))
 }
