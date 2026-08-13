@@ -17,22 +17,32 @@ interface VideoStreamState {
   connected: boolean
 }
 
-// Single /ws connection, handling both message types the backend sends
-// (docs/adr/clip-backend.md § 32): binary JPEG frames (undrawn — this
-// hook turns each into an object URL, revoking the previous one so a
-// long session doesn't leak one blob URL per frame) and text JSON box
-// data ({"boxes":[...]}, sent every cycle even empty). One hook/one
-// connection rather than two, so the two message types share the exact
-// same underlying WebSocket instead of opening it twice.
-export function useVideoStream(): VideoStreamState {
+// Single /ws/sessions/:id connection, handling both message types the
+// backend sends (docs/adr/clip-backend.md § 32): binary JPEG frames
+// (undrawn — this hook turns each into an object URL, revoking the
+// previous one so a long session doesn't leak one blob URL per frame)
+// and text JSON box data ({"boxes":[...]}, sent every cycle even empty).
+// One hook/one connection rather than two, so the two message types share
+// the exact same underlying WebSocket instead of opening it twice.
+//
+// Migrated 2026-08-13 from the mono-session /ws endpoint to the per-
+// session /ws/sessions/:id one (docs/gui/spec.md § 1.1) — sessionId is
+// null until App.tsx has created a session via api.createSession, so no
+// connection is attempted before one exists.
+export function useVideoStream(sessionId: string | null): VideoStreamState {
   const [frameURL, setFrameURL] = useState<string | null>(null)
   const [boxes, setBoxes] = useState<OverlayBox[]>([])
   const [connected, setConnected] = useState(false)
   const lastURL = useRef<string | null>(null)
 
   useEffect(() => {
+    if (!sessionId) {
+      setConnected(false)
+      return
+    }
+
     const proto = window.location.protocol === 'https:' ? 'wss' : 'ws'
-    const ws = new WebSocket(`${proto}://${window.location.host}/ws`)
+    const ws = new WebSocket(`${proto}://${window.location.host}/ws/sessions/${sessionId}`)
     ws.binaryType = 'blob'
 
     ws.onopen = () => setConnected(true)
@@ -73,7 +83,7 @@ export function useVideoStream(): VideoStreamState {
         URL.revokeObjectURL(lastURL.current)
       }
     }
-  }, [])
+  }, [sessionId])
 
   return { frameURL, boxes, connected }
 }
