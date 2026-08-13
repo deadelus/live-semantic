@@ -14,6 +14,11 @@ assets/videos/*.mp4
 # à l'exécution, jamais versionnés. Dossier préservé via .gitkeep.
 logs/*.log
 
+# Galerie de références persistée (implementation/storage/diskgallery,
+# TODO.md § H1) : photos + embeddings de l'utilisateur, données runtime
+# locales, jamais versionnées.
+data/
+
 # Pipeline de fine-tuning YOLO (training/, TODO.md § A) : données
 # téléchargées et artefacts d'entraînement, jamais versionnés — seuls les
 # scripts le sont.

@@ -158,6 +158,7 @@ func (m *mockAlertSender) Cleanup() {}
 // always succeeds.
 type mockGalleryRepo struct {
 	entries map[string]*storage.Gallery
+	nextSeq int
 }
 
 func newMockGalleryRepo() *mockGalleryRepo {
@@ -166,18 +167,41 @@ func newMockGalleryRepo() *mockGalleryRepo {
 
 var _ storage.GalleryStorage = (*mockGalleryRepo)(nil)
 
-func (g *mockGalleryRepo) Add(name string, embedding entities.Embedding) error {
+func (g *mockGalleryRepo) AddImage(name string, embedding entities.Embedding, thumbnail []byte) (string, error) {
 	if name == "" {
-		return fmt.Errorf("gallery entry name cannot be empty")
+		return "", fmt.Errorf("gallery entry name cannot be empty")
 	}
 	if len(embedding) == 0 {
-		return fmt.Errorf("gallery entry %q: embedding cannot be empty", name)
+		return "", fmt.Errorf("gallery entry %q: embedding cannot be empty", name)
 	}
-	if _, exists := g.entries[name]; exists {
-		return fmt.Errorf("gallery entry %q already exists", name)
+	if len(thumbnail) == 0 {
+		return "", fmt.Errorf("gallery entry %q: thumbnail cannot be empty", name)
 	}
-	g.entries[name] = &storage.Gallery{Name: name, Embedding: embedding, Enabled: true}
-	return nil
+	g.nextSeq++
+	id := fmt.Sprintf("img-%d", g.nextSeq)
+	e, ok := g.entries[name]
+	if !ok {
+		e = &storage.Gallery{Name: name, Enabled: true}
+		g.entries[name] = e
+	}
+	e.Images = append(e.Images, storage.GalleryImage{ID: id, Embedding: embedding})
+	return id, nil
+}
+
+func (g *mockGalleryRepo) RemoveImage(name, imageID string) {
+	e, ok := g.entries[name]
+	if !ok {
+		return
+	}
+	for i, img := range e.Images {
+		if img.ID == imageID {
+			e.Images = append(e.Images[:i], e.Images[i+1:]...)
+			break
+		}
+	}
+	if len(e.Images) == 0 {
+		delete(g.entries, name)
+	}
 }
 
 func (g *mockGalleryRepo) Remove(name string) { delete(g.entries, name) }
@@ -205,12 +229,29 @@ func (g *mockGalleryRepo) SetEnabled(name string, enabled bool) error {
 	return nil
 }
 
-func (g *mockGalleryRepo) Get(name string) (entities.Embedding, bool) {
+func (g *mockGalleryRepo) Get(name string) ([]entities.Embedding, bool) {
 	e, ok := g.entries[name]
-	if !ok || !e.Enabled {
+	if !ok || !e.Enabled || len(e.Images) == 0 {
 		return nil, false
 	}
-	return e.Embedding, true
+	out := make([]entities.Embedding, len(e.Images))
+	for i, img := range e.Images {
+		out[i] = img.Embedding
+	}
+	return out, true
+}
+
+func (g *mockGalleryRepo) Thumbnail(name, imageID string) ([]byte, bool) {
+	e, ok := g.entries[name]
+	if !ok {
+		return nil, false
+	}
+	for _, img := range e.Images {
+		if img.ID == imageID {
+			return []byte("thumb"), true
+		}
+	}
+	return nil, false
 }
 
 func (g *mockGalleryRepo) List() []storage.Gallery {
@@ -299,11 +340,11 @@ func TestNewTrackManager_ExactTermsHaveNoEmbedding(t *testing.T) {
 	if len(m.terms) != 2 {
 		t.Fatalf("terms = %+v, want 2 entries", m.terms)
 	}
-	if got := m.terms["person"]; got.Cap != 2 || got.Embedding != nil {
-		t.Fatalf(`terms["person"] = %+v, want Cap=2 Embedding=nil`, got)
+	if got := m.terms["person"]; got.Cap != 2 || len(got.Embeddings) != 0 {
+		t.Fatalf(`terms["person"] = %+v, want Cap=2 Embeddings=empty`, got)
 	}
-	if got := m.terms["car"]; got.Cap != 1 || got.Embedding != nil {
-		t.Fatalf(`terms["car"] = %+v, want Cap=1 Embedding=nil`, got)
+	if got := m.terms["car"]; got.Cap != 1 || len(got.Embeddings) != 0 {
+		t.Fatalf(`terms["car"] = %+v, want Cap=1 Embeddings=empty`, got)
 	}
 }
 
@@ -318,8 +359,8 @@ func TestNewTrackManager_SemanticTermGetsEmbedding(t *testing.T) {
 	if !ok {
 		t.Fatalf("terms = %+v, missing the semantic term", m.terms)
 	}
-	if got.Embedding == nil {
-		t.Fatal("semantic term should have a non-nil Embedding")
+	if len(got.Embeddings) == 0 {
+		t.Fatal("semantic term should have a non-empty Embeddings")
 	}
 	// 2, not 1: "person with a red hat" mentions "person" (a COCO word) ->
 	// semanticLabelHint finds it -> newTrackManager also encodes "person"
@@ -340,8 +381,8 @@ func TestNewTrackManager_GalleryTerm_UsesGalleryEmbeddingNotEncodeText(t *testin
 	uc := newTestUseCase(&mockObjectDetector{}, encoder, &mockAlertSender{})
 
 	galleryEmbedding := entities.Embedding{0.5, 0.5, 0}
-	if err := uc.gallery.Add("mon_sac", galleryEmbedding); err != nil {
-		t.Fatalf("gallery.Add() error = %v", err)
+	if _, err := uc.gallery.AddImage("mon_sac", galleryEmbedding, []byte("thumb")); err != nil {
+		t.Fatalf("gallery.AddImage() error = %v", err)
 	}
 
 	m, err := newTrackManager(uc, dto.RecognitionRequest{Filter: "mon_sac*1"})
@@ -352,8 +393,8 @@ func TestNewTrackManager_GalleryTerm_UsesGalleryEmbeddingNotEncodeText(t *testin
 	if !ok {
 		t.Fatalf("terms = %+v, missing the gallery term", m.terms)
 	}
-	if len(got.Embedding) != len(galleryEmbedding) || got.Embedding[0] != galleryEmbedding[0] {
-		t.Fatalf("term.Embedding = %v, want the gallery's own embedding %v", got.Embedding, galleryEmbedding)
+	if len(got.Embeddings) != 1 || len(got.Embeddings[0]) != len(galleryEmbedding) || got.Embeddings[0][0] != galleryEmbedding[0] {
+		t.Fatalf("term.Embeddings = %v, want [%v]", got.Embeddings, galleryEmbedding)
 	}
 	if encoder.encodeTextCalls != 0 {
 		t.Fatalf("EncodeText called %d times, want 0 (a registered gallery name should never fall back to text encoding)", encoder.encodeTextCalls)
@@ -370,8 +411,8 @@ func TestReanchor_GalleryTerm_MatchesCandidateByImageSimilarity(t *testing.T) {
 	// use by default — a real gallery embedding would come from a real
 	// EncodeImage call on a reference crop, not from EncodeText, but the
 	// mock's scoring math only cares about the axis, not its origin.
-	if err := uc.gallery.Add("mon_sac", entities.Embedding{1, 0, 0}); err != nil {
-		t.Fatalf("gallery.Add() error = %v", err)
+	if _, err := uc.gallery.AddImage("mon_sac", entities.Embedding{1, 0, 0}, []byte("thumb")); err != nil {
+		t.Fatalf("gallery.AddImage() error = %v", err)
 	}
 
 	req := dto.RecognitionRequest{Filter: "mon_sac*1"}

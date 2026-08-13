@@ -179,13 +179,16 @@ type trackedObject struct {
 const notifyDebounce = 5 * time.Second
 
 // termMatch is how trackManager remembers a parsed filterTerm internally:
-// Embedding nil means an exact COCO-label term (matched directly against
-// box.Label, no CLIP call); non-nil means a semantic term (matched via
-// CLIP cosine similarity against every still-unclaimed candidate box,
-// ranked, capped — see reanchor).
+// zero-length Embeddings means an exact COCO-label term (matched directly
+// against box.Label, no CLIP call); non-empty means a semantic term
+// (matched via CLIP cosine similarity against every still-unclaimed
+// candidate box, ranked, capped — see reanchor). Embeddings holds more
+// than one entry only for a gallery term with several reference photos
+// (2026-08-13) — a free-text term always has exactly one (its own
+// EncodeText result).
 type termMatch struct {
-	Cap       int
-	Embedding entities.Embedding
+	Cap        int
+	Embeddings []entities.Embedding
 	// Overlap mirrors filterTerm.Overlap ("+overlap" in the filter spec):
 	// when true, this term's semantic pass (reanchor) may still evaluate a
 	// candidate box another term already claimed this cycle. Consulted by
@@ -194,7 +197,8 @@ type termMatch struct {
 	// LabelHint (filter_spec.go's semanticLabelHint) restricts this term's
 	// candidates to boxes YOLO already labeled with this class — empty
 	// means no restriction, every box is a candidate. Only ever set for a
-	// semantic term (Embedding != nil); a nil Embedding never has a hint.
+	// semantic term (len(Embeddings) > 0); an exact-label term never has a
+	// hint.
 	LabelHint string
 	// BaseEmbedding is the CLIP text embedding of LabelHint alone (e.g.
 	// "person" for the term "person with a hat") — nil unless LabelHint is
@@ -299,18 +303,25 @@ func newTrackManager(uc *UseCase, req dto.RecognitionRequest) (*trackManager, er
 		// docs/adr/clip-backend.md § 24): a name
 		// registered via AddGalleryReference is matched image↔image
 		// against candidates (reanchor's pass 2, unchanged — it doesn't
-		// care whether Embedding came from EncodeText or a gallery
-		// lookup) instead of text↔image. Checked after isCOCOLabel
-		// (unconditional COCO priority, same reason AddGalleryReference
-		// rejects a COCO-colliding name) but before EncodeText, so a
-		// registered reference never pays for/risks a text-encode error.
+		// care whether an Embeddings entry came from EncodeText or a
+		// gallery lookup) instead of text↔image. Checked after
+		// isCOCOLabel (unconditional COCO priority, same reason
+		// AddGalleryReference rejects a COCO-colliding name) but before
+		// EncodeText, so a registered reference never pays for/risks a
+		// text-encode error. Get returns every reference photo's
+		// embedding for this name (2026-08-13, multi-image entries) —
+		// bestCosineSimilarity below takes the single best score across
+		// all of them per candidate box, so an entry with several
+		// reference photos (different angle/lighting) is more forgiving
+		// than one with a single fragile photo, without needing a
+		// separate "which photo matched" concept anywhere downstream.
 		// No LabelHint/BaseEmbedding for a gallery term — there's no free
 		// text to scan for a mentioned COCO class, and no "base noun" to
 		// diff against (defaultDifferentialMargin, § 23) — falls back to
 		// the absolute threshold alone, same as any other term with no
 		// LabelHint.
-		if emb, ok := uc.gallery.Get(t.Key); ok {
-			m.terms[t.Key] = termMatch{Cap: t.Cap, Embedding: emb, Overlap: t.Overlap}
+		if embs, ok := uc.gallery.Get(t.Key); ok {
+			m.terms[t.Key] = termMatch{Cap: t.Cap, Embeddings: embs, Overlap: t.Overlap}
 			continue
 		}
 		emb, err := uc.semanticEncoder.EncodeText(t.Key)
@@ -318,7 +329,7 @@ func newTrackManager(uc *UseCase, req dto.RecognitionRequest) (*trackManager, er
 			return nil, fmt.Errorf("encode semantic filter term %q: %w", t.Key, err)
 		}
 		labelHint, _ := semanticLabelHint(t.Key)
-		match := termMatch{Cap: t.Cap, Embedding: emb, Overlap: t.Overlap, LabelHint: labelHint}
+		match := termMatch{Cap: t.Cap, Embeddings: []entities.Embedding{emb}, Overlap: t.Overlap, LabelHint: labelHint}
 		if labelHint != "" {
 			baseEmb, err := uc.semanticEncoder.EncodeText(labelHint)
 			if err != nil {
@@ -353,6 +364,26 @@ func cosineSimilarity(a, b entities.Embedding) float32 {
 		return 0
 	}
 	return float32(dot / (math.Sqrt(normA) * math.Sqrt(normB)))
+}
+
+// bestCosineSimilarity scores candidate against every ref and returns the
+// highest score — added 2026-08-13 for multi-image gallery terms: a
+// candidate box only needs to resemble the *best-matching* reference
+// photo, not all of them (they may look quite different from each other,
+// e.g. front/side/back of the same object) or an average of them (which
+// would blur distinct references together and could sink a genuinely
+// good match dragged down by a poor one). Returns 0 for an empty refs
+// slice (shouldn't happen in practice — termMatch.Embeddings is only
+// ever empty for a non-semantic term, which never reaches this call —
+// but a safe, unmatched-by-construction default beats a panic).
+func bestCosineSimilarity(candidate entities.Embedding, refs []entities.Embedding) float32 {
+	var best float32
+	for i, ref := range refs {
+		if s := cosineSimilarity(candidate, ref); i == 0 || s > best {
+			best = s
+		}
+	}
+	return best
 }
 
 // count returns the number of active tracks — safe accessor for logging
@@ -727,7 +758,7 @@ func (m *trackManager) reanchor(frame *entities.Frame, req dto.RecognitionReques
 	// clip-backend.md § 13/16/17).
 	for i, box := range result.BoundingBoxes {
 		term, ok := m.terms[box.Label]
-		if !ok || term.Embedding != nil {
+		if !ok || len(term.Embeddings) > 0 {
 			continue
 		}
 		claimed[i] = true
@@ -755,7 +786,7 @@ func (m *trackManager) reanchor(frame *entities.Frame, req dto.RecognitionReques
 	//     § 17). No hint (0 or 2+ COCO classes mentioned) means every box
 	//     is still a candidate, same as before.
 	for key, term := range m.terms {
-		if term.Embedding == nil {
+		if len(term.Embeddings) == 0 {
 			continue
 		}
 
@@ -776,7 +807,7 @@ func (m *trackManager) reanchor(frame *entities.Frame, req dto.RecognitionReques
 				m.uc.logger.Info("Semantic encode failed", map[string]interface{}{"error": err.Error()})
 				continue
 			}
-			score := cosineSimilarity(embedding, term.Embedding)
+			score := bestCosineSimilarity(embedding, term.Embeddings)
 			accepted := score >= defaultSimilarityThreshold
 			logFields := map[string]interface{}{
 				"term":       key,

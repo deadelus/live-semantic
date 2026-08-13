@@ -26,6 +26,10 @@ func (s *Server) setupRoutes() {
 
 	v1 := s.router.Group("/api/v1")
 	{
+		// Local camera device discovery (docs/gui/ device picker) — see
+		// devices.go for why this is index-probing, not a true enumeration.
+		v1.GET("/devices", s.devices.list)
+
 		v1.POST("/recognition/start", s.recognition.start)
 		v1.POST("/recognition/stop", s.recognition.stop)
 		v1.GET("/recognition/status", s.recognition.status)
@@ -36,6 +40,10 @@ func (s *Server) setupRoutes() {
 		v1.GET("/gallery", s.gallery.list)
 		v1.DELETE("/gallery/:name", s.gallery.remove)
 		v1.PATCH("/gallery/:name", s.gallery.update)
+		// Per-image routes (2026-08-13, multi-image entries) — see
+		// gallery.go's removeImage/thumbnail doc comments.
+		v1.DELETE("/gallery/:name/images/:imageID", s.gallery.removeImage)
+		v1.GET("/gallery/:name/images/:imageID", s.gallery.thumbnail)
 
 		// Multi-flux session CRUD — see sessions.go.
 		v1.POST("/sessions", s.sessions.create)

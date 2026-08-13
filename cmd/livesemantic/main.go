@@ -8,7 +8,7 @@ import (
 	"live-semantic/internal/implementation/inference/onnx/clip"
 	"live-semantic/internal/implementation/inference/onnx/yolo11s"
 	lognotifier "live-semantic/internal/implementation/notifier/log-notifier"
-	"live-semantic/internal/implementation/storage/inmemory"
+	"live-semantic/internal/implementation/storage/diskgallery"
 	"live-semantic/internal/implementation/streamer/input"
 	"live-semantic/internal/implementation/streamer/output"
 	gocvtracker "live-semantic/internal/implementation/tracking/gocv-tracker"
@@ -110,7 +110,7 @@ func main() {
 	// draw for CLI/interactive mode. See initDependencies's doc comment.
 	// browserInput is likewise mode-dependent (nil outside web mode — see
 	// its own doc comment).
-	localInput, browserInput, streamingOutput, notifier, objectDetector, semanticEncoder, trackerFactory, err := initDependencies(*web)
+	localInput, browserInput, streamingOutput, notifier, objectDetector, semanticEncoder, trackerFactoryBuilder, err := initDependencies(*web)
 	if err != nil {
 		engine.Logger().Error("Failed to initialize dependencies", err)
 		return
@@ -120,12 +120,31 @@ func main() {
 	// every session.Manager-owned UseCase — TODO.md § H1 Multi-flux: a
 	// reference gallery entry added from one flux must be usable as a
 	// filter term on every other flux, not siloed per-session. Concrete
-	// implementation/storage/inmemory.Gallery constructed here, the
+	// implementation/storage/diskgallery.Gallery constructed here, the
 	// composition root — application/uc only ever sees it through the
 	// storage.GalleryStorage port (dependency inversion, 2026-08-12).
-	galleryRepo := inmemory.New()
+	//
+	// diskgallery, not inmemory — switched 2026-08-13: a user-curated
+	// gallery of reference photos/embeddings is meant to survive a
+	// restart, which a pure-RAM store never could (implementation/storage/
+	// inmemory's doc comment explains why that adapter still exists, just
+	// not wired in here anymore). "data/gallery" is a plain relative path,
+	// same convention as "logs/livesemantic.log" elsewhere in this
+	// composition root — not yet a flag/env var (nothing has needed one
+	// so far), revisit if a real deployment needs the location
+	// configurable.
+	galleryRepo, err := diskgallery.New("data/gallery")
+	if err != nil {
+		engine.Logger().Error("Failed to initialize gallery storage", err)
+		return
+	}
 
-	useCases, err := uc.NewUseCase(engine.Context(), engine.Logger(), localInput, browserInput, streamingOutput, notifier, objectDetector, semanticEncoder, trackerFactory, galleryRepo)
+	// trackerFactoryBuilder() called fresh here — a dedicated
+	// gocvtracker.Factory (and therefore frame cache) for this UseCase,
+	// not shared with session.Manager's own sessions below. See
+	// session.NewManager's doc comment for why sharing one across
+	// concurrently-running sessions used to SIGSEGV.
+	useCases, err := uc.NewUseCase(engine.Context(), engine.Logger(), localInput, browserInput, streamingOutput, notifier, objectDetector, semanticEncoder, trackerFactoryBuilder(), galleryRepo)
 	if err != nil {
 		engine.Logger().Error("Failed to create use cases", err)
 		return
@@ -192,7 +211,7 @@ func main() {
 			notifier,
 			objectDetector,
 			semanticEncoder,
-			trackerFactory,
+			trackerFactoryBuilder,
 			galleryRepo,
 		)
 		startWebServer(engine, useCases, wsOutput, browserInput, sessionManager, serverPort)
@@ -211,7 +230,7 @@ func main() {
 // caméra navigateur") — only web mode has an /ws/ingest endpoint for one
 // to receive frames from, so it stays nil in CLI/interactive mode rather
 // than being built unused. Everything else is shared regardless of mode.
-func initDependencies(webMode bool) (localInput streamer.InputStream, browserInput *input.BrowserInput, streamingOutput streamer.OutputStream, alertSender notifier.AlertSender, objectDetector inference.ObjectDetector, semanticEncoder inference.SemanticEncoder, trackerFactory tracking.TrackerFactory, err error) {
+func initDependencies(webMode bool) (localInput streamer.InputStream, browserInput *input.BrowserInput, streamingOutput streamer.OutputStream, alertSender notifier.AlertSender, objectDetector inference.ObjectDetector, semanticEncoder inference.SemanticEncoder, trackerFactoryBuilder func() tracking.TrackerFactory, err error) {
 	// Device 0 hardcoded for now — configurable at the adapter level
 	// (TODO.md § H1), not yet exposed via CLI/REST (source selection is
 	// part of the GUI "Ajouter une source" flow, § H1 Multi-flux/H2).
@@ -247,10 +266,15 @@ func initDependencies(webMode bool) (localInput streamer.InputStream, browserInp
 	// weaker accuracy at 320px becomes the bigger problem instead.
 	// gocvtracker.Factory implements tracking.TrackerFactory (a real
 	// interface, 2026-08-12 — see its own doc comment) for the fixed KCF
-	// choice above.
-	trackerFactory = gocvtracker.NewFactory(gocvtracker.KCF)
+	// choice above. A *builder*, not a shared instance, since 2026-08-13:
+	// each call must return a brand new Factory (own frame-conversion
+	// cache) — see session.NewManager's doc comment for the SIGSEGV that
+	// happened when every session shared one Factory/cache.
+	trackerFactoryBuilder = func() tracking.TrackerFactory {
+		return gocvtracker.NewFactory(gocvtracker.KCF)
+	}
 
-	return localInput, browserInput, streamingOutput, alertSender, objectDetector, semanticEncoder, trackerFactory, nil
+	return localInput, browserInput, streamingOutput, alertSender, objectDetector, semanticEncoder, trackerFactoryBuilder, nil
 }
 
 func determinePort(flagPort, defaultPort int) int {

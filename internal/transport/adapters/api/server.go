@@ -31,6 +31,7 @@ type Server struct {
 	recognition   *recognitionController
 	gallery       *galleryController
 	sessions      *sessionController
+	devices       *devicesController
 }
 
 // NewServer creates the unified server. broadcaster receives every
@@ -60,6 +61,7 @@ func NewServer(useCases uc.UseCases, broadcaster FrameBroadcaster, frameReceiver
 		recognition:   newRecognitionController(useCases, logger),
 		gallery:       newGalleryController(useCases, logger),
 		sessions:      newSessionController(sessionManager, logger),
+		devices:       newDevicesController(sessionManager),
 	}
 
 	server.setupRoutes()

@@ -87,6 +87,15 @@ type GalleryReferences interface {
 	// 2026-08-12 — Recognition's ctx parameter existed but every gallery
 	// method had none at all).
 	AddGalleryReference(ctx context.Context, name string, crop image.Image) error
+	// RemoveGalleryImage deletes one reference photo (by ID) from an
+	// entry — v2 of the delete flow, alongside whole-entry removal below
+	// (2026-08-13, multi-image entries). See
+	// storage.GalleryStorage.RemoveImage's doc comment for the "last
+	// image removes the whole entry" behavior.
+	RemoveGalleryImage(ctx context.Context, name, imageID string)
+	// GetGalleryThumbnail returns one reference photo's stored thumbnail
+	// bytes (JPEG) for a REST handler to serve directly.
+	GetGalleryThumbnail(ctx context.Context, name, imageID string) ([]byte, bool)
 	// RemoveGalleryReference deletes a gallery entry — see
 	// storage.GalleryStorage.Remove (idempotent, not an error if absent).
 	RemoveGalleryReference(ctx context.Context, name string)
