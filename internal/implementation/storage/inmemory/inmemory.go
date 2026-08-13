@@ -26,9 +26,10 @@ type Gallery struct {
 }
 
 type entry struct {
-	name    string
-	enabled bool
-	images  []image
+	name      string
+	enabled   bool
+	images    []image
+	cocoClass string
 }
 
 type image struct {
@@ -150,6 +151,19 @@ func (g *Gallery) SetEnabled(name string, enabled bool) error {
 	return nil
 }
 
+// SetCocoClass — see storage.GalleryStorage.
+func (g *Gallery) SetCocoClass(name, cocoClass string) error {
+	name = normalize(name)
+	g.mu.Lock()
+	defer g.mu.Unlock()
+	e, ok := g.entries[name]
+	if !ok {
+		return fmt.Errorf("gallery entry %q not found", name)
+	}
+	e.cocoClass = cocoClass
+	return nil
+}
+
 // Get — see storage.GalleryStorage. Nil-receiver-safe (a nil *Gallery
 // behaves as empty) — application/uc.NewUseCase's gallery parameter used
 // to allow a nil *ReferenceGallery pre-refactor; kept for callers that
@@ -200,7 +214,7 @@ func (g *Gallery) List() []storage.Gallery {
 		for i, img := range e.images {
 			images[i] = storage.GalleryImage{ID: img.id, Embedding: img.embedding}
 		}
-		out = append(out, storage.Gallery{Name: e.name, Enabled: e.enabled, Images: images})
+		out = append(out, storage.Gallery{Name: e.name, Enabled: e.enabled, Images: images, CocoClass: e.cocoClass})
 	}
 	sort.Slice(out, func(i, j int) bool { return out[i].Name < out[j].Name })
 	return out

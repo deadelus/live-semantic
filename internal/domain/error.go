@@ -20,6 +20,7 @@ var (
 	ErrNilUtils           = errors.New("utils not initialized")
 	ErrNilTrackerFactory  = errors.New("tracker factory not initialized")
 	ErrNilGalleryRepo     = errors.New("gallery repository not initialized")
+	ErrNilCollectionRepo  = errors.New("collection repository not initialized")
 
 	// Camera capture errors.
 	ErrNoCameraFound        = errors.New("no camera found")

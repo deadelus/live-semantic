@@ -57,9 +57,10 @@ type Gallery struct {
 }
 
 type entry struct {
-	name    string
-	enabled bool
-	images  []imageMeta
+	name      string
+	enabled   bool
+	images    []imageMeta
+	cocoClass string
 }
 
 type imageMeta struct {
@@ -69,9 +70,10 @@ type imageMeta struct {
 
 // entryFile is entry.json's on-disk shape.
 type entryFile struct {
-	Name    string      `json:"name"`
-	Enabled bool        `json:"enabled"`
-	Images  []imageMeta `json:"images"`
+	Name      string      `json:"name"`
+	Enabled   bool        `json:"enabled"`
+	Images    []imageMeta `json:"images"`
+	CocoClass string      `json:"coco_class,omitempty"`
 }
 
 var _ storage.GalleryStorage = (*Gallery)(nil)
@@ -116,7 +118,7 @@ func (g *Gallery) load() error {
 		if err := json.Unmarshal(data, &ef); err != nil {
 			return fmt.Errorf("diskgallery: parse %q: %w", path, err)
 		}
-		g.entries[normalize(ef.Name)] = &entry{name: normalize(ef.Name), enabled: ef.Enabled, images: ef.Images}
+		g.entries[normalize(ef.Name)] = &entry{name: normalize(ef.Name), enabled: ef.Enabled, images: ef.Images, cocoClass: ef.CocoClass}
 
 		for _, img := range ef.Images {
 			if seq, ok := imageSeq(img.ID); ok && seq >= g.nextImgSeq {
@@ -173,7 +175,7 @@ func (g *Gallery) save(e *entry) error {
 		return fmt.Errorf("diskgallery: create entry dir: %w", err)
 	}
 
-	ef := entryFile{Name: e.name, Enabled: e.enabled, Images: e.images}
+	ef := entryFile{Name: e.name, Enabled: e.enabled, Images: e.images, CocoClass: e.cocoClass}
 	data, err := json.MarshalIndent(ef, "", "  ")
 	if err != nil {
 		return fmt.Errorf("diskgallery: marshal entry: %w", err)
@@ -323,6 +325,19 @@ func (g *Gallery) SetEnabled(name string, enabled bool) error {
 	return g.save(e)
 }
 
+// SetCocoClass — see storage.GalleryStorage.
+func (g *Gallery) SetCocoClass(name, cocoClass string) error {
+	name = normalize(name)
+	g.mu.Lock()
+	defer g.mu.Unlock()
+	e, ok := g.entries[name]
+	if !ok {
+		return fmt.Errorf("gallery entry %q not found", name)
+	}
+	e.cocoClass = cocoClass
+	return g.save(e)
+}
+
 // Get — see storage.GalleryStorage.
 func (g *Gallery) Get(name string) ([]entities.Embedding, bool) {
 	if g == nil {
@@ -370,7 +385,7 @@ func (g *Gallery) List() []storage.Gallery {
 		for i, img := range e.images {
 			images[i] = storage.GalleryImage{ID: img.ID, Embedding: img.Embedding}
 		}
-		out = append(out, storage.Gallery{Name: e.name, Enabled: e.enabled, Images: images})
+		out = append(out, storage.Gallery{Name: e.name, Enabled: e.enabled, Images: images, CocoClass: e.cocoClass})
 	}
 	sort.Slice(out, func(i, j int) bool { return out[i].Name < out[j].Name })
 	return out

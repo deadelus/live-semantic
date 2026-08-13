@@ -29,9 +29,23 @@ type GalleryImageInfo struct {
 // thumbnail grid and offer per-photo removal (v2 of the delete flow,
 // alongside whole-entry removal).
 type GalleryEntryInfo struct {
-	Name    string
-	Enabled bool
-	Images  []GalleryImageInfo
+	Name      string
+	Enabled   bool
+	Images    []GalleryImageInfo
+	CocoClass string
+}
+
+// CollectionInfo is the read-only view of a Collection returned to a REST
+// caller — a straight projection of storage.Collection, no
+// embedding/vector data to strip out here (unlike GalleryEntryInfo),
+// kept as its own type anyway for the same reason GalleryEntryInfo is:
+// application/uc's public shape shouldn't just be a re-export of an
+// infrastructure/storage type, so the two layers can evolve
+// independently.
+type CollectionInfo struct {
+	Name  string
+	Tags  []string
+	Terms []string
 }
 
 // thumbnailMaxDimension bounds a stored reference photo's thumbnail —
@@ -165,7 +179,81 @@ func (uc *UseCase) ListGalleryReferences(_ context.Context) []GalleryEntryInfo {
 		for i, img := range e.Images {
 			images[i] = GalleryImageInfo{ID: img.ID}
 		}
-		out = append(out, GalleryEntryInfo{Name: e.Name, Enabled: e.Enabled, Images: images})
+		out = append(out, GalleryEntryInfo{Name: e.Name, Enabled: e.Enabled, Images: images, CocoClass: e.CocoClass})
+	}
+	return out
+}
+
+// SetGalleryCocoClass links name to cocoClass (the Bibliothèque model's
+// optional "classe COCO liée", docs/gui/design-brief.md § Bibliothèque,
+// screen 4c) — restricts this Term's matching to boxes already classified
+// there by YOLO (application/uc/tracking.go). cocoClass == "" clears an
+// existing link. A non-empty cocoClass must be one of the 80 real class
+// names — screen 4d's "warning" state (no COCO class matches) is exactly
+// this validation failing, surfaced to the caller as an error rather than
+// silently storing an unmatchable class name.
+func (uc *UseCase) SetGalleryCocoClass(_ context.Context, name, cocoClass string) error {
+	if cocoClass != "" && !isCOCOLabel(cocoClass) {
+		return fmt.Errorf("%q is not one of the 80 COCO classes of the active model", cocoClass)
+	}
+	return uc.gallery.SetCocoClass(name, cocoClass)
+}
+
+// --- Bibliothèque — Collections (2026-08-13). See use_case.go's
+// GalleryReferences doc comments for why these live in the same
+// interface/file as the Term (gallery) methods above. ---
+
+// CreateCollection — see storage.CollectionStorage.Create. No name
+// validation beyond what the storage layer already does (non-empty,
+// unique) — unlike Term names, a Collection name never collides with a
+// COCO class (it's not itself usable as a filter term, only the Terms it
+// groups are).
+func (uc *UseCase) CreateCollection(_ context.Context, name string, tags []string) error {
+	return uc.collections.Create(name, tags)
+}
+
+// DeleteCollection — see storage.CollectionStorage.Delete.
+func (uc *UseCase) DeleteCollection(_ context.Context, name string) {
+	uc.collections.Delete(name)
+}
+
+// RenameCollection — see storage.CollectionStorage.Rename.
+func (uc *UseCase) RenameCollection(_ context.Context, oldName, newName string) error {
+	return uc.collections.Rename(oldName, newName)
+}
+
+// SetCollectionTags — see storage.CollectionStorage.SetTags.
+func (uc *UseCase) SetCollectionTags(_ context.Context, name string, tags []string) error {
+	return uc.collections.SetTags(name, tags)
+}
+
+// AddTermToCollection links termName into collectionName — validated here
+// (not in storage.CollectionStorage, which deliberately doesn't know
+// GalleryStorage exists, see its own doc comment) against the gallery:
+// grouping a name that isn't a real Term yet would silently produce a
+// Collection screen listing a term with no photos, which the Bibliothèque
+// model says can't exist ("un Terme sans photo n'existe pas", screen 4a's
+// model note) — reject it up front instead.
+func (uc *UseCase) AddTermToCollection(_ context.Context, collectionName, termName string) error {
+	if _, ok := uc.gallery.Get(termName); !ok {
+		return fmt.Errorf("term %q does not exist (or has no reference photos) in the gallery", termName)
+	}
+	return uc.collections.AddTerm(collectionName, termName)
+}
+
+// RemoveTermFromCollection — see storage.CollectionStorage.RemoveTerm.
+// Never deletes the Term itself, only the grouping (screen 4b: "Retirer
+// un Terme ne le supprime pas de la bibliothèque").
+func (uc *UseCase) RemoveTermFromCollection(_ context.Context, collectionName, termName string) {
+	uc.collections.RemoveTerm(collectionName, termName)
+}
+
+// ListCollections — see storage.CollectionStorage.List.
+func (uc *UseCase) ListCollections(_ context.Context) []CollectionInfo {
+	collections := uc.collections.List()
+	out := make([]CollectionInfo, 0, len(collections))
+	for _, c := range collections {
+		out = append(out, CollectionInfo{Name: c.Name, Tags: c.Tags, Terms: c.Terms})
 	}
 	return out
 }

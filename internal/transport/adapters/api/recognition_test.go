@@ -57,6 +57,17 @@ type mockUseCases struct {
 	// control what the REST handler sees.
 	thumbnail   []byte
 	thumbnailOK bool
+
+	// cocoClasses is a minimal real store (name -> linked COCO class),
+	// same rationale as galleryEntries above — enough to exercise
+	// galleryController.update's coco_class field without depending on a
+	// different package's internals.
+	cocoClasses map[string]string
+
+	// collections is a minimal real Bibliothèque Collections store —
+	// same rationale as galleryEntries/cocoClasses above, enough to
+	// exercise collectionsController's REST handlers end to end.
+	collections map[string]*uc.CollectionInfo
 }
 
 func (m *mockUseCases) AddGalleryReference(_ context.Context, name string, _ image.Image) error {
@@ -123,7 +134,117 @@ func (m *mockUseCases) ListGalleryReferences(_ context.Context) []uc.GalleryEntr
 	defer m.galleryMu.Unlock()
 	out := make([]uc.GalleryEntryInfo, 0, len(m.galleryEntries))
 	for name, enabled := range m.galleryEntries {
-		out = append(out, uc.GalleryEntryInfo{Name: name, Enabled: enabled})
+		out = append(out, uc.GalleryEntryInfo{Name: name, Enabled: enabled, CocoClass: m.cocoClasses[name]})
+	}
+	return out
+}
+
+// SetGalleryCocoClass — real minimal behavior (name must exist), same
+// rationale as SetGalleryReferenceEnabled above.
+func (m *mockUseCases) SetGalleryCocoClass(_ context.Context, name, cocoClass string) error {
+	m.galleryMu.Lock()
+	defer m.galleryMu.Unlock()
+	if _, ok := m.galleryEntries[name]; !ok {
+		return fmt.Errorf("gallery entry %q not found", name)
+	}
+	if m.cocoClasses == nil {
+		m.cocoClasses = map[string]string{}
+	}
+	m.cocoClasses[name] = cocoClass
+	return nil
+}
+
+// --- Bibliothèque — Collections mock. A minimal real store (name ->
+// *uc.CollectionInfo), same rationale as galleryEntries/cocoClasses
+// above — enough to exercise collectionsController's REST handlers end
+// to end without depending on a different package's internals. ---
+
+func (m *mockUseCases) CreateCollection(_ context.Context, name string, tags []string) error {
+	m.galleryMu.Lock()
+	defer m.galleryMu.Unlock()
+	if m.collections == nil {
+		m.collections = map[string]*uc.CollectionInfo{}
+	}
+	if _, exists := m.collections[name]; exists {
+		return fmt.Errorf("collection %q already exists", name)
+	}
+	m.collections[name] = &uc.CollectionInfo{Name: name, Tags: tags}
+	return nil
+}
+
+func (m *mockUseCases) DeleteCollection(_ context.Context, name string) {
+	m.galleryMu.Lock()
+	defer m.galleryMu.Unlock()
+	delete(m.collections, name)
+}
+
+func (m *mockUseCases) RenameCollection(_ context.Context, oldName, newName string) error {
+	m.galleryMu.Lock()
+	defer m.galleryMu.Unlock()
+	e, ok := m.collections[oldName]
+	if !ok {
+		return fmt.Errorf("collection %q not found", oldName)
+	}
+	if _, exists := m.collections[newName]; exists {
+		return fmt.Errorf("collection %q already exists", newName)
+	}
+	delete(m.collections, oldName)
+	e.Name = newName
+	m.collections[newName] = e
+	return nil
+}
+
+func (m *mockUseCases) SetCollectionTags(_ context.Context, name string, tags []string) error {
+	m.galleryMu.Lock()
+	defer m.galleryMu.Unlock()
+	e, ok := m.collections[name]
+	if !ok {
+		return fmt.Errorf("collection %q not found", name)
+	}
+	e.Tags = tags
+	return nil
+}
+
+func (m *mockUseCases) AddTermToCollection(_ context.Context, collectionName, termName string) error {
+	m.galleryMu.Lock()
+	defer m.galleryMu.Unlock()
+	e, ok := m.collections[collectionName]
+	if !ok {
+		return fmt.Errorf("collection %q not found", collectionName)
+	}
+	if _, exists := m.galleryEntries[termName]; !exists {
+		return fmt.Errorf("term %q does not exist", termName)
+	}
+	for _, t := range e.Terms {
+		if t == termName {
+			return nil
+		}
+	}
+	e.Terms = append(e.Terms, termName)
+	return nil
+}
+
+func (m *mockUseCases) RemoveTermFromCollection(_ context.Context, collectionName, termName string) {
+	m.galleryMu.Lock()
+	defer m.galleryMu.Unlock()
+	e, ok := m.collections[collectionName]
+	if !ok {
+		return
+	}
+	for i, t := range e.Terms {
+		if t == termName {
+			e.Terms = append(e.Terms[:i], e.Terms[i+1:]...)
+			return
+		}
+	}
+}
+
+func (m *mockUseCases) ListCollections(_ context.Context) []uc.CollectionInfo {
+	m.galleryMu.Lock()
+	defer m.galleryMu.Unlock()
+	out := make([]uc.CollectionInfo, 0, len(m.collections))
+	for _, e := range m.collections {
+		out = append(out, *e)
 	}
 	return out
 }

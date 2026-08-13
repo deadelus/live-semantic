@@ -169,6 +169,14 @@ func (g *sessionMockGalleryRepo) SetEnabled(name string, enabled bool) error {
 	e.Enabled = enabled
 	return nil
 }
+func (g *sessionMockGalleryRepo) SetCocoClass(name, cocoClass string) error {
+	e, ok := g.entries[name]
+	if !ok {
+		return fmt.Errorf("gallery entry %q not found", name)
+	}
+	e.CocoClass = cocoClass
+	return nil
+}
 func (g *sessionMockGalleryRepo) Get(name string) ([]entities.Embedding, bool) {
 	e, ok := g.entries[name]
 	if !ok || !e.Enabled || len(e.Images) == 0 {
@@ -200,6 +208,24 @@ func (g *sessionMockGalleryRepo) List() []storage.Gallery {
 	return out
 }
 
+// sessionMockCollectionRepo is a minimal storage.CollectionStorage test
+// double — same rationale as sessionMockGalleryRepo above. Session REST
+// tests don't exercise Collections behavior, just need a non-nil value.
+type sessionMockCollectionRepo struct{}
+
+var _ storage.CollectionStorage = (*sessionMockCollectionRepo)(nil)
+
+func (sessionMockCollectionRepo) Create(name string, tags []string) error       { return nil }
+func (sessionMockCollectionRepo) Delete(name string)                            {}
+func (sessionMockCollectionRepo) Rename(oldName, newName string) error          { return nil }
+func (sessionMockCollectionRepo) SetTags(name string, tags []string) error      { return nil }
+func (sessionMockCollectionRepo) AddTerm(collectionName, termName string) error { return nil }
+func (sessionMockCollectionRepo) RemoveTerm(collectionName, termName string)    {}
+func (sessionMockCollectionRepo) Get(name string) (storage.Collection, bool) {
+	return storage.Collection{}, false
+}
+func (sessionMockCollectionRepo) List() []storage.Collection { return nil }
+
 // newSessionTestServer wires a Server whose session.Manager's
 // InputFactory always hands out a fresh *sessionMockInput — the caller
 // gets the underlying manager back too, for tests that need to inspect
@@ -214,6 +240,7 @@ func newSessionTestServer() (*gin.Engine, *session.Manager) {
 		sessionMockEncoder{},
 		func() tracking.TrackerFactory { return sessionMockTrackerFactory },
 		newSessionMockGalleryRepo(),
+		sessionMockCollectionRepo{},
 	)
 
 	gin.SetMode(gin.TestMode)

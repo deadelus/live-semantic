@@ -121,14 +121,18 @@ func (gc *galleryController) thumbnail(c *gin.Context) {
 	c.Data(http.StatusOK, "image/jpeg", data)
 }
 
-// update handles PATCH /api/v1/gallery/:name — JSON body with either or
-// both of "new_name" (rename) and "enabled" (toggle), e.g.
-// {"enabled": false} or {"new_name": "autre_nom"}. Applied in that order
-// (rename first) so a single call can do both.
+// update handles PATCH /api/v1/gallery/:name — JSON body with any of
+// "new_name" (rename), "enabled" (toggle), "coco_class" (link/unlink to a
+// COCO class — added 2026-08-13, § Bibliothèque screen 4c; an empty
+// string clears an existing link, see uc.SetGalleryCocoClass), e.g.
+// {"enabled": false} or {"coco_class": "person"} or {"coco_class": ""}.
+// Applied in that order (rename, then enabled, then coco_class) so a
+// single call can do all three.
 func (gc *galleryController) update(c *gin.Context) {
 	var body struct {
-		NewName *string `json:"new_name"`
-		Enabled *bool   `json:"enabled"`
+		NewName   *string `json:"new_name"`
+		Enabled   *bool   `json:"enabled"`
+		CocoClass *string `json:"coco_class"`
 	}
 	if err := c.ShouldBindJSON(&body); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
@@ -145,6 +149,12 @@ func (gc *galleryController) update(c *gin.Context) {
 	}
 	if body.Enabled != nil {
 		if err := gc.useCases.SetGalleryReferenceEnabled(c.Request.Context(), name, *body.Enabled); err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+			return
+		}
+	}
+	if body.CocoClass != nil {
+		if err := gc.useCases.SetGalleryCocoClass(c.Request.Context(), name, *body.CocoClass); err != nil {
 			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 			return
 		}

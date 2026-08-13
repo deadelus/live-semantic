@@ -186,6 +186,14 @@ func (g *mockGalleryRepo) SetEnabled(name string, enabled bool) error {
 	e.Enabled = enabled
 	return nil
 }
+func (g *mockGalleryRepo) SetCocoClass(name, cocoClass string) error {
+	e, ok := g.entries[name]
+	if !ok {
+		return fmt.Errorf("gallery entry %q not found", name)
+	}
+	e.CocoClass = cocoClass
+	return nil
+}
 func (g *mockGalleryRepo) Get(name string) ([]entities.Embedding, bool) {
 	e, ok := g.entries[name]
 	if !ok || !e.Enabled || len(e.Images) == 0 {
@@ -197,6 +205,25 @@ func (g *mockGalleryRepo) Get(name string) ([]entities.Embedding, bool) {
 	}
 	return out, true
 }
+
+// mockCollectionRepo is a minimal storage.CollectionStorage test double —
+// same rationale as mockGalleryRepo just above (package-local, not
+// implementation/*). Session tests don't exercise Collections behavior
+// directly, just need a non-nil value to satisfy NewManager.
+type mockCollectionRepo struct{}
+
+var _ storage.CollectionStorage = (*mockCollectionRepo)(nil)
+
+func (mockCollectionRepo) Create(name string, tags []string) error       { return nil }
+func (mockCollectionRepo) Delete(name string)                            {}
+func (mockCollectionRepo) Rename(oldName, newName string) error          { return nil }
+func (mockCollectionRepo) SetTags(name string, tags []string) error      { return nil }
+func (mockCollectionRepo) AddTerm(collectionName, termName string) error { return nil }
+func (mockCollectionRepo) RemoveTerm(collectionName, termName string)    {}
+func (mockCollectionRepo) Get(name string) (storage.Collection, bool) {
+	return storage.Collection{}, false
+}
+func (mockCollectionRepo) List() []storage.Collection { return nil }
 func (g *mockGalleryRepo) Thumbnail(name, imageID string) ([]byte, bool) {
 	e, ok := g.entries[name]
 	if !ok {
@@ -234,6 +261,7 @@ func newTestManager(mi *mockInput) *Manager {
 		// doc comment); a fresh one per test is fine here, TestGallery
 		// SharedAcrossSessions passes an explicit shared one instead.
 		newMockGalleryRepo(),
+		mockCollectionRepo{},
 	)
 }
 
@@ -273,7 +301,7 @@ func TestCreateSession_InputFactoryErrorPropagates(t *testing.T) {
 	m := NewManager(
 		func(Source) (streamer.InputStream, error) { return nil, boom },
 		func() streamer.OutputStream { return mockOutput{} },
-		noopLogger{}, mockNotifier{}, mockDetector{}, mockEncoder{}, func() tracking.TrackerFactory { return mockTrackerFactory }, nil,
+		noopLogger{}, mockNotifier{}, mockDetector{}, mockEncoder{}, func() tracking.TrackerFactory { return mockTrackerFactory }, nil, nil,
 	)
 
 	if _, err := m.CreateSession(context.Background(), Source{Kind: "local"}); !errors.Is(err, boom) {
@@ -488,7 +516,7 @@ func TestGallerySharedAcrossSessions(t *testing.T) {
 	m := NewManager(
 		func(Source) (streamer.InputStream, error) { return newMockInput(), nil },
 		func() streamer.OutputStream { return mockOutput{} },
-		noopLogger{}, mockNotifier{}, mockDetector{}, mockEncoder{}, func() tracking.TrackerFactory { return mockTrackerFactory }, galleryRepo,
+		noopLogger{}, mockNotifier{}, mockDetector{}, mockEncoder{}, func() tracking.TrackerFactory { return mockTrackerFactory }, galleryRepo, mockCollectionRepo{},
 	)
 
 	infoA, _ := m.CreateSession(context.Background(), Source{Kind: "local"})

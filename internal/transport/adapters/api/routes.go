@@ -45,6 +45,16 @@ func (s *Server) setupRoutes() {
 		v1.DELETE("/gallery/:name/images/:imageID", s.gallery.removeImage)
 		v1.GET("/gallery/:name/images/:imageID", s.gallery.thumbnail)
 
+		// Bibliothèque — Collections CRUD (docs/gui/design-brief.md §
+		// Bibliothèque, 2026-08-13) — see collections.go. Grouping only,
+		// references Terms above by name (:term), never owns their data.
+		v1.POST("/collections", s.collections.add)
+		v1.GET("/collections", s.collections.list)
+		v1.DELETE("/collections/:name", s.collections.remove)
+		v1.PATCH("/collections/:name", s.collections.update)
+		v1.POST("/collections/:name/terms/:term", s.collections.addTerm)
+		v1.DELETE("/collections/:name/terms/:term", s.collections.removeTerm)
+
 		// Multi-flux session CRUD — see sessions.go.
 		v1.POST("/sessions", s.sessions.create)
 		v1.GET("/sessions", s.sessions.list)

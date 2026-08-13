@@ -53,6 +53,17 @@ type Gallery struct {
 	Name    string
 	Enabled bool
 	Images  []GalleryImage
+	// CocoClass is an optional link to one of YOLO11s's 80 native COCO
+	// classes (empty string means unlinked) — restricts this Term's
+	// matching to boxes YOLO already classified into that class instead
+	// of comparing against every detected box, per the Bibliothèque model
+	// fixed in the 2026-08-13 mockups (docs/gui/design-brief.md §
+	// Bibliothèque, screens 4c/4d). Business validation (must be one of
+	// the 80 real class names) is the caller's job
+	// (application/uc.UseCase.SetGalleryCocoClass) — same division as the
+	// rest of this port, GalleryStorage itself doesn't know what a COCO
+	// class is.
+	CocoClass string
 }
 
 // GalleryStorage persists named, multi-image CLIP reference entries.
@@ -91,6 +102,12 @@ type GalleryStorage interface {
 	// SetEnabled toggles an entry (every image at once) without deleting
 	// it. Errors if name doesn't exist.
 	SetEnabled(name string, enabled bool) error
+	// SetCocoClass sets or clears (cocoClass == "") name's linked COCO
+	// class — see Gallery.CocoClass's doc comment. Errors if name doesn't
+	// exist. Doesn't validate cocoClass is actually one of the 80 real
+	// class names — that's the caller's job (see this interface's own doc
+	// comment on business validation living outside this port).
+	SetCocoClass(name, cocoClass string) error
 	// Get returns every embedding of name's images — ok is false if the
 	// entry doesn't exist, is disabled, or has zero images (a disabled or
 	// image-less entry must behave as absent to a filter-term lookup).
