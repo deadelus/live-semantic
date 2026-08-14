@@ -121,29 +121,126 @@ export function SourcesList({ onOpen }: SourcesListProps) {
     return sessions.filter((s) => sourceLabel(s).toLowerCase().includes(q))
   }, [sessions, search])
 
+  const [addTab, setAddTab] = useState<'local' | 'file' | 'webrtc'>('local')
+  const [fileURI, setFileURI] = useState('')
+  const [fileBusy, setFileBusy] = useState(false)
+  const [webrtcBusy, setWebrtcBusy] = useState(false)
+
+  // handleAddFile creates a "file" session — covers a local video file
+  // path AND rtsp://.../http(s):// URLs, resolved identically by gocv
+  // (input.FileInput's own doc comment): no separate RTSP tab needed.
+  // Backend support for this already existed (sessionInputFactory, since
+  // 2026-08-11) — this was purely a missing frontend trigger, no backend
+  // work needed.
+  const handleAddFile = async () => {
+    const uri = fileURI.trim()
+    if (!uri) return
+    setFileBusy(true)
+    try {
+      const info = await createSession({ kind: 'file', uri })
+      setSessions((prev) => [...prev, info])
+      setFileURI('')
+    } catch {
+      pushError("Impossible d'ajouter cette source (chemin/URL invalide ?).")
+    } finally {
+      setFileBusy(false)
+    }
+  }
+
+  // handleAddWebRTC only *creates* the session (Source.Kind: "webrtc") —
+  // the actual RTCPeerConnection/getUserMedia negotiation
+  // (WebRTCCamera.ts) happens once the user opens it and clicks
+  // "Démarrer" (LiveView.tsx), same lazy pattern already used for
+  // "browser" kind sessions. Backend added 2026-08-13 (branch
+  // feat/gui-webrtc-ingestion), this was the missing frontend trigger.
+  const handleAddWebRTC = async () => {
+    setWebrtcBusy(true)
+    try {
+      const info = await createSession({ kind: 'webrtc' })
+      setSessions((prev) => [...prev, info])
+    } catch {
+      pushError("Impossible d'ajouter cette source WebRTC.")
+    } finally {
+      setWebrtcBusy(false)
+    }
+  }
+
   return (
     <div className="ls-sources">
       <div className="ls-sources__devices">
         <div className="ls-sources__devices-header">
           <h2>+ Ajouter une source</h2>
-          <Button variant="discrete" onClick={refreshDevices} disabled={devicesLoading}>
-            {devicesLoading ? 'Scan…' : '🔄 Actualiser'}
-          </Button>
+          {addTab === 'local' && (
+            <Button variant="discrete" onClick={refreshDevices} disabled={devicesLoading}>
+              {devicesLoading ? 'Scan…' : '🔄 Actualiser'}
+            </Button>
+          )}
         </div>
-        {devices.length === 0 ? (
-          <p className="ls-muted">Aucune caméra détectée.</p>
-        ) : (
-          <div className="ls-sources__device-list">
-            {devices.map((d) => (
-              <Button
-                key={d.index}
-                variant="primary"
-                onClick={() => handleAdd(d.index)}
-                disabled={d.busy || busyIndex === d.index}
-              >
-                {d.busy ? `Caméra ${d.index} (occupée)` : `+ Caméra ${d.index}`}
-              </Button>
-            ))}
+
+        <div className="ls-sources__add-tabs">
+          <button
+            className={`ls-sources__add-tab ${addTab === 'local' ? 'ls-sources__add-tab--active' : ''}`}
+            onClick={() => setAddTab('local')}
+          >
+            Caméra locale
+          </button>
+          <button
+            className={`ls-sources__add-tab ${addTab === 'file' ? 'ls-sources__add-tab--active' : ''}`}
+            onClick={() => setAddTab('file')}
+          >
+            Fichier / RTSP / HTTP
+          </button>
+          <button
+            className={`ls-sources__add-tab ${addTab === 'webrtc' ? 'ls-sources__add-tab--active' : ''}`}
+            onClick={() => setAddTab('webrtc')}
+          >
+            Caméra WebRTC
+          </button>
+        </div>
+
+        {addTab === 'local' &&
+          (devices.length === 0 ? (
+            <p className="ls-muted">Aucune caméra détectée.</p>
+          ) : (
+            <div className="ls-sources__device-list">
+              {devices.map((d) => (
+                <Button
+                  key={d.index}
+                  variant="primary"
+                  onClick={() => handleAdd(d.index)}
+                  disabled={d.busy || busyIndex === d.index}
+                >
+                  {d.busy ? `Caméra ${d.index} (occupée)` : `+ Caméra ${d.index}`}
+                </Button>
+              ))}
+            </div>
+          ))}
+
+        {addTab === 'file' && (
+          <div className="ls-sources__add-form">
+            <input
+              className="ls-input"
+              type="text"
+              value={fileURI}
+              onChange={(e) => setFileURI(e.target.value)}
+              onKeyDown={(e) => e.key === 'Enter' && handleAddFile()}
+              placeholder="/chemin/vers/video.mp4, rtsp://…, http://…"
+            />
+            <Button variant="primary" onClick={handleAddFile} disabled={fileBusy || !fileURI.trim()}>
+              + Ajouter
+            </Button>
+          </div>
+        )}
+
+        {addTab === 'webrtc' && (
+          <div className="ls-sources__add-form">
+            <p className="ls-muted">
+              Négociation WebRTC sans serveur TURN — fonctionne sur le même réseau local, pas
+              forcément derrière un NAT distant.
+            </p>
+            <Button variant="primary" onClick={handleAddWebRTC} disabled={webrtcBusy}>
+              + Ajouter une caméra WebRTC
+            </Button>
           </div>
         )}
       </div>

@@ -28,6 +28,42 @@
   gap: 8px;
 }
 
+.ls-sources__add-tabs {
+  display: flex;
+  gap: 4px;
+  margin-bottom: 4px;
+}
+
+.ls-sources__add-tab {
+  padding: 5px 12px;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-md);
+  background: none;
+  color: var(--text-tertiary);
+  font-family: var(--font-sans);
+  font-size: 11.5px;
+  cursor: pointer;
+}
+
+.ls-sources__add-tab--active {
+  background: rgba(77, 158, 248, 0.18);
+  border-color: rgba(77, 158, 248, 0.4);
+  color: var(--color-accent-text);
+  font-weight: 600;
+}
+
+.ls-sources__add-form {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.ls-sources__add-form .ls-input {
+  flex: 1;
+  max-width: 420px;
+}
+
 /* Toolbar (docs/gui/mockups/ screen 1b's own sub-bar: view toggle, count,
    search) — sits above the table, below the "add a source" block. */
 .ls-sources__toolbar {

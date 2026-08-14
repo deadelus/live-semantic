@@ -14,6 +14,7 @@ import {
 } from './api'
 import { VideoStream, type NormalizedRect } from './VideoStream'
 import { BrowserCamera } from './BrowserCamera'
+import { WebRTCCamera } from './WebRTCCamera'
 import { Button } from './components/Button'
 import { colorForID } from './components/VideoOverlayBox'
 import type { OverlayBox } from './components/VideoOverlayBox'
@@ -52,7 +53,12 @@ export function LiveView({ session, onStatusChange }: LiveViewProps) {
   // genuinely new failure (message changed) raises a new toast.
   const lastToastedError = useRef<string | null>(session.error ?? null)
 
+  // browserCamera (JPEG-over-WS) and webrtcCamera (real WebRTC) are
+  // mutually exclusive — session.source.kind fixes which one a given
+  // session actually uses (decided at createSession time, no "change
+  // kind" endpoint), each ref only ever gets populated for its own kind.
   const browserCamera = useRef<BrowserCamera | null>(null)
+  const webrtcCamera = useRef<WebRTCCamera | null>(null)
   const { frameURL, boxes, connected } = useVideoStream(session.id)
 
   useEffect(() => {
@@ -120,18 +126,17 @@ export function LiveView({ session, onStatusChange }: LiveViewProps) {
   // at, no new frames arrive until this screen is reopened). Solving
   // that for real needs the source to keep capturing off-screen, out of
   // scope for this slice.
-  useEffect(() => {
-    return () => {
-      browserCamera.current?.stop()
-      browserCamera.current = null
-    }
-  }, [])
+  const stopClientCapture = () => {
+    browserCamera.current?.stop()
+    browserCamera.current = null
+    webrtcCamera.current?.stop()
+    webrtcCamera.current = null
+  }
+
+  useEffect(() => stopClientCapture, [])
 
   useEffect(() => {
-    if (!running) {
-      browserCamera.current?.stop()
-      browserCamera.current = null
-    }
+    if (!running) stopClientCapture()
   }, [running])
 
   const handleStart = async () => {
@@ -141,12 +146,15 @@ export function LiveView({ session, onStatusChange }: LiveViewProps) {
         const cam = new BrowserCamera()
         await cam.start(`/ws/sessions/${session.id}/ingest`)
         browserCamera.current = cam
+      } else if (session.source.kind === 'webrtc' && !webrtcCamera.current) {
+        const cam = new WebRTCCamera()
+        await cam.start(session.id)
+        webrtcCamera.current = cam
       }
       await startSessionRecognition(session.id, filter)
       setRunning(true)
     } catch {
-      browserCamera.current?.stop()
-      browserCamera.current = null
+      stopClientCapture()
       pushError('Impossible de démarrer la reconnaissance.')
     } finally {
       setBusy(false)
