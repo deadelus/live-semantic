@@ -160,6 +160,22 @@ export function rewindImageURL(sessionId: string, offsetMs: number): string {
   return `/api/v1/sessions/${sessionId}/rewind/image?offset_ms=${Math.round(offsetMs)}`
 }
 
+// Journal des événements (docs/gui/mockups/ screen 1b's bottom drawer,
+// backend added 2026-08-14) — aggregated across every session sharing
+// the backend's journal.Journal instance, newest first.
+export interface JournalEntry {
+  timestampMs: number
+  sessionId: string
+  type: 'TrackEntered' | 'TrackMatched' | 'TrackLost'
+  trackId: string
+  class: string
+  score?: number
+}
+
+export function listJournal(): Promise<{ entries: JournalEntry[] }> {
+  return fetch('/api/v1/journal').then((res) => parseJSONOrThrow<{ entries: JournalEntry[] }>(res))
+}
+
 export function listDevices(): Promise<{ devices: DeviceInfo[] }> {
   return fetch('/api/v1/devices').then((res) => parseJSONOrThrow<{ devices: DeviceInfo[] }>(res))
 }

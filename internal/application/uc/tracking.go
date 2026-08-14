@@ -11,6 +11,7 @@ import (
 
 	"live-semantic/internal/application/dto"
 	"live-semantic/internal/domain/entities"
+	"live-semantic/internal/infrastructure/journal"
 	"live-semantic/internal/infrastructure/tracking"
 )
 
@@ -1037,6 +1038,22 @@ func (m *trackManager) emit(obj *trackedObject, evt *entities.TrackEvent, req dt
 		"class": evt.Track.Class,
 		"state": evt.Track.State.String(),
 	})
+
+	// Unconditional (every event type, no debounce, no filter
+	// requirement) — deliberately not the same gate as the
+	// AlertSender path below, see journal.Journal's own doc comment for
+	// why the two contracts differ. Nil-checked: journal is optional
+	// (CLI/interactive mode has no REST journal endpoint reading it).
+	if m.uc.journal != nil {
+		m.uc.journal.Record(journal.Entry{
+			Timestamp: time.Now(),
+			SessionID: m.uc.sessionID,
+			Type:      evt.Type.String(),
+			TrackID:   evt.Track.ID,
+			Class:     evt.Track.Class,
+			Score:     evt.Score,
+		})
+	}
 
 	if evt.Type == entities.EventTrackLost {
 		return

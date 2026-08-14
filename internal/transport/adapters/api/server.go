@@ -33,6 +33,7 @@ type Server struct {
 	collections   *collectionsController
 	sessions      *sessionController
 	devices       *devicesController
+	journal       *journalController
 }
 
 // NewServer creates the unified server. broadcaster receives every
@@ -64,6 +65,7 @@ func NewServer(useCases uc.UseCases, broadcaster FrameBroadcaster, frameReceiver
 		collections:   newCollectionsController(useCases, logger),
 		sessions:      newSessionController(sessionManager, logger),
 		devices:       newDevicesController(sessionManager),
+		journal:       newJournalController(sessionManager),
 	}
 
 	server.setupRoutes()

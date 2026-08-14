@@ -262,6 +262,7 @@ func newTestManager(mi *mockInput) *Manager {
 		// SharedAcrossSessions passes an explicit shared one instead.
 		newMockGalleryRepo(),
 		mockCollectionRepo{},
+		nil,
 	)
 }
 
@@ -301,7 +302,7 @@ func TestCreateSession_InputFactoryErrorPropagates(t *testing.T) {
 	m := NewManager(
 		func(Source) (streamer.InputStream, error) { return nil, boom },
 		func() streamer.OutputStream { return mockOutput{} },
-		noopLogger{}, mockNotifier{}, mockDetector{}, mockEncoder{}, func() tracking.TrackerFactory { return mockTrackerFactory }, nil, nil,
+		noopLogger{}, mockNotifier{}, mockDetector{}, mockEncoder{}, func() tracking.TrackerFactory { return mockTrackerFactory }, nil, nil, nil,
 	)
 
 	if _, err := m.CreateSession(context.Background(), Source{Kind: "local"}); !errors.Is(err, boom) {
@@ -516,7 +517,7 @@ func TestGallerySharedAcrossSessions(t *testing.T) {
 	m := NewManager(
 		func(Source) (streamer.InputStream, error) { return newMockInput(), nil },
 		func() streamer.OutputStream { return mockOutput{} },
-		noopLogger{}, mockNotifier{}, mockDetector{}, mockEncoder{}, func() tracking.TrackerFactory { return mockTrackerFactory }, galleryRepo, mockCollectionRepo{},
+		noopLogger{}, mockNotifier{}, mockDetector{}, mockEncoder{}, func() tracking.TrackerFactory { return mockTrackerFactory }, galleryRepo, mockCollectionRepo{}, nil,
 	)
 
 	infoA, _ := m.CreateSession(context.Background(), Source{Kind: "local"})
