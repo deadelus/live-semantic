@@ -25,6 +25,39 @@ func TestNewRingBufferOutput_AcceptsBoxAwareInner(t *testing.T) {
 	}
 }
 
+// TestRingBufferOutput_ForwardsFrameBroadcaster is a regression test for
+// a real bug found in a live run (2026-08-13, same day this file was
+// added): wrapping WebSocketOutput in RingBufferOutput without
+// forwarding AddClient/RemoveClient made
+// transport/adapters/api.handleSessionWebSocket's own
+// `out.(FrameBroadcaster)` type assertion fail — no WS client ever got
+// registered, so a session processed frames normally server-side but the
+// GUI showed no video at all. This package can't import
+// transport/adapters/api's own FrameBroadcaster interface (wrong
+// dependency direction) to assert against directly, so this test checks
+// the same thing structurally: AddClient/RemoveClient on the wrapper
+// must actually reach the inner WebSocketOutput's client set.
+func TestRingBufferOutput_ForwardsFrameBroadcaster(t *testing.T) {
+	ws := NewWebSocketOutput()
+	rb, err := NewRingBufferOutput(ws, time.Minute)
+	if err != nil {
+		t.Fatalf("NewRingBufferOutput() error = %v", err)
+	}
+
+	serverConn, _, cleanup := newConnPair(t)
+	defer cleanup()
+
+	rb.AddClient(serverConn)
+	if len(ws.clients) != 1 {
+		t.Fatalf("inner WebSocketOutput has %d clients after RingBufferOutput.AddClient(), want 1", len(ws.clients))
+	}
+
+	rb.RemoveClient(serverConn)
+	if len(ws.clients) != 0 {
+		t.Fatalf("inner WebSocketOutput has %d clients after RingBufferOutput.RemoveClient(), want 0", len(ws.clients))
+	}
+}
+
 func TestRingBufferOutput_RewindRange_EmptyIsZero(t *testing.T) {
 	rb, err := NewRingBufferOutput(NewWebSocketOutput(), time.Minute)
 	if err != nil {

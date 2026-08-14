@@ -9,6 +9,8 @@ import (
 
 	"live-semantic/internal/domain/entities"
 	"live-semantic/internal/infrastructure/streamer"
+
+	"github.com/gorilla/websocket"
 )
 
 // jpegQuality mirrors WebSocketOutput's own choice (websocket.go) — same
@@ -47,13 +49,33 @@ const maxEntries = 2000
 // (useVideoStream.ts treats the two message types independently) — not a
 // new source of imprecision.
 type RingBufferOutput struct {
-	inner      streamer.OutputStream
-	innerBoxes streamer.BoxAwareOutputStream
-	maxAge     time.Duration
+	inner        streamer.OutputStream
+	innerBoxes   streamer.BoxAwareOutputStream
+	innerBcaster frameBroadcaster // nil if inner doesn't support it (see AddClient's own doc comment)
+	maxAge       time.Duration
 
 	mu        sync.Mutex
 	entries   []ringEntry
 	lastBoxes []streamer.BoxData
+}
+
+// frameBroadcaster structurally mirrors transport/adapters/api.
+// FrameBroadcaster — duplicated here rather than imported (this package
+// must never import transport/*, wrong dependency direction) so
+// RingBufferOutput can forward AddClient/RemoveClient to inner and, by
+// Go's structural typing, still satisfy transport's own FrameBroadcaster
+// interface without either package knowing about the other's type.
+//
+// Found missing 2026-08-13 the same day this file was added: wrapping
+// WebSocketOutput in RingBufferOutput without this made
+// session.Manager.Output(id) fail transport/adapters/api's own
+// `out.(FrameBroadcaster)` type assertion (handleSessionWebSocket) — no
+// client ever got registered, so a session ran with zero visible video
+// in the GUI despite the backend processing frames normally. Real bug,
+// caught in a live run, not theoretical.
+type frameBroadcaster interface {
+	AddClient(conn *websocket.Conn)
+	RemoveClient(conn *websocket.Conn)
 }
 
 type ringEntry struct {
@@ -83,7 +105,30 @@ func NewRingBufferOutput(inner streamer.OutputStream, maxAge time.Duration) (*Ri
 	if !ok {
 		return nil, fmt.Errorf("output: RingBufferOutput requires a BoxAwareOutputStream inner, got %T", inner)
 	}
-	return &RingBufferOutput{inner: inner, innerBoxes: innerBoxes, maxAge: maxAge}, nil
+	// innerBcaster is allowed to be nil (a plain BoxAwareOutputStream that
+	// isn't also a FrameBroadcaster) — AddClient/RemoveClient just become
+	// no-ops in that case, see their own doc comments. Every real inner
+	// this project constructs (WebSocketOutput) satisfies both, so this
+	// is defensive, not the expected path.
+	innerBcaster, _ := inner.(frameBroadcaster)
+	return &RingBufferOutput{inner: inner, innerBoxes: innerBoxes, innerBcaster: innerBcaster, maxAge: maxAge}, nil
+}
+
+// AddClient forwards to inner's own AddClient — see frameBroadcaster's
+// doc comment for why this exists at all (structural satisfaction of
+// transport/adapters/api.FrameBroadcaster). No-op if inner doesn't
+// support it.
+func (r *RingBufferOutput) AddClient(conn *websocket.Conn) {
+	if r.innerBcaster != nil {
+		r.innerBcaster.AddClient(conn)
+	}
+}
+
+// RemoveClient — see AddClient's doc comment.
+func (r *RingBufferOutput) RemoveClient(conn *websocket.Conn) {
+	if r.innerBcaster != nil {
+		r.innerBcaster.RemoveClient(conn)
+	}
 }
 
 // Initialize — see streamer.OutputStream.
