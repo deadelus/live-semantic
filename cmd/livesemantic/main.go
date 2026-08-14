@@ -7,6 +7,7 @@ import (
 	"live-semantic/internal/application/uc"
 	"live-semantic/internal/implementation/inference/onnx/clip"
 	"live-semantic/internal/implementation/inference/onnx/yolo11s"
+	journalinmemory "live-semantic/internal/implementation/journal/inmemory"
 	lognotifier "live-semantic/internal/implementation/notifier/log-notifier"
 	"live-semantic/internal/implementation/storage/diskgallery"
 	"live-semantic/internal/implementation/streamer/input"
@@ -163,12 +164,23 @@ func main() {
 		return
 	}
 
+	// journalRepo: aggregated multi-flux event log (docs/gui/mockups/
+	// screen 1b "Journal des événements", TODO.md § H1, added
+	// 2026-08-14) — shared across the mono-session UseCase below and
+	// every session.Manager session further down, same sharing rationale
+	// as galleryRepo/collectionRepo: a journal aggregated across sources
+	// is the whole point, not a per-session log. In-memory only (no
+	// backing store yet needed, journal.inmemory's own doc comment) —
+	// unlike the gallery, losing it on restart is an acceptable trade-off
+	// for an operational log.
+	journalRepo := journalinmemory.New()
+
 	// trackerFactoryBuilder() called fresh here — a dedicated
 	// gocvtracker.Factory (and therefore frame cache) for this UseCase,
 	// not shared with session.Manager's own sessions below. See
 	// session.NewManager's doc comment for why sharing one across
 	// concurrently-running sessions used to SIGSEGV.
-	useCases, err := uc.NewUseCase(engine.Context(), engine.Logger(), localInput, browserInput, streamingOutput, notifier, objectDetector, semanticEncoder, trackerFactoryBuilder(), galleryRepo, collectionRepo)
+	useCases, err := uc.NewUseCase(engine.Context(), engine.Logger(), localInput, browserInput, streamingOutput, notifier, objectDetector, semanticEncoder, trackerFactoryBuilder(), galleryRepo, collectionRepo, journalRepo, "mono-session")
 	if err != nil {
 		engine.Logger().Error("Failed to create use cases", err)
 		return
@@ -238,6 +250,7 @@ func main() {
 			trackerFactoryBuilder,
 			galleryRepo,
 			collectionRepo,
+			journalRepo,
 		)
 		startWebServer(engine, useCases, wsOutput, browserInput, sessionManager, serverPort)
 	case *interactive:

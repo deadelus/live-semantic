@@ -451,15 +451,22 @@ aujourd'hui, aucun n'est exposé :
 
 ### 3.5 Historique / alertes
 
-- Log agrégé multi-flux des événements (`TrackEntered`/`TrackMatched`/
-  `TrackLost`), avec timestamp, source, label, score CLIP.
-- Filtre "quelle caméra" sur l'historique.
+- **Fait le 2026-08-14** : log agrégé multi-flux des événements
+  (`TrackEntered`/`TrackMatched`/`TrackLost`), avec timestamp, source,
+  label, score CLIP — `infrastructure/journal.Journal` +
+  `implementation/journal/inmemory` (ring buffer 500 entrées, pas de
+  persistance across-restart, log opérationnel pas donnée utilisateur),
+  `GET /api/v1/journal`, tiroir dans `SourcesList.tsx`. Distinct du
+  chemin `notifier.AlertSender` (filtré/débouncé, pensé pour alerter un
+  humain) — `tracking.go` enregistre maintenant chaque transition sans
+  filtre ni debounce en plus de ce chemin existant, inchangé.
+- Filtre "quelle caméra" sur l'historique — fait (pastilles par source
+  dans le tiroir).
 - Export clip vidéo / capture sur match — n'existe pas, zéro ligne de
   code, à concevoir si demandé.
-- **Point ouvert côté design** (`docs/gui/design-brief.md`) : accessible
-  depuis l'accueil (§ 3.1) ou depuis chaque onglet (§ 3.2), pas encore
-  tranché — pas d'implication backend particulière dans un sens ou
-  l'autre (le log est agrégé multi-flux quoi qu'il arrive).
+- **Point de design tranché** : le tiroir vit uniquement à l'accueil
+  Sources (1b), pas par onglet Vue live — le journal étant déjà agrégé
+  multi-flux, un tiroir dupliqué par onglet n'aurait rien ajouté.
 
 ---
 

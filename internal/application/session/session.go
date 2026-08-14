@@ -24,6 +24,7 @@ import (
 	"live-semantic/internal/application/dto"
 	"live-semantic/internal/application/uc"
 	"live-semantic/internal/infrastructure/inference"
+	"live-semantic/internal/infrastructure/journal"
 	"live-semantic/internal/infrastructure/notifier"
 	"live-semantic/internal/infrastructure/storage"
 	"live-semantic/internal/infrastructure/streamer"
@@ -121,6 +122,7 @@ type Manager struct {
 	trackerFactoryBuilder func() tracking.TrackerFactory
 	gallery               storage.GalleryStorage
 	collections           storage.CollectionStorage
+	journal               journal.Journal
 }
 
 // NewManager creates an empty Manager. galleryRepo is shared across every
@@ -149,6 +151,7 @@ func NewManager(
 	trackerFactoryBuilder func() tracking.TrackerFactory,
 	galleryRepo storage.GalleryStorage,
 	collectionRepo storage.CollectionStorage,
+	journalRepo journal.Journal,
 ) *Manager {
 	return &Manager{
 		sessions:              make(map[string]*entry),
@@ -161,7 +164,16 @@ func NewManager(
 		trackerFactoryBuilder: trackerFactoryBuilder,
 		gallery:               galleryRepo,
 		collections:           collectionRepo,
+		journal:               journalRepo,
 	}
+}
+
+// Journal returns the Manager's shared journal.Journal — callers
+// (transport/adapters/api) read it directly (List()) for the aggregated
+// event log REST endpoint. May be nil if NewManager was given one (CLI
+// tools building a Manager without a journal don't need this feature).
+func (m *Manager) Journal() journal.Journal {
+	return m.journal
 }
 
 // CreateSession builds a new session's input/output via the injected
@@ -171,6 +183,16 @@ func NewManager(
 // input/output/trackManager are per-session. Does not start recognition
 // — see StartRecognition.
 func (m *Manager) CreateSession(ctx context.Context, src Source) (Info, error) {
+	// ID generated up front (not at insertion time, like before
+	// 2026-08-14) — uc.NewUseCase below needs it to tag journal entries
+	// (journal.Entry.SessionID) with the same ID the caller will see in
+	// the returned Info. Monotonic nextID under its own short lock, never
+	// reused even if this CreateSession call later fails.
+	m.mu.Lock()
+	m.nextID++
+	id := fmt.Sprintf("session-%d", m.nextID)
+	m.mu.Unlock()
+
 	in, err := m.inputFactory(src)
 	if err != nil {
 		return Info{}, fmt.Errorf("create input for source %+v: %w", src, err)
@@ -185,7 +207,7 @@ func (m *Manager) CreateSession(ctx context.Context, src Source) (Info, error) {
 	// in Recognize (Source == "" -> localInput) always resolves
 	// to the right thing regardless of what kind of source this actually
 	// is (camera, file/RTSP, or browser ingest).
-	useCases, err := uc.NewUseCase(ctx, m.logger, in, in, out, m.notifier, m.objectDetector, m.semanticEncoder, m.trackerFactoryBuilder(), m.gallery, m.collections)
+	useCases, err := uc.NewUseCase(ctx, m.logger, in, in, out, m.notifier, m.objectDetector, m.semanticEncoder, m.trackerFactoryBuilder(), m.gallery, m.collections, m.journal, id)
 	if err != nil {
 		return Info{}, fmt.Errorf("create use cases: %w", err)
 	}
@@ -194,8 +216,6 @@ func (m *Manager) CreateSession(ctx context.Context, src Source) (Info, error) {
 	close(preClosed)
 
 	m.mu.Lock()
-	m.nextID++
-	id := fmt.Sprintf("session-%d", m.nextID)
 	m.sessions[id] = &entry{source: src, input: in, output: out, useCases: useCases, done: preClosed}
 	m.mu.Unlock()
 

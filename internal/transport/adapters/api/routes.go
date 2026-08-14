@@ -30,6 +30,10 @@ func (s *Server) setupRoutes() {
 		// devices.go for why this is index-probing, not a true enumeration.
 		v1.GET("/devices", s.devices.list)
 
+		// Journal des événements agrégé multi-flux (docs/gui/mockups/ screen
+		// 1b, TODO.md § H1) — voir journal.go.
+		v1.GET("/journal", s.journal.list)
+
 		v1.POST("/recognition/start", s.recognition.start)
 		v1.POST("/recognition/stop", s.recognition.stop)
 		v1.GET("/recognition/status", s.recognition.status)

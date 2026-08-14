@@ -2,11 +2,13 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import {
   createSession,
   listDevices,
+  listJournal,
   listSessions,
   removeSession,
   sourceLabel,
   sourceType,
   type DeviceInfo,
+  type JournalEntry,
   type SessionInfo,
 } from './api'
 import { Button } from './components/Button'
@@ -120,6 +122,48 @@ export function SourcesList({ onOpen }: SourcesListProps) {
     if (!q) return sessions
     return sessions.filter((s) => sourceLabel(s).toLowerCase().includes(q))
   }, [sessions, search])
+
+  // Journal des événements (docs/gui/mockups/ screen 1b's bottom drawer,
+  // backend added 2026-08-14) — polled only while the drawer is open, no
+  // point fetching a log nobody's looking at every 2s in the background.
+  const [journalOpen, setJournalOpen] = useState(false)
+  const [journalEntries, setJournalEntries] = useState<JournalEntry[]>([])
+  const [journalFilter, setJournalFilter] = useState<string | null>(null)
+
+  useEffect(() => {
+    const poll = () => {
+      listJournal()
+        .then((r) => setJournalEntries(r.entries))
+        .catch(() => {
+          /* transient network hiccup — next poll will retry */
+        })
+    }
+    poll() // once on mount regardless — backs the table's "Dernier événement" column
+    if (!journalOpen) return
+    const id = setInterval(poll, 2000) // faster refresh only while the drawer is actually visible
+    return () => clearInterval(id)
+  }, [journalOpen])
+
+  const visibleJournalEntries = journalFilter
+    ? journalEntries.filter((e) => e.sessionId === journalFilter)
+    : journalEntries
+
+  const journalEventColor: Record<JournalEntry['type'], string> = {
+    TrackEntered: 'var(--color-success-text)',
+    TrackMatched: 'var(--color-accent-text)',
+    TrackLost: 'var(--text-faint)',
+  }
+
+  // lastEventFor backs the table's "Dernier événement" column —
+  // journalEntries is already newest-first (journal.Journal.List's own
+  // contract), so the first match per session is the most recent one.
+  const lastEventFor = (sessionId: string): string => {
+    const entry = journalEntries.find((e) => e.sessionId === sessionId)
+    if (!entry) return '—'
+    const secondsAgo = Math.max(0, Math.round((Date.now() - entry.timestampMs) / 1000))
+    const ago = secondsAgo < 60 ? `${secondsAgo}s` : `${Math.round(secondsAgo / 60)}min`
+    return `${entry.type} · il y a ${ago}`
+  }
 
   const [addTab, setAddTab] = useState<'local' | 'file' | 'webrtc'>('local')
   const [fileURI, setFileURI] = useState('')
@@ -264,6 +308,9 @@ export function SourcesList({ onOpen }: SourcesListProps) {
           onChange={(e) => setSearch(e.target.value)}
           placeholder="Rechercher une source…"
         />
+        <Button variant={journalOpen ? 'secondary' : 'discrete'} onClick={() => setJournalOpen((v) => !v)}>
+          Journal{journalEntries.length > 0 ? ` (${journalEntries.length})` : ''}
+        </Button>
       </div>
 
       {visibleSessions.length === 0 ? (
@@ -297,7 +344,7 @@ export function SourcesList({ onOpen }: SourcesListProps) {
                 <span className="ls-sources__mono">{sourceType(s)}</span>
                 <span className="ls-sources__mono">—</span>
                 <span className="ls-sources__filter">{s.filter || '—'}</span>
-                <span className="ls-sources__last">—</span>
+                <span className="ls-sources__last">{lastEventFor(s.id)}</span>
                 <span className="ls-sources__actions">
                   <Button variant="secondary" onClick={() => onOpen(s)}>
                     Ouvrir
@@ -312,6 +359,60 @@ export function SourcesList({ onOpen }: SourcesListProps) {
               </div>
             )
           })}
+        </div>
+      )}
+
+      {journalOpen && (
+        <div className="ls-journal">
+          <div className="ls-journal__header">
+            <span className="ls-journal__title">Journal des événements</span>
+            <div className="ls-journal__pills">
+              <button
+                className={`ls-journal__pill ${journalFilter === null ? 'ls-journal__pill--active' : ''}`}
+                onClick={() => setJournalFilter(null)}
+              >
+                Toutes les sources
+              </button>
+              {sessions.map((s) => (
+                <button
+                  key={s.id}
+                  className={`ls-journal__pill ${journalFilter === s.id ? 'ls-journal__pill--active' : ''}`}
+                  onClick={() => setJournalFilter(s.id)}
+                >
+                  {sourceLabel(s)}
+                </button>
+              ))}
+            </div>
+            <div className="ls-topbar__spacer" />
+            <button className="ls-journal__collapse" onClick={() => setJournalOpen(false)}>
+              Replier ▾
+            </button>
+          </div>
+          {visibleJournalEntries.length === 0 ? (
+            <p className="ls-muted" style={{ padding: '10px 16px' }}>
+              Aucun événement pour l'instant.
+            </p>
+          ) : (
+            <div className="ls-journal__rows">
+              {visibleJournalEntries.slice(0, 100).map((e, i) => (
+                <div key={i} className="ls-journal__row">
+                  <span className="ls-journal__time">
+                    {new Date(e.timestampMs).toLocaleTimeString()}
+                  </span>
+                  <span className="ls-journal__event" style={{ color: journalEventColor[e.type] }}>
+                    {e.type}
+                  </span>
+                  <span className="ls-journal__label">
+                    {e.class || e.trackId}
+                    {e.score ? ` (${(e.score * 100).toFixed(0)}%)` : ''}
+                  </span>
+                  <span className="ls-journal__source">
+                    {sessions.find((s) => s.id === e.sessionId) ? sourceLabel(sessions.find((s) => s.id === e.sessionId)!) : e.sessionId}
+                  </span>
+                </div>
+              ))}
+            </div>
+          )}
         </div>
       )}
     </div>

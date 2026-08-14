@@ -10,6 +10,7 @@ import (
 	"live-semantic/internal/application/dto"
 	"live-semantic/internal/domain"
 	"live-semantic/internal/infrastructure/inference"
+	"live-semantic/internal/infrastructure/journal"
 	"live-semantic/internal/infrastructure/notifier"
 	"live-semantic/internal/infrastructure/storage"
 	"live-semantic/internal/infrastructure/streamer"
@@ -210,6 +211,19 @@ type UseCase struct {
 	// CollectionStorage-backed methods around it. Same shape/rationale as
 	// gallery just above: a port, never a concrete implementation/* type.
 	collections storage.CollectionStorage
+
+	// journal records every Track lifecycle transition, unconditionally
+	// (tracking.go's emit()) — the aggregated multi-flux event log
+	// (docs/gui/mockups/ screen 1b "Journal des événements", added
+	// 2026-08-14). May be nil (CLI/interactive mode, where nothing reads
+	// it) — emit() checks before use, same nil-tolerance as a handful of
+	// other optional collaborators in this codebase.
+	journal journal.Journal
+	// sessionID tags every journal entry this UseCase's tracking loop
+	// records — session.Manager's own "session-N" ID for a multi-flux
+	// session, or a fixed label for the single-session path. Purely a
+	// label, this UseCase never looks it up anywhere.
+	sessionID string
 }
 
 // NewUseCase initializes your use cases with all the necessary
@@ -228,7 +242,12 @@ type UseCase struct {
 // every session should see the same named references, not one gallery
 // each) construct one such Repository and pass the same instance to
 // every NewUseCase call.
-func NewUseCase(ctx context.Context, logger logger.Logger, localInput streamer.InputStream, browserInput streamer.InputStream, streamingOutput streamer.OutputStream, notifier notifier.AlertSender, objectDetector inference.ObjectDetector, semanticEncoder inference.SemanticEncoder, trackerFactory tracking.TrackerFactory, galleryRepo storage.GalleryStorage, collectionRepo storage.CollectionStorage) (UseCases, error) {
+// journalRepo may be nil (CLI/interactive mode — see UseCase.journal's
+// own doc comment) — unlike every other dependency here, it's not
+// required, so no domain.ErrNil* guard exists for it. sessionID labels
+// every journal entry this UseCase's tracking loop records (ignored if
+// journalRepo is nil).
+func NewUseCase(ctx context.Context, logger logger.Logger, localInput streamer.InputStream, browserInput streamer.InputStream, streamingOutput streamer.OutputStream, notifier notifier.AlertSender, objectDetector inference.ObjectDetector, semanticEncoder inference.SemanticEncoder, trackerFactory tracking.TrackerFactory, galleryRepo storage.GalleryStorage, collectionRepo storage.CollectionStorage, journalRepo journal.Journal, sessionID string) (UseCases, error) {
 
 	if ctx == nil {
 		return nil, domain.ErrNilContext
@@ -280,5 +299,7 @@ func NewUseCase(ctx context.Context, logger logger.Logger, localInput streamer.I
 		trackerFactory:  trackerFactory,
 		gallery:         galleryRepo,
 		collections:     collectionRepo,
+		journal:         journalRepo,
+		sessionID:       sessionID,
 	}, nil
 }

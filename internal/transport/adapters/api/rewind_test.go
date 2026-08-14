@@ -63,6 +63,7 @@ func newRewindTestServer(out *rewindMockOutput) (*gin.Engine, *session.Manager) 
 		func() tracking.TrackerFactory { return sessionMockTrackerFactory },
 		newSessionMockGalleryRepo(),
 		sessionMockCollectionRepo{},
+		nil,
 	)
 
 	gin.SetMode(gin.TestMode)
