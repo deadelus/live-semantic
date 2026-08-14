@@ -24,17 +24,15 @@ import './Library.css'
 // PATCH .../gallery/:name's coco_class field.
 //
 // Deliberately NOT built here: the "+ Nouveau Terme" photo-upload modal
-// (screen 4c) — creating a Term requires at least one reference photo
-// (storage.GalleryStorage.AddImage, "un Terme sans photo n'existe pas"),
-// and the only way to produce one today is POST /api/v1/gallery's
-// multipart upload, which needs a source image. The intended real source
-// (clicking/drawing a box on the live video, TODO.md § H1 "Sélection
-// runtime + labellisation") isn't built yet — bolting a bare file-picker
-// onto this screen instead would be a disconnected, throwaway upload
-// flow, not the actual product interaction. This screen therefore
-// manages Terms that already exist (rename, enable/disable, link a COCO
-// class, delete, group into Collections) — full CRUD once a Term exists,
-// just not creation.
+// (screen 4c). Term creation now has a real path (LiveView.tsx, "sélection
+// runtime + labellisation", added 2026-08-13/14 — clicking/drawing a box
+// on the live video crops it client-side and POSTs it) but that's the
+// *live video*, which this screen doesn't have — Library has no camera
+// feed to crop from, so a same-shaped upload flow here would need its own
+// file-picker + crop UI, a second, disconnected way to do the same thing.
+// This screen manages Terms that already exist (rename, enable/disable,
+// link a COCO class, delete, group into Collections) — full CRUD once a
+// Term exists, just not creation from a bare file upload.
 export function Library() {
   const [collections, setCollections] = useState<CollectionEntry[]>([])
   const [terms, setTerms] = useState<GalleryEntry[]>([])
@@ -55,6 +53,7 @@ export function Library() {
   useEffect(reload, []) // eslint-disable-line react-hooks/exhaustive-deps
 
   const selectedCollection = collections.find((c) => c.name === selected) ?? null
+  const termsByName = new Map(terms.map((t) => [t.name, t]))
 
   const handleCreateCollection = async () => {
     const name = newCollectionName.trim()
@@ -168,15 +167,28 @@ export function Library() {
                 className={`ls-library__card ${selected === c.name ? 'ls-library__card--selected' : ''}`}
                 onClick={() => setSelected(selected === c.name ? null : c.name)}
               >
-                <span className="ls-library__card-name">{c.name}</span>
-                <span className="ls-library__card-count">{c.terms.length} Termes</span>
-                <div className="ls-library__tags">
-                  {c.tags.map((t) => (
-                    <span key={t} className="ls-library__tag">
-                      {t}
-                    </span>
-                  ))}
-                </div>
+                <span className="ls-library__card-cover">
+                  {c.terms[0] && termsByName.get(c.terms[0])?.images[0] ? (
+                    <img
+                      className="ls-library__card-cover-img"
+                      src={`/api/v1/gallery/${encodeURIComponent(c.terms[0])}/images/${encodeURIComponent(termsByName.get(c.terms[0])!.images[0].id)}`}
+                      alt=""
+                    />
+                  ) : (
+                    <span className="ls-library__card-cover-icon">▣</span>
+                  )}
+                </span>
+                <span className="ls-library__card-body">
+                  <span className="ls-library__card-name">{c.name}</span>
+                  <span className="ls-library__card-count">{c.terms.length} Termes</span>
+                  <div className="ls-library__tags">
+                    {c.tags.map((t) => (
+                      <span key={t} className="ls-library__tag">
+                        {t}
+                      </span>
+                    ))}
+                  </div>
+                </span>
               </button>
             ))}
           </div>
@@ -204,17 +216,22 @@ export function Library() {
               {selectedCollection.terms.length === 0 ? (
                 <li className="ls-muted">Aucun Terme pour l'instant.</li>
               ) : (
-                selectedCollection.terms.map((t) => (
-                  <li key={t} className="ls-library__term-row">
-                    <span>{t}</span>
-                    <Button
-                      variant="discrete"
-                      onClick={() => handleRemoveTerm(selectedCollection.name, t)}
-                    >
-                      Retirer
-                    </Button>
-                  </li>
-                ))
+                selectedCollection.terms.map((t) => {
+                  const entry = termsByName.get(t)
+                  return (
+                    <li key={t} className="ls-library__term-row">
+                      <TermThumbnail entry={entry} name={t} />
+                      <span className="ls-library__term-name">{t}</span>
+                      {entry?.cocoClass && <span className="ls-library__coco-badge">COCO {entry.cocoClass}</span>}
+                      <Button
+                        variant="discrete"
+                        onClick={() => handleRemoveTerm(selectedCollection.name, t)}
+                      >
+                        Retirer
+                      </Button>
+                    </li>
+                  )
+                })
               )}
             </ul>
 
@@ -241,14 +258,16 @@ export function Library() {
         <h2>Tous les Termes</h2>
         {terms.length === 0 ? (
           <p className="ls-muted">
-            Aucun Terme pour l'instant — un Terme se crée depuis la Vue live en sélectionnant un
-            objet (fonctionnalité pas encore construite, TODO.md § H1 « Sélection runtime »).
+            Aucun Terme pour l'instant — un Terme se crée depuis la Vue live en cliquant sur une
+            box détectée ou en dessinant une région, puis en le nommant.
           </p>
         ) : (
           <ul className="ls-library__term-list ls-library__term-list--full">
             {terms.map((t) => (
               <li key={t.name} className="ls-library__term-row">
+                <TermThumbnail entry={t} name={t.name} />
                 <span className="ls-library__term-name">{t.name}</span>
+                {t.cocoClass && <span className="ls-library__coco-badge">COCO {t.cocoClass}</span>}
                 <span className="ls-library__term-meta">
                   {t.images.length} photo{t.images.length > 1 ? 's' : ''}
                 </span>
@@ -270,5 +289,28 @@ export function Library() {
         )}
       </section>
     </div>
+  )
+}
+
+// TermThumbnail — docs/gui/mockups/ screens 4a-4d all show a Term's first
+// reference photo as a small hatched-placeholder-bordered swatch; this is
+// that swatch, backed by a real GET .../gallery/:name/images/:imageID
+// (the same thumbnail Library's own uploads produce), not a fake
+// placeholder — falls back to the mockup's own hatch pattern (CSS only)
+// if entry is unknown (e.g. a Collection referencing a Term not yet in
+// the loaded terms list) or genuinely has zero images (shouldn't happen,
+// storage.GalleryStorage never keeps an image-less entry, but this
+// component doesn't assume that invariant holds).
+function TermThumbnail({ entry, name }: { entry: GalleryEntry | undefined; name: string }) {
+  const firstImage = entry?.images[0]
+  if (!firstImage) {
+    return <span className="ls-library__thumb ls-library__thumb--placeholder" />
+  }
+  return (
+    <img
+      className="ls-library__thumb"
+      src={`/api/v1/gallery/${encodeURIComponent(name)}/images/${encodeURIComponent(firstImage.id)}`}
+      alt=""
+    />
   )
 }

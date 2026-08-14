@@ -7,11 +7,17 @@
 // it's done first rather than bolted onto a single hardcoded session
 // later.
 
-export type SourceKind = 'local' | 'browser'
+// Mirrors every session.Source.Kind value the backend accepts
+// (sessionInputFactory, cmd/livesemantic/main.go) — "file" and "webrtc"
+// have no session-*creation* UI yet (no file-picker, no RTCPeerConnection
+// client, TODO.md § H1), but a session of either kind can still exist
+// (created via curl, or once a future client wires them up) and this
+// list has to display it without falling back to a raw string.
+export type SourceKind = 'local' | 'browser' | 'file' | 'webrtc'
 
 // Mirrors session.Source (internal/application/session/session.go) —
-// Device only makes sense for "local" (which webcam index), URI only for
-// a future "file"/RTSP kind (not wired in the GUI yet, TODO.md § H1).
+// Device only makes sense for "local" (which webcam index), URI for
+// "file"/RTSP or a future YouTube-via-yt-dlp kind (TODO.md § H1).
 export interface Source {
   kind: SourceKind
   device?: number
@@ -156,6 +162,37 @@ export function rewindImageURL(sessionId: string, offsetMs: number): string {
 
 export function listDevices(): Promise<{ devices: DeviceInfo[] }> {
   return fetch('/api/v1/devices').then((res) => parseJSONOrThrow<{ devices: DeviceInfo[] }>(res))
+}
+
+// sourceLabel/sourceType are shared display helpers — used by both the
+// Sources table (SourcesList.tsx) and the open-session tab (App.tsx), so
+// a session created with a kind neither UI has a creation flow for yet
+// ("file"/"webrtc", see SourceKind's own doc comment) still displays
+// something sensible everywhere instead of only one place handling it.
+export function sourceLabel(s: SessionInfo): string {
+  switch (s.source.kind) {
+    case 'local':
+      return `Caméra ${s.source.device ?? 0}`
+    case 'browser':
+      return 'Caméra du navigateur'
+    case 'webrtc':
+      return 'Caméra WebRTC'
+    case 'file':
+      return s.source.uri ?? 'Fichier / RTSP'
+  }
+}
+
+export function sourceType(s: SessionInfo): string {
+  switch (s.source.kind) {
+    case 'local':
+      return 'Caméra locale'
+    case 'browser':
+      return 'Caméra navigateur'
+    case 'webrtc':
+      return 'WebRTC'
+    case 'file':
+      return 'Fichier / RTSP'
+  }
 }
 
 // --- Bibliothèque — Termes (gallery) + Collections (docs/gui/design-brief.md
