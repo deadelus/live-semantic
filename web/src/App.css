@@ -62,6 +62,42 @@
   font-weight: 600;
 }
 
+/* Open session as a tab (docs/gui/mockups/ screen 1c's own top-bar tab:
+   a live-status dot + name + ×) — not a separate sub-bar below the top
+   bar like this app used to render (2026-08-14 fidelity pass). */
+.ls-topbar__tab--session {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+}
+
+.ls-topbar__session-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--color-warning);
+  flex: none;
+}
+
+.ls-topbar__session-dot--live {
+  background: var(--color-success);
+  animation: ls-pulse 2s infinite;
+}
+
+.ls-topbar__session-dot--error {
+  background: var(--color-danger);
+}
+
+.ls-topbar__tab-close {
+  color: var(--text-faint);
+  cursor: pointer;
+  padding: 0 2px;
+}
+
+.ls-topbar__tab-close:hover {
+  color: var(--text-primary);
+}
+
 .ls-topbar__spacer {
   flex: 1;
 }
@@ -74,70 +110,111 @@
   padding: 12px;
 }
 
-.ls-subbar {
+/* Transport bar (docs/gui/mockups/ screen 1c) — timeline + playback
+   controls, sits below the video, above nothing (no separate sub-bar
+   above the video anymore, see .ls-topbar__tab--session's own comment). */
+.ls-transport {
   flex: none;
-  height: 38px;
+  margin: 0 12px 12px;
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  padding: 10px 14px;
   display: flex;
-  align-items: center;
-  gap: 12px;
-  padding: 0 14px;
-  background: var(--bg-panel);
-  border-bottom: 1px solid var(--border);
+  flex-direction: column;
+  gap: 8px;
 }
 
-.ls-back {
-  background: none;
-  border: none;
-  color: var(--text-tertiary);
-  font-family: var(--font-sans);
-  font-size: 12.5px;
-  font-weight: 600;
-  cursor: pointer;
-  padding: 4px 6px;
+.ls-transport__timeline {
+  position: relative;
+  height: 8px;
+  border-radius: 4px;
+  background: var(--border);
 }
 
-.ls-back:hover {
-  color: var(--text-primary);
+.ls-transport__timeline-fill {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  right: 0;
+  border-radius: 4px;
+  background: rgba(77, 158, 248, 0.25);
 }
 
-.ls-subbar__label {
+.ls-transport__timeline-marker {
+  position: absolute;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  width: 3px;
+  height: 14px;
+  border-radius: 2px;
+  background: var(--color-accent);
+}
+
+.ls-transport__timeline-labels {
+  display: flex;
+  justify-content: space-between;
   font-family: var(--font-mono);
-  font-size: 12px;
-  color: var(--text-tertiary);
+  font-size: 9.5px;
+  color: var(--text-faint);
+  margin-top: 2px;
 }
 
-.ls-rewind-bar {
-  flex: none;
+.ls-transport__controls {
   display: flex;
   align-items: center;
-  gap: 12px;
-  height: 34px;
-  padding: 0 14px;
-  background: var(--bg-drawer);
-  border-bottom: 1px solid var(--border);
+  gap: 8px;
 }
 
-.ls-rewind-bar__slider {
+.ls-transport__live-pill {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 12px;
+  border-radius: var(--radius-md);
+  background: rgba(46, 194, 126, 0.14);
+  color: var(--color-success-text);
+  font-weight: 700;
+  font-size: 11px;
+}
+
+.ls-transport__live-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--color-success);
+  display: inline-block;
+  animation: ls-pulse 1.6s infinite;
+}
+
+.ls-transport__buffer {
+  font-size: 11.5px;
+  color: var(--text-quaternary);
+}
+
+.ls-transport__buffer-value {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--text-secondary);
+  margin-left: 6px;
+}
+
+.ls-video-column {
   flex: 1;
-  accent-color: var(--color-purple);
-}
-
-.ls-rewind-bar__label {
-  font-family: var(--font-mono);
-  font-size: 10.5px;
-  color: var(--text-tertiary);
-  white-space: nowrap;
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
 }
 
 .ls-video-wrap {
   position: relative;
   flex: 1;
   display: flex;
-  min-width: 0;
+  min-height: 0;
 }
 
 .ls-video-wrap .ls-video {
-  flex: 1;
+  margin: 12px 12px 0;
 }
 
 .ls-label-form {
@@ -241,6 +318,94 @@
 
 .ls-detections__label {
   color: var(--text-secondary);
+}
+
+/* Filtres sémantiques (docs/gui/mockups/ screen 1c) — chip list read-only
+   view of the backend's single filter string (dto.RecognitionRequest.
+   Filter is one comma-separated string, not structured per-term data
+   yet — docs/gui/spec.md § 3.3 notes this needs a transport change
+   before a real editable-chip UI is possible; this renders what's there
+   without inventing per-term thresholds/scores the backend doesn't
+   expose). The raw text input right below remains the actual editing
+   surface. */
+.ls-filter-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.ls-filter-chip {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 10px;
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+
+.ls-filter-chip__dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 3px;
+  flex: none;
+}
+
+/* Galerie de références, inline in the Vue live right panel (screen 1c —
+   distinct from the standalone Bibliothèque tab, docs/gui/design-brief.md
+   § Bibliothèque: this is the quick-glance/toggle view while watching a
+   stream, the Bibliothèque tab is where Collections/full CRUD live). */
+.ls-panel-gallery {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+
+.ls-panel-gallery__row {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  padding: 4px 8px;
+  background: var(--bg-card);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+}
+
+.ls-panel-gallery__thumb {
+  width: 26px;
+  height: 26px;
+  border-radius: 5px;
+  background: repeating-linear-gradient(135deg, var(--video-hatch-1) 0 6px, var(--video-hatch-2) 6px 12px);
+  border: 2px solid var(--color-purple);
+  flex: none;
+  object-fit: cover;
+}
+
+.ls-panel-gallery__label {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.ls-panel-gallery__name {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-primary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.ls-panel-gallery__meta {
+  font-family: var(--font-mono);
+  font-size: 9.5px;
+  color: var(--text-faint);
 }
 
 .ls-panel__section--advanced {

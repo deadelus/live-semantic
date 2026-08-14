@@ -4,19 +4,30 @@ import { LiveView } from './LiveView'
 import { Library } from './Library'
 import { ThemeToggle } from './components/ThemeToggle'
 import { ToastProvider } from './toast/ToastProvider'
-import type { SessionInfo } from './api'
+import { sourceLabel, type SessionInfo } from './api'
 import './App.css'
 
 type Tab = 'sources' | 'library'
 
-// Top-level view router — two permanent tabs (Sources / Bibliothèque,
-// docs/gui/mockups/ screens 4a's own top-bar tab pattern), plus the live
-// view (1c/1f) which temporarily replaces whichever tab is active when a
-// source is opened, back button returns to it. No react-router: three
-// screens still don't justify the dependency (no deep-linking need has
-// come up), revisit if that changes. Session lifecycle owned entirely by
-// SourcesList (create/list/remove) — App.tsx only tracks which one is
-// currently open, LiveView never creates or deletes a session itself.
+// Live-session status for the tab pill's dot (docs/gui/mockups/ screen
+// 1c's own top-bar tab: a small dot, pulsing green while connected,
+// steady amber otherwise — color/pulse state, not a full StatusBadge,
+// that lives in the tab itself). Lifted up from LiveView via
+// onStatusChange since the mockup renders the open session as a *tab in
+// this same top bar*, not a separate sub-bar below it (2026-08-14
+// fidelity pass — LiveView used to render its own full-width status row,
+// removed in favor of matching the mockup's actual structure).
+interface LiveStatus {
+  connected: boolean
+  hasError: boolean
+}
+
+// Top-level view router — three tabs in one row, exactly the mockup's own
+// pattern (screen 1c's top bar: "Sources" + the currently open source as
+// a pill tab with a live status dot + name + ×, screen 4a's "Sources /
+// Bibliothèque" pair) — not three independent "screens" the rest of the
+// app pretends don't share a bar. No react-router: still just a handful
+// of tabs, no deep-linking need has come up.
 //
 // ToastProvider wraps everything once here (2026-08-13) so every screen
 // can raise a clean error toast without knowing about each other —
@@ -25,11 +36,14 @@ type Tab = 'sources' | 'library'
 function App() {
   const [tab, setTab] = useState<Tab>('sources')
   const [activeSession, setActiveSession] = useState<SessionInfo | null>(null)
+  const [liveStatus, setLiveStatus] = useState<LiveStatus>({ connected: false, hasError: false })
 
   const openTab = (t: Tab) => {
     setActiveSession(null) // switching tabs always leaves the live view
     setTab(t)
   }
+
+  const closeSession = () => setActiveSession(null)
 
   return (
     <ToastProvider>
@@ -52,13 +66,24 @@ function App() {
             >
               Bibliothèque
             </button>
+            {activeSession && (
+              <span className="ls-topbar__tab ls-topbar__tab--active ls-topbar__tab--session">
+                <span
+                  className={`ls-topbar__session-dot ${liveStatus.hasError ? 'ls-topbar__session-dot--error' : liveStatus.connected ? 'ls-topbar__session-dot--live' : ''}`}
+                />
+                {sourceLabel(activeSession)}
+                <span className="ls-topbar__tab-close" onClick={closeSession}>
+                  ×
+                </span>
+              </span>
+            )}
           </nav>
           <div className="ls-topbar__spacer" />
           <ThemeToggle />
         </header>
 
         {activeSession ? (
-          <LiveView session={activeSession} onBack={() => setActiveSession(null)} />
+          <LiveView session={activeSession} onStatusChange={setLiveStatus} />
         ) : tab === 'sources' ? (
           <SourcesList onOpen={setActiveSession} />
         ) : (

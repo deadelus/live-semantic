@@ -1,14 +1,15 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import {
   createSession,
   listDevices,
   listSessions,
   removeSession,
+  sourceLabel,
+  sourceType,
   type DeviceInfo,
   type SessionInfo,
 } from './api'
 import { Button } from './components/Button'
-import { StatusBadge } from './components/StatusBadge'
 import { useToast } from './toast/ToastProvider'
 import './SourcesList.css'
 
@@ -16,31 +17,32 @@ interface SourcesListProps {
   onOpen: (session: SessionInfo) => void
 }
 
-// Home screen — vue liste (docs/gui/mockups/ screen 1b). The mosaic view
-// (1a/1e) isn't built here: it needs a dedicated low-fps preview WS
-// protocol per tile (docs/gui/spec.md § 3.1) that doesn't exist yet —
-// building it against /ws/sessions/:id's full-rate protocol would waste
-// bandwidth per tile for no reason, not a shortcut worth taking.
+// Home screen — vue liste (docs/gui/mockups/ screen 1b), rebuilt
+// 2026-08-14 as a real table matching the mockup's own grid columns
+// (dot, Source, Type, Définition, Filtres actifs, Dernier événement,
+// Actions). Two columns intentionally show "—", not invented data:
+// "Définition" (resolution) and "Dernier événement" have no backend
+// source yet — session.Info carries neither a frame size nor an
+// aggregated event log (docs/gui/spec.md § 3.5 "Historique/alertes" is
+// still "zéro ligne de code"). Showing a placeholder honestly is better
+// than fabricating a number nobody measured. The mockup's own bottom
+// "Journal des événements" drawer is the same story — not built here for
+// the same reason.
 //
-// Device picker — redesigned 2026-08-13, replacing the earlier "caméra
-// serveur" / "caméra navigateur" dropdown: that let two sources silently
-// fight over the exact same physical webcam with no way to see it coming
-// (the bug behind TODO.md § H1's "Échecs d'input silencieux" fix). Now
-// GET /api/v1/devices lists real local camera indices with a `busy` flag
-// (a running session already claims it) — busy devices are shown
-// disabled instead of letting the user hit that conflict again. Browser
-// camera capture (getUserMedia, api.ts's `Source.kind === 'browser'`)
-// still exists and works server-side (BrowserInput, /ws/sessions/:id/ingest)
-// but isn't exposed here anymore — it solves a different problem (a
-// remote device's own camera, not a local index) that doesn't fit a
-// device picker; revisit as its own entry point if/when that's needed.
+// The mosaic view (1a/1e) isn't built here either: it needs a dedicated
+// low-fps preview WS protocol per tile (docs/gui/spec.md § 3.1) that
+// doesn't exist yet — the toggle below is shown but disabled, not
+// hidden, so the gap is visible rather than silently absent.
 //
-// Both lists poll independently (2s) rather than pushing over WS — no
-// aggregated "changed" event exists server-side for either.
+// Device picker — redesigned 2026-08-13 (see refreshDevices' own doc
+// comment for the polling-frequency bug fixed 2026-08-14): GET
+// /api/v1/devices lists real local camera indices with a `busy` flag (a
+// running session already claims it) — busy devices are shown disabled.
 export function SourcesList({ onOpen }: SourcesListProps) {
   const [sessions, setSessions] = useState<SessionInfo[]>([])
   const [devices, setDevices] = useState<DeviceInfo[]>([])
   const [busyIndex, setBusyIndex] = useState<number | null>(null)
+  const [search, setSearch] = useState('')
   const { pushError } = useToast()
   const toastedErrors = useRef<Record<string, string>>({})
 
@@ -112,11 +114,18 @@ export function SourcesList({ onOpen }: SourcesListProps) {
     }
   }
 
+  const connectedCount = sessions.filter((s) => s.running).length
+  const visibleSessions = useMemo(() => {
+    const q = search.trim().toLowerCase()
+    if (!q) return sessions
+    return sessions.filter((s) => sourceLabel(s).toLowerCase().includes(q))
+  }, [sessions, search])
+
   return (
     <div className="ls-sources">
       <div className="ls-sources__devices">
         <div className="ls-sources__devices-header">
-          <h2>Caméras disponibles</h2>
+          <h2>+ Ajouter une source</h2>
           <Button variant="discrete" onClick={refreshDevices} disabled={devicesLoading}>
             {devicesLoading ? 'Scan…' : '🔄 Actualiser'}
           </Button>
@@ -139,26 +148,74 @@ export function SourcesList({ onOpen }: SourcesListProps) {
         )}
       </div>
 
-      {sessions.length === 0 ? (
-        <p className="ls-muted">Aucune source ajoutée — choisissez une caméra ci-dessus.</p>
+      <div className="ls-sources__toolbar">
+        <div className="ls-sources__view-toggle">
+          <span className="ls-sources__view-toggle-active">Liste</span>
+          <span className="ls-sources__view-toggle-disabled" title="Pas encore disponible — docs/gui/spec.md § 3.1">
+            Mosaïque
+          </span>
+        </div>
+        <span className="ls-sources__count">
+          {sessions.length} source{sessions.length > 1 ? 's' : ''} · {connectedCount} connectée
+          {connectedCount > 1 ? 's' : ''}
+        </span>
+        <div className="ls-topbar__spacer" />
+        <input
+          className="ls-input ls-sources__search"
+          type="text"
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
+          placeholder="Rechercher une source…"
+        />
+      </div>
+
+      {visibleSessions.length === 0 ? (
+        <p className="ls-muted">
+          {sessions.length === 0
+            ? 'Aucune source ajoutée — choisissez une caméra ci-dessus.'
+            : 'Aucune source ne correspond à la recherche.'}
+        </p>
       ) : (
-        <ul className="ls-sources__list">
-          {sessions.map((s) => (
-            <li key={s.id} className="ls-sources__row">
-              <StatusBadge status={s.error ? 'error' : s.running ? 'connected' : 'disconnected'} />
-              <span className="ls-sources__label">Caméra {s.source.device ?? 0}</span>
-              <span className="ls-sources__filter">{s.filter || '—'}</span>
-              <div className="ls-sources__actions">
-                <Button variant="secondary" onClick={() => onOpen(s)}>
-                  Ouvrir
-                </Button>
-                <Button variant="danger" onClick={() => handleRemove(s.id)}>
-                  Supprimer
-                </Button>
+        <div className="ls-sources__table">
+          <div className="ls-sources__row ls-sources__row--header">
+            <span />
+            <span>Source</span>
+            <span>Type</span>
+            <span>Définition</span>
+            <span>Filtres actifs</span>
+            <span>Dernier événement</span>
+            <span className="ls-sources__actions-header">Actions</span>
+          </div>
+          {visibleSessions.map((s) => {
+            const status = s.error ? 'error' : s.running ? 'connected' : 'disconnected'
+            return (
+              <div key={s.id} className="ls-sources__row">
+                <span className={`ls-sources__dot ls-sources__dot--${status}`} />
+                <span className="ls-sources__name">
+                  {sourceLabel(s)}
+                  <span className={`ls-sources__status-text ls-sources__status-text--${status}`}>
+                    {s.error ? 'erreur' : s.running ? 'connecté' : 'déconnecté'}
+                  </span>
+                </span>
+                <span className="ls-sources__mono">{sourceType(s)}</span>
+                <span className="ls-sources__mono">—</span>
+                <span className="ls-sources__filter">{s.filter || '—'}</span>
+                <span className="ls-sources__last">—</span>
+                <span className="ls-sources__actions">
+                  <Button variant="secondary" onClick={() => onOpen(s)}>
+                    Ouvrir
+                  </Button>
+                  <Button variant="discrete" disabled title="Pas encore disponible">
+                    Éditer
+                  </Button>
+                  <Button variant="danger" onClick={() => handleRemove(s.id)}>
+                    Suppr.
+                  </Button>
+                </span>
               </div>
-            </li>
-          ))}
-        </ul>
+            )
+          })}
+        </div>
       )}
     </div>
   )

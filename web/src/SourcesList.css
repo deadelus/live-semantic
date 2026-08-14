@@ -28,39 +28,138 @@
   gap: 8px;
 }
 
-.ls-sources__list {
-  list-style: none;
-  margin: 0;
-  padding: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-}
-
-.ls-sources__row {
+/* Toolbar (docs/gui/mockups/ screen 1b's own sub-bar: view toggle, count,
+   search) — sits above the table, below the "add a source" block. */
+.ls-sources__toolbar {
   display: flex;
   align-items: center;
   gap: 12px;
-  padding: 10px 14px;
-  background: var(--bg-card);
-  border: 1px solid var(--border);
-  border-radius: var(--radius-lg);
+  height: 34px;
+  padding: 0 2px;
 }
 
-.ls-sources__label {
-  font-size: 13px;
-  color: var(--text-primary);
+.ls-sources__view-toggle {
+  display: flex;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-md);
+  overflow: hidden;
+  font-size: 11.5px;
+}
+
+.ls-sources__view-toggle-active {
+  padding: 5px 12px;
+  background: rgba(77, 158, 248, 0.18);
+  color: var(--color-accent-text);
   font-weight: 600;
+}
+
+.ls-sources__view-toggle-disabled {
+  padding: 5px 12px;
+  color: var(--text-faint);
+  cursor: not-allowed;
+}
+
+.ls-sources__count {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--text-tertiary);
+  white-space: nowrap;
+}
+
+.ls-sources__search {
+  width: 220px;
+}
+
+/* Table (docs/gui/mockups/ screen 1b) — CSS grid, one column template
+   shared by the header row and every data row so they always line up. */
+.ls-sources__table {
+  display: flex;
+  flex-direction: column;
+}
+
+.ls-sources__row {
+  display: grid;
+  grid-template-columns: 16px 1.6fr 0.7fr 0.8fr 0.9fr 1.1fr 200px;
+  gap: 12px;
+  align-items: center;
+  padding: 11px 14px;
+  border-bottom: 1px solid var(--border-subtle);
+  font-size: 12.5px;
+}
+
+.ls-sources__row--header {
+  padding: 8px 14px;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  color: var(--text-faint);
+  text-transform: uppercase;
+  border-bottom: 1px solid var(--border);
+}
+
+.ls-sources__dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+}
+
+.ls-sources__dot--connected {
+  background: var(--color-success);
+}
+
+.ls-sources__dot--error {
+  background: var(--color-danger);
+}
+
+.ls-sources__dot--disconnected {
+  background: var(--text-faint);
+}
+
+.ls-sources__name {
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.ls-sources__status-text {
+  font-weight: 400;
+  font-size: 11px;
+  margin-left: 9px;
+}
+
+.ls-sources__status-text--connected {
+  color: var(--color-success-text);
+}
+
+.ls-sources__status-text--error {
+  color: var(--color-danger-text);
+}
+
+.ls-sources__status-text--disconnected {
+  color: var(--text-faint);
+}
+
+.ls-sources__mono {
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  color: var(--text-tertiary);
 }
 
 .ls-sources__filter {
   font-family: var(--font-mono);
   font-size: 12px;
-  color: var(--text-tertiary);
+  color: var(--text-secondary);
+}
+
+.ls-sources__last {
+  color: var(--text-quaternary);
+  font-size: 11.5px;
 }
 
 .ls-sources__actions {
-  margin-left: auto;
   display: flex;
-  gap: 8px;
+  gap: 6px;
+  justify-content: flex-end;
+}
+
+.ls-sources__actions-header {
+  text-align: right;
 }
