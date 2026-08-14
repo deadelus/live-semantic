@@ -4,9 +4,11 @@ import (
 	"bytes"
 	"image/jpeg"
 	"net/http"
+	"strconv"
 	"time"
 
 	"live-semantic/internal/domain/entities"
+	"live-semantic/internal/infrastructure/streamer"
 
 	"github.com/gin-gonic/gin"
 	"github.com/gorilla/websocket"
@@ -19,8 +21,29 @@ import (
 // package directly — main.go wires the concrete type in, satisfying this
 // interface structurally.
 type FrameBroadcaster interface {
-	AddClient(conn *websocket.Conn)
+	AddClient(conn *websocket.Conn, opts streamer.ClientOptions)
 	RemoveClient(conn *websocket.Conn)
+}
+
+// clientOptionsFromQuery parses the mosaic view's own subscription knobs
+// (docs/gui/spec.md § 3.1, added 2026-08-14) — ?fps=1&boxes=false on any
+// of the /ws(/sessions/:id) endpoints below. Missing/invalid values fall
+// back to streamer.DefaultClientOptions() (unlimited FPS, boxes
+// included) — the Vue live tab's own connection never sends these
+// params, so it always gets that default.
+func clientOptionsFromQuery(c *gin.Context) streamer.ClientOptions {
+	opts := streamer.DefaultClientOptions()
+	if raw := c.Query("fps"); raw != "" {
+		if fps, err := strconv.ParseFloat(raw, 64); err == nil && fps >= 0 {
+			opts.FPS = fps
+		}
+	}
+	if raw := c.Query("boxes"); raw != "" {
+		if boxes, err := strconv.ParseBool(raw); err == nil {
+			opts.Boxes = boxes
+		}
+	}
+	return opts
 }
 
 // FrameReceiver accepts frames decoded from a browser's own camera feed
@@ -55,7 +78,7 @@ func (s *Server) handleWebSocket(c *gin.Context) {
 		return
 	}
 
-	s.broadcaster.AddClient(conn)
+	s.broadcaster.AddClient(conn, clientOptionsFromQuery(c))
 	defer s.broadcaster.RemoveClient(conn)
 
 	s.logger.Info("WebSocket client connected", nil)
@@ -142,7 +165,7 @@ func (s *Server) handleSessionWebSocket(c *gin.Context) {
 		return
 	}
 
-	broadcaster.AddClient(conn)
+	broadcaster.AddClient(conn, clientOptionsFromQuery(c))
 	defer broadcaster.RemoveClient(conn)
 
 	s.logger.Info("Session WebSocket client connected", map[string]interface{}{"session": id})

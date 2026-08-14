@@ -82,11 +82,24 @@
   font-size: 11.5px;
 }
 
-.ls-sources__view-toggle-active {
+.ls-sources__view-toggle-active,
+.ls-sources__view-toggle-inactive {
   padding: 5px 12px;
+  border: none;
+  font-family: var(--font-sans);
+  font-size: 11.5px;
+  cursor: pointer;
+}
+
+.ls-sources__view-toggle-active {
   background: rgba(77, 158, 248, 0.18);
   color: var(--color-accent-text);
   font-weight: 600;
+}
+
+.ls-sources__view-toggle-inactive {
+  background: none;
+  color: var(--text-tertiary);
 }
 
 .ls-sources__view-toggle-disabled {

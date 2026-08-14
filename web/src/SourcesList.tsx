@@ -12,6 +12,7 @@ import {
   type SessionInfo,
 } from './api'
 import { Button } from './components/Button'
+import { MosaicView } from './Mosaic'
 import { useToast } from './toast/ToastProvider'
 import './SourcesList.css'
 
@@ -22,19 +23,16 @@ interface SourcesListProps {
 // Home screen — vue liste (docs/gui/mockups/ screen 1b), rebuilt
 // 2026-08-14 as a real table matching the mockup's own grid columns
 // (dot, Source, Type, Définition, Filtres actifs, Dernier événement,
-// Actions). Two columns intentionally show "—", not invented data:
-// "Définition" (resolution) and "Dernier événement" have no backend
-// source yet — session.Info carries neither a frame size nor an
-// aggregated event log (docs/gui/spec.md § 3.5 "Historique/alertes" is
-// still "zéro ligne de code"). Showing a placeholder honestly is better
-// than fabricating a number nobody measured. The mockup's own bottom
-// "Journal des événements" drawer is the same story — not built here for
-// the same reason.
+// Actions). "Définition" (resolution) still shows "—" — session.Info
+// carries no frame-size field, not built here. "Dernier événement" and
+// the Journal drawer below are backed by a real aggregated event log
+// (infrastructure/journal.Journal, GET /api/v1/journal, added
+// 2026-08-14) — see lastEventFor/journalEntries.
 //
-// The mosaic view (1a/1e) isn't built here either: it needs a dedicated
-// low-fps preview WS protocol per tile (docs/gui/spec.md § 3.1) that
-// doesn't exist yet — the toggle below is shown but disabled, not
-// hidden, so the gap is visible rather than silently absent.
+// Vue mosaïque (1a/1e) — also added 2026-08-14 (Mosaic.tsx): each tile
+// is its own WS subscription with server-side-throttled FPS/boxes
+// (useVideoStream's opts, docs/gui/spec.md § 3.1's "abonnement par flux
+// avec des paramètres ajustables", not two hardcoded tiers).
 //
 // Device picker — redesigned 2026-08-13 (see refreshDevices' own doc
 // comment for the polling-frequency bug fixed 2026-08-14): GET
@@ -45,6 +43,7 @@ export function SourcesList({ onOpen }: SourcesListProps) {
   const [devices, setDevices] = useState<DeviceInfo[]>([])
   const [busyIndex, setBusyIndex] = useState<number | null>(null)
   const [search, setSearch] = useState('')
+  const [view, setView] = useState<'list' | 'mosaic'>('list')
   const { pushError } = useToast()
   const toastedErrors = useRef<Record<string, string>>({})
 
@@ -291,10 +290,18 @@ export function SourcesList({ onOpen }: SourcesListProps) {
 
       <div className="ls-sources__toolbar">
         <div className="ls-sources__view-toggle">
-          <span className="ls-sources__view-toggle-active">Liste</span>
-          <span className="ls-sources__view-toggle-disabled" title="Pas encore disponible — docs/gui/spec.md § 3.1">
+          <button
+            className={view === 'list' ? 'ls-sources__view-toggle-active' : 'ls-sources__view-toggle-inactive'}
+            onClick={() => setView('list')}
+          >
+            Liste
+          </button>
+          <button
+            className={view === 'mosaic' ? 'ls-sources__view-toggle-active' : 'ls-sources__view-toggle-inactive'}
+            onClick={() => setView('mosaic')}
+          >
             Mosaïque
-          </span>
+          </button>
         </div>
         <span className="ls-sources__count">
           {sessions.length} source{sessions.length > 1 ? 's' : ''} · {connectedCount} connectée
@@ -313,7 +320,9 @@ export function SourcesList({ onOpen }: SourcesListProps) {
         </Button>
       </div>
 
-      {visibleSessions.length === 0 ? (
+      {view === 'mosaic' ? (
+        <MosaicView sessions={visibleSessions} onOpen={onOpen} />
+      ) : visibleSessions.length === 0 ? (
         <p className="ls-muted">
           {sessions.length === 0
             ? 'Aucune source ajoutée — choisissez une caméra ci-dessus.'
