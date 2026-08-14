@@ -66,18 +66,30 @@ export function SourcesList({ onOpen }: SourcesListProps) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
-  useEffect(() => {
-    const poll = () => {
-      listDevices()
-        .then((r) => setDevices(r.devices))
-        .catch(() => {
-          /* transient network hiccup — next poll will retry */
-        })
-    }
-    poll()
-    const id = setInterval(poll, 2000)
-    return () => clearInterval(id)
-  }, [])
+  const [devicesLoading, setDevicesLoading] = useState(false)
+
+  // Scan once on mount, never on an interval — real bug found 2026-08-14
+  // in a live run: input.ProbeDevices (implementation/streamer/input/
+  // probe.go) *physically opens and closes every non-busy camera index*
+  // (no portable "list connected webcams" API exists, see its own doc
+  // comment) to check availability. Polling GET /api/v1/devices every 2s
+  // like the sessions list above meant every non-busy camera's hardware
+  // LED flickered on/off every 2 seconds, and — worse — a Continuity
+  // Camera (iPhone) index being probed repeatedly kept re-triggering
+  // iOS's "authorize this Mac to use your camera" handoff prompt in a
+  // loop, unprompted by any user action. refreshDevices below is a
+  // manual re-scan (button) instead — same probing cost, but the user
+  // decides when to pay it (e.g. after plugging in a new camera), not a
+  // background timer.
+  const refreshDevices = () => {
+    setDevicesLoading(true)
+    listDevices()
+      .then((r) => setDevices(r.devices))
+      .catch(() => pushError('Impossible de lister les caméras.'))
+      .finally(() => setDevicesLoading(false))
+  }
+
+  useEffect(refreshDevices, []) // eslint-disable-line react-hooks/exhaustive-deps
 
   const handleAdd = async (index: number) => {
     setBusyIndex(index)
@@ -103,7 +115,12 @@ export function SourcesList({ onOpen }: SourcesListProps) {
   return (
     <div className="ls-sources">
       <div className="ls-sources__devices">
-        <h2>Caméras disponibles</h2>
+        <div className="ls-sources__devices-header">
+          <h2>Caméras disponibles</h2>
+          <Button variant="discrete" onClick={refreshDevices} disabled={devicesLoading}>
+            {devicesLoading ? 'Scan…' : '🔄 Actualiser'}
+          </Button>
+        </div>
         {devices.length === 0 ? (
           <p className="ls-muted">Aucune caméra détectée.</p>
         ) : (

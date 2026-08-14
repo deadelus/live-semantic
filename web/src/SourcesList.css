@@ -8,6 +8,13 @@
   overflow-y: auto;
 }
 
+.ls-sources__devices-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
 .ls-sources__devices h2 {
   margin: 0 0 10px;
   font-size: 13px;
