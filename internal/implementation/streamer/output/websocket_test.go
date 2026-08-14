@@ -74,7 +74,7 @@ func TestAddClient_RegistersConnection(t *testing.T) {
 	serverConn, _, cleanup := newConnPair(t)
 	defer cleanup()
 
-	wo.AddClient(serverConn)
+	wo.AddClient(serverConn, streamer.DefaultClientOptions())
 
 	if len(wo.clients) != 1 {
 		t.Fatalf("clients = %d, want 1", len(wo.clients))
@@ -89,7 +89,7 @@ func TestRemoveClient_UnregistersAndCloses(t *testing.T) {
 	serverConn, _, cleanup := newConnPair(t)
 	defer cleanup()
 
-	wo.AddClient(serverConn)
+	wo.AddClient(serverConn, streamer.DefaultClientOptions())
 	wo.RemoveClient(serverConn)
 
 	if len(wo.clients) != 0 {
@@ -109,7 +109,7 @@ func TestRemoveClient_UnknownConnectionIsNoop(t *testing.T) {
 	// Never added — must not panic, must not affect an unrelated client.
 	other, _, otherCleanup := newConnPair(t)
 	defer otherCleanup()
-	wo.AddClient(other)
+	wo.AddClient(other, streamer.DefaultClientOptions())
 
 	wo.RemoveClient(serverConn)
 
@@ -126,8 +126,8 @@ func TestRender_BroadcastsToAllClients(t *testing.T) {
 	server2, client2, cleanup2 := newConnPair(t)
 	defer cleanup2()
 
-	wo.AddClient(server1)
-	wo.AddClient(server2)
+	wo.AddClient(server1, streamer.DefaultClientOptions())
+	wo.AddClient(server2, streamer.DefaultClientOptions())
 
 	if err := wo.Render(testFrame()); err != nil {
 		t.Fatalf("Render() error = %v", err)
@@ -148,12 +148,62 @@ func TestRender_BroadcastsToAllClients(t *testing.T) {
 	}
 }
 
+// TestRender_RespectsPerClientFPSCap — mosaic view (docs/gui/spec.md §
+// 3.1, added 2026-08-14): a client subscribed with a low FPS cap must
+// not receive every single Render call, only as often as its cap allows.
+func TestRender_RespectsPerClientFPSCap(t *testing.T) {
+	wo := NewWebSocketOutput()
+	serverConn, clientConn, cleanup := newConnPair(t)
+	defer cleanup()
+
+	// A very low cap (1 frame per 10 minutes) makes the test
+	// deterministic: the first Render always sends (lastFrameAt is
+	// zero), every subsequent one within the same test run must not.
+	wo.AddClient(serverConn, streamer.ClientOptions{FPS: 1.0 / 600, Boxes: true})
+
+	if err := wo.Render(testFrame()); err != nil {
+		t.Fatalf("first Render() error = %v", err)
+	}
+	clientConn.SetReadDeadline(time.Now().Add(2 * time.Second))
+	if _, _, err := clientConn.ReadMessage(); err != nil {
+		t.Fatalf("first frame: ReadMessage() error = %v, want the first frame to always be sent", err)
+	}
+
+	if err := wo.Render(testFrame()); err != nil {
+		t.Fatalf("second Render() error = %v", err)
+	}
+	clientConn.SetReadDeadline(time.Now().Add(150 * time.Millisecond))
+	if _, _, err := clientConn.ReadMessage(); err == nil {
+		t.Fatal("second frame arrived despite the FPS cap — throttling isn't working")
+	}
+}
+
+// TestRenderBoxes_SkipsClientsWithBoxesDisabled — mosaic tiles ask for
+// Boxes:false (docs/gui/spec.md § 3.1's "aperture léger... sans boxes ni
+// overlay") and must never receive a boxes message at all.
+func TestRenderBoxes_SkipsClientsWithBoxesDisabled(t *testing.T) {
+	wo := NewWebSocketOutput()
+	serverConn, clientConn, cleanup := newConnPair(t)
+	defer cleanup()
+
+	wo.AddClient(serverConn, streamer.ClientOptions{FPS: 0, Boxes: false})
+
+	if err := wo.RenderBoxes([]streamer.BoxData{{ID: "person"}}); err != nil {
+		t.Fatalf("RenderBoxes() error = %v", err)
+	}
+
+	clientConn.SetReadDeadline(time.Now().Add(150 * time.Millisecond))
+	if _, _, err := clientConn.ReadMessage(); err == nil {
+		t.Fatal("client with Boxes:false received a boxes message")
+	}
+}
+
 func TestRender_DropsClientOnWriteFailure(t *testing.T) {
 	wo := NewWebSocketOutput()
 	serverConn, _, cleanup := newConnPair(t)
 	defer cleanup()
 
-	wo.AddClient(serverConn)
+	wo.AddClient(serverConn, streamer.DefaultClientOptions())
 	// Close the connection directly (bypassing RemoveClient) to simulate a
 	// client that disappeared without a clean unregister — Render must
 	// detect the write failure and drop it on its own.
@@ -175,8 +225,8 @@ func TestRenderBoxes_BroadcastsJSONToAllClients(t *testing.T) {
 	server2, client2, cleanup2 := newConnPair(t)
 	defer cleanup2()
 
-	wo.AddClient(server1)
-	wo.AddClient(server2)
+	wo.AddClient(server1, streamer.DefaultClientOptions())
+	wo.AddClient(server2, streamer.DefaultClientOptions())
 
 	boxes := []streamer.BoxData{
 		{ID: "person", Label: "person (89.97%)", TrackID: "track-1", X1: 0.1, Y1: 0.2, X2: 0.3, Y2: 0.4},
@@ -213,7 +263,7 @@ func TestRenderBoxes_EmptySliceStillSendsAMessage(t *testing.T) {
 	wo := NewWebSocketOutput()
 	serverConn, clientConn, cleanup := newConnPair(t)
 	defer cleanup()
-	wo.AddClient(serverConn)
+	wo.AddClient(serverConn, streamer.DefaultClientOptions())
 
 	if err := wo.RenderBoxes(nil); err != nil {
 		t.Fatalf("RenderBoxes(nil) error = %v", err)
@@ -240,7 +290,7 @@ func TestRenderBoxes_DropsClientOnWriteFailure(t *testing.T) {
 	serverConn, _, cleanup := newConnPair(t)
 	defer cleanup()
 
-	wo.AddClient(serverConn)
+	wo.AddClient(serverConn, streamer.DefaultClientOptions())
 	serverConn.Close()
 
 	if err := wo.RenderBoxes([]streamer.BoxData{{ID: "person"}}); err != nil {
@@ -263,7 +313,7 @@ func TestStop_DoesNotDisconnectClients(t *testing.T) {
 	serverConn, _, cleanup := newConnPair(t)
 	defer cleanup()
 
-	wo.AddClient(serverConn)
+	wo.AddClient(serverConn, streamer.DefaultClientOptions())
 	wo.Stop()
 
 	if len(wo.clients) != 1 {
@@ -279,8 +329,8 @@ func TestCleanup_ClosesAllClients(t *testing.T) {
 	server2, _, cleanup2 := newConnPair(t)
 	defer cleanup2()
 
-	wo.AddClient(server1)
-	wo.AddClient(server2)
+	wo.AddClient(server1, streamer.DefaultClientOptions())
+	wo.AddClient(server2, streamer.DefaultClientOptions())
 
 	wo.Cleanup()
 

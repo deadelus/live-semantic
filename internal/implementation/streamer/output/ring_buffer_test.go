@@ -47,7 +47,7 @@ func TestRingBufferOutput_ForwardsFrameBroadcaster(t *testing.T) {
 	serverConn, _, cleanup := newConnPair(t)
 	defer cleanup()
 
-	rb.AddClient(serverConn)
+	rb.AddClient(serverConn, streamer.DefaultClientOptions())
 	if len(ws.clients) != 1 {
 		t.Fatalf("inner WebSocketOutput has %d clients after RingBufferOutput.AddClient(), want 1", len(ws.clients))
 	}

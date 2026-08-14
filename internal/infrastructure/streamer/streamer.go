@@ -42,6 +42,37 @@ type OutputStream interface {
 // BoxData is one detected/tracked box as structured data — label, score,
 // and coordinates normalized to [0,1] (fraction of frame width/height,
 // not pixels), so a client doesn't need to know the source frame's
+// ClientOptions is one WebSocket client's per-connection subscription
+// settings — added 2026-08-14 for the mosaic view (docs/gui/mockups/
+// screens 1a/1e, docs/gui/spec.md § 3.1: "il faut un abonnement par flux
+// avec des paramètres ajustables (fps cible, inclure ou non les boxes),
+// la vue onglet n'étant qu'un cas particulier avec les paramètres au
+// maximum" — one adjustable subscription, not two hardcoded tiers). A
+// mosaic tile subscribes with a low FPS and Boxes:false (bandwidth-light
+// preview); the Vue live tab subscribes with FPS:0 (unlimited) and
+// Boxes:true — same WS endpoint, same broadcaster, different options per
+// connection.
+type ClientOptions struct {
+	// FPS caps how often this client receives a rendered frame — 0 means
+	// unlimited (send every frame Render is called with, the Vue live
+	// tab's own default). A mosaic tile might ask for 1.
+	FPS float64
+	// Boxes controls whether this client receives RenderBoxes messages at
+	// all — a mosaic tile's aperture léger is explicitly "sans boxes ni
+	// overlay" (docs/gui/spec.md § 3.1) to stay cheap to render at a
+	// glance across many tiles.
+	Boxes bool
+}
+
+// DefaultClientOptions is the Vue live tab's own subscription: no FPS
+// cap, boxes included — every WS connection had exactly this shape
+// before ClientOptions existed, kept as the zero-friction default so
+// existing callers (handleWebSocket, the single-session path) don't need
+// to think about mosaic-specific settings.
+func DefaultClientOptions() ClientOptions {
+	return ClientOptions{FPS: 0, Boxes: true}
+}
+
 // resolution to position an overlay. docs/gui/mockups/
 // (screens 1c/1d/1h — boxes drawn as separate, hoverable/clickable DOM
 // elements, colored by filter term, not baked into the video pixels).

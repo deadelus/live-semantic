@@ -74,7 +74,7 @@ type RingBufferOutput struct {
 // in the GUI despite the backend processing frames normally. Real bug,
 // caught in a live run, not theoretical.
 type frameBroadcaster interface {
-	AddClient(conn *websocket.Conn)
+	AddClient(conn *websocket.Conn, opts streamer.ClientOptions)
 	RemoveClient(conn *websocket.Conn)
 }
 
@@ -118,9 +118,9 @@ func NewRingBufferOutput(inner streamer.OutputStream, maxAge time.Duration) (*Ri
 // doc comment for why this exists at all (structural satisfaction of
 // transport/adapters/api.FrameBroadcaster). No-op if inner doesn't
 // support it.
-func (r *RingBufferOutput) AddClient(conn *websocket.Conn) {
+func (r *RingBufferOutput) AddClient(conn *websocket.Conn, opts streamer.ClientOptions) {
 	if r.innerBcaster != nil {
-		r.innerBcaster.AddClient(conn)
+		r.innerBcaster.AddClient(conn, opts)
 	}
 }
 

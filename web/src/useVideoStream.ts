@@ -29,11 +29,25 @@ interface VideoStreamState {
 // session /ws/sessions/:id one (docs/gui/spec.md § 1.1) — sessionId is
 // null until App.tsx has created a session via api.createSession, so no
 // connection is attempted before one exists.
-export function useVideoStream(sessionId: string | null): VideoStreamState {
+//
+// opts backs the mosaic view's own subscription knobs (docs/gui/spec.md
+// § 3.1, added 2026-08-14) — ?fps=N&boxes=false on the same WS endpoint,
+// server-side throttling (implementation/streamer/output.WebSocketOutput's
+// per-client streamer.ClientOptions), not a client-side frame-dropping
+// hack: a mosaic tile genuinely never receives the extra frames/boxes
+// over the wire, not just discards them after the fact.
+export interface VideoStreamOptions {
+  fps?: number
+  boxes?: boolean
+}
+
+export function useVideoStream(sessionId: string | null, opts?: VideoStreamOptions): VideoStreamState {
   const [frameURL, setFrameURL] = useState<string | null>(null)
   const [boxes, setBoxes] = useState<OverlayBox[]>([])
   const [connected, setConnected] = useState(false)
   const lastURL = useRef<string | null>(null)
+  const fps = opts?.fps
+  const includeBoxes = opts?.boxes
 
   useEffect(() => {
     if (!sessionId) {
@@ -42,7 +56,11 @@ export function useVideoStream(sessionId: string | null): VideoStreamState {
     }
 
     const proto = window.location.protocol === 'https:' ? 'wss' : 'ws'
-    const ws = new WebSocket(`${proto}://${window.location.host}/ws/sessions/${sessionId}`)
+    const params = new URLSearchParams()
+    if (fps !== undefined) params.set('fps', String(fps))
+    if (includeBoxes !== undefined) params.set('boxes', String(includeBoxes))
+    const query = params.toString() ? `?${params.toString()}` : ''
+    const ws = new WebSocket(`${proto}://${window.location.host}/ws/sessions/${sessionId}${query}`)
     ws.binaryType = 'blob'
 
     ws.onopen = () => setConnected(true)
@@ -83,7 +101,7 @@ export function useVideoStream(sessionId: string | null): VideoStreamState {
         URL.revokeObjectURL(lastURL.current)
       }
     }
-  }, [sessionId])
+  }, [sessionId, fps, includeBoxes])
 
   return { frameURL, boxes, connected }
 }
